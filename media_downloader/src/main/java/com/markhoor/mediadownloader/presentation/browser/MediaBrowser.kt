@@ -107,11 +107,21 @@ class MediaBrowser internal constructor(
      * Page scripts need JavaScript and DOM storage, so both are switched on. On Android 8+ the
      * renderer is marked as one the system may reclaim while the app is out of sight - on a device
      * short of memory it would be killed anyway, and that is handled.
+     *
+     * A WebView the module made is also allowed to start media without a tap. Detection has nothing
+     * to find until a player asks for its file, and many only do that on play: with the WebView's
+     * default a video page sits on its poster, so no button appears and the page looks unsupported.
+     * A host that brings its own WebView keeps whatever it set - this is not changed underneath it.
      */
     @SuppressLint("SetJavaScriptEnabled", "JavascriptInterface")
     private fun configure() {
         webView.settings.javaScriptEnabled = true
         webView.settings.domStorageEnabled = true
+        if (ownsWebView) {
+            webView.settings.mediaPlaybackRequiresUserGesture = false
+            webView.settings.useWideViewPort = true
+            webView.settings.loadWithOverviewMode = true
+        }
         if (ownsWebView && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             webView.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_BOUND, true)
         }
