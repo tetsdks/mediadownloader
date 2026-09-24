@@ -1,0 +1,14 @@
+*.iml
+.gradle
+.kotlin
+# Holds sdk.dir and the tweeload api key: never committed.
+local.properties
+/local.properties
+# The IDE's own state; nothing here belongs to the library.
+.idea/
+.DS_Store
+# Every module's build output, not just the root's.
+build/
+/captures
+.externalNativeBuild
+.cxx
