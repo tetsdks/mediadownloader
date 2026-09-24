@@ -8,6 +8,8 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts.RequestPermission
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -144,6 +146,9 @@ fun DemoRoot(
     }
 
     Scaffold(
+        // The whole scaffold sits above the keyboard, bottom bar included. Padding only the content
+        // would leave the bar's reserved space stranded behind the keyboard as a dead band.
+        modifier = Modifier.imePadding(),
         snackbarHost = { SnackbarHost(snackbar) },
         bottomBar = {
             NavigationBar {
@@ -158,7 +163,11 @@ fun DemoRoot(
             }
         },
     ) { innerPadding ->
-        Box(Modifier.padding(innerPadding)) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .padding(innerPadding),
+        ) {
             when (tab) {
                 DemoTab.Link -> LinkScreen(
                     vm = linkVm,
