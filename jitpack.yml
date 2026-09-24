@@ -1,0 +1,11 @@
+# JitPack has no JDK 25 image, and the library targets Java 21 - which is also what its tests have
+# always run under.
+jdk:
+  - openjdk21
+before_install:
+  # The wrapper is committed executable, but JitPack's checkout does not always keep the bit.
+  - chmod +x ./gradlew
+install:
+  # Only the library: the Compose demo app is not part of what consumers get, and building it here
+  # would just cost time. Tests run in CI and locally, not on every tag build.
+  - ./gradlew :media_downloader:publishToMavenLocal -x test --no-daemon --no-configuration-cache

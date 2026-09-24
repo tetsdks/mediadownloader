@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The device check's own host app: initializes the module the way a real app does, so a
+     download can be carried on by WorkManager after its process died. Test APK only. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application android:name="com.markhoor.mediadownloader.DeviceCheckApplication">
+        <activity
+            android:name="com.markhoor.mediadownloader.BrowserCheckActivity"
+            android:exported="false" />
+    </application>
+</manifest>

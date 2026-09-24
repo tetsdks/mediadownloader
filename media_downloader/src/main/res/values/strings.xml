@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="media_downloader_channel_name">Downloads</string>
+    <string name="media_downloader_channel_description">Progress of media being downloaded</string>
+    <string name="media_downloader_downloading">Downloading</string>
+    <string name="media_downloader_preparing">Preparing download…</string>
+    <string name="media_downloader_waiting_for_network">Waiting for a connection</string>
+    <string name="media_downloader_completed">Download complete</string>
+    <string name="media_downloader_failed">Download failed</string>
+    <string name="media_downloader_unavailable">This video is private or no longer available</string>
+    <string name="media_downloader_progress">%1$s of %2$s</string>
+    <string name="media_downloader_untitled">Untitled</string>
+</resources>
