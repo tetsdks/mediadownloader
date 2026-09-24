@@ -5,14 +5,36 @@ plugins {
     `maven-publish`
 }
 
-// The coordinates a local publish uses. JitPack passes its own -Pgroup/-Pversion and those win:
-// it builds this module, finds the one artifact, and serves it as
-// com.github.Dev-Husnain:MediaDownloaderLibrary:<tag> - the repository's name, not the module's,
-// because the repo publishes a single artifact. Bump `version` and the git tag together.
+/**
+ * What git says this working tree is: the tag when HEAD is exactly on one and nothing is modified,
+ * and otherwise the tag with how far past it we are, the commit, and `-dirty` - e.g.
+ * `0.1.0-4-gab12cd3-dirty`. `--always` keeps it working before the first tag is ever made.
+ *
+ * Read through `providers.exec`, which the configuration cache understands; a plain command here
+ * would make every build re-run configuration. Nothing runs it unless it is actually needed.
+ */
+val gitDescribe: String? by lazy {
+    val repository = rootDir.absolutePath
+    val output = providers.exec {
+        commandLine("git", "-C", repository, "describe", "--tags", "--dirty", "--always")
+        isIgnoreExitValue = true
+    }
+    output.takeIf { it.result.get().exitValue == 0 }
+        ?.standardOutput?.asText?.get()?.trim()?.ifBlank { null }
+}
+
+// The coordinates. JitPack passes its own -Pgroup/-Pversion and those win: it builds this module,
+// finds the one artifact, and serves it as com.github.Dev-Husnain:MediaDownloaderLibrary:<tag> -
+// the repository's name, not the module's, because the repo publishes a single artifact.
+//
+// A release is therefore only ever a git tag; there is no version to edit here. What is left is
+// what a *local* publish is called, and that follows git too, so publishing an unreleased working
+// tree can never quietly overwrite a real version in ~/.m2 - its name says what it is.
 group = (findProperty("group") as? String)?.takeIf { it.contains('.') }
     ?: "com.github.Dev-Husnain.MediaDownloaderLibrary"
 version = (findProperty("version") as? String)?.takeIf { it != Project.DEFAULT_VERSION }
-    ?: "0.1.0"
+    ?: gitDescribe
+    ?: "0.0.0-local"
 
 android {
     namespace = "com.markhoor.mediadownloader"

@@ -147,11 +147,8 @@ then `./gradlew :app:installDebug`.
 ./gradlew :media_downloader:publishToMavenLocal  # for a local consumer
 ```
 
-Releases are cut by tagging. JitPack builds the tag and, because the repository publishes a
-single artifact, serves it under the repository's own name -
-`com.github.Dev-Husnain:MediaDownloaderLibrary:<tag>` - not the module path. The build log at
-`jitpack.io/com/github/Dev-Husnain/MediaDownloaderLibrary/<tag>/build.log` always prints the
-coordinate it actually served.
+A release is a git tag and nothing else - there is no version number to edit. See
+[`RELEASE.md`](RELEASE.md).
 
 ## License
 
