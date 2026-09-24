@@ -17,6 +17,9 @@ plugins {
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
+        // Uncomment to build against a locally published artifact instead of the module, or
+        // add maven("https://jitpack.io") to consume a released tag.
+        // mavenLocal()
         google()
         mavenCentral()
     }
@@ -24,4 +27,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "MediaDownloaderLibrary"
 include(":app")
+include(":media_downloader")
  
