@@ -5,10 +5,10 @@ plugins {
     `maven-publish`
 }
 
-// The coordinates a consumer writes. Kept identical to what JitPack serves for a module in a
-// multi-module repo (com.github.<user>.<repo>:<module>:<tag>), so the dependency line is the same
-// whether it resolves from mavenLocal or from JitPack. JitPack passes its own -Pgroup/-Pversion;
-// those win, and these are what a local publish uses. Bump `version` and the git tag together.
+// The coordinates a local publish uses. JitPack passes its own -Pgroup/-Pversion and those win:
+// it builds this module, finds the one artifact, and serves it as
+// com.github.Dev-Husnain:MediaDownloaderLibrary:<tag> - the repository's name, not the module's,
+// because the repo publishes a single artifact. Bump `version` and the git tag together.
 group = (findProperty("group") as? String)?.takeIf { it.contains('.') }
     ?: "com.github.Dev-Husnain.MediaDownloaderLibrary"
 version = (findProperty("version") as? String)?.takeIf { it != Project.DEFAULT_VERSION }
