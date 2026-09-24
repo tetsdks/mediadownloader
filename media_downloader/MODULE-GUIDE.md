@@ -415,6 +415,12 @@ its wiring in `MediaDownloaderComponent`.
     script cannot reach: one hidden leftover from the feed left the page with no button of either
     kind. The count therefore measures each button's own box, not the tracked element's - an
     element off screen still measures its full size, so scrolling is untouched.
+  - **A button on <body> is positioned against the viewport, not the page.** Instagram's floating
+    button shares `styledata` with the buttons that sit inside a post's own box, where
+    `position:absolute` is right. Appended to `<body>` it is not: instagram's app shell leaves the
+    body at zero height, so `bottom` measured against nothing and the button was laid out 177px
+    above the top of the screen - present, visible, 40x40, and not on the display. It is `fixed`
+    there, at the maximum z-index, because instagram lays its own overlay over a reel.
   - **A WebView the module makes may start media by itself.** `MediaBrowser.configure` sets
     `mediaPlaybackRequiresUserGesture = false` (and a wide viewport) only when `ownsWebView`:
     detection has nothing to find until a player asks for its file, and many only do that on play.
