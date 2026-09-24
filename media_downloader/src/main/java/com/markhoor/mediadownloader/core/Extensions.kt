@@ -62,8 +62,10 @@ private fun String.hostOrNull(): String? {
     if (isEmpty()) return null
     val rawHost = runCatching { URI(withHttpsScheme()).host }.getOrNull() ?: return null
     // IDN.toUnicode is native ICU work that only matters for punycode, so ASCII hosts skip it.
-    val isPunycode = rawHost.startsWith(Url.PUNYCODE_PREFIX) || rawHost.contains(".${Url.PUNYCODE_PREFIX}")
-    val decoded = if (isPunycode) runCatching { IDN.toUnicode(rawHost) }.getOrNull() ?: return null else rawHost
+    val isPunycode =
+        rawHost.startsWith(Url.PUNYCODE_PREFIX) || rawHost.contains(".${Url.PUNYCODE_PREFIX}")
+    val decoded = if (isPunycode) runCatching { IDN.toUnicode(rawHost) }.getOrNull()
+        ?: return null else rawHost
     return decoded.lowercase(Locale.US).trimEnd('.').removePrefix(Url.WWW_PREFIX)
 }
 
@@ -98,7 +100,8 @@ private fun String.startsWithScheme(): Boolean =
  * [Url.EMBEDDED_SCAN_LIMIT] and [Url.MAX_EMBEDDED_URLS] because a WebView url can be megabytes.
  */
 internal fun String.embeddedUrls(): Sequence<String> {
-    val scanned = if (length > Url.EMBEDDED_SCAN_LIMIT) substring(0, Url.EMBEDDED_SCAN_LIMIT) else this
+    val scanned =
+        if (length > Url.EMBEDDED_SCAN_LIMIT) substring(0, Url.EMBEDDED_SCAN_LIMIT) else this
     return URL_START.findAll(scanned)
         .drop(if (scanned.startsWithScheme()) 1 else 0)
         .take(Url.MAX_EMBEDDED_URLS)
@@ -128,14 +131,17 @@ internal fun String.urlPath(): String? = runCatching {
  * A downloadable url: a scheme and no whitespace. A failed extraction that returned a chunk of the
  * page has neither, which is how it is told apart from a real link.
  */
-internal fun String?.isHttpUrl(): Boolean = this != null && startsWithScheme() && none { it.isWhitespace() }
+internal fun String?.isHttpUrl(): Boolean =
+    this != null && startsWithScheme() && none { it.isWhitespace() }
 
 /** This link made absolute against [baseUrl], the playlist or page it was found in. */
 internal fun String.resolveAgainst(baseUrl: String): String {
     if (startsWithScheme()) return this
     runCatching { URI(baseUrl).resolve(this).toString() }.getOrNull()?.let { return it }
-    val origin = baseUrl.substringBefore("://") + "://" + baseUrl.substringAfter("://").substringBefore('/')
-    return if (startsWith("/")) origin + this else baseUrl.substringBefore('?').substringBeforeLast('/') + "/" + this
+    val origin =
+        baseUrl.substringBefore("://") + "://" + baseUrl.substringAfter("://").substringBefore('/')
+    return if (startsWith("/")) origin + this else baseUrl.substringBefore('?')
+        .substringBeforeLast('/') + "/" + this
 }
 
 /**
@@ -149,7 +155,8 @@ internal fun String.inheritQueryFrom(playlistUrl: String): String {
 }
 
 /** An HLS playlist: an `m3u8` in the url, or an hls manifest path. */
-internal fun String.isHlsPlaylistUrl(): Boolean = contains("m3u8") || (contains("/hls/") && contains("/manifest"))
+internal fun String.isHlsPlaylistUrl(): Boolean =
+    contains("m3u8") || (contains("/hls/") && contains("/manifest"))
 
 /** A url that names a picture file. */
 internal fun String.isImageFileUrl(): Boolean {
@@ -161,7 +168,8 @@ internal fun String.isImageFileUrl(): Boolean {
 
 // region Site links: which parser a link belongs to
 
-private val THREADS_MEDIA_PAGE = Regex("""https?://(www\.)?threads\.com/@[^/]+/post/[^/]+/media.*""")
+private val THREADS_MEDIA_PAGE =
+    Regex("""https?://(www\.)?threads\.com/@[^/]+/post/[^/]+/media.*""")
 
 internal fun String.isFacebookVideoLink(): Boolean {
     if (this == Constants.Facebook.WATCH_ROOT || !isSiteOf("facebook.com")) return false
@@ -172,7 +180,7 @@ internal fun String.isFacebookShareLink(): Boolean = isSiteOf("facebook.com") &&
 
 internal fun String.isInstagramPostLink(): Boolean =
     (isSiteOf("instagram.com") && listOf("/p/", "/reel/", "/reels/").any { contains(it) }) ||
-        isThreadsVideoFileUrl()
+            isThreadsVideoFileUrl()
 
 /** A post's own page; the site root and the feed name no post. */
 internal fun String.isThreadsPostLink(): Boolean =
@@ -234,7 +242,12 @@ internal fun String.decodeHtmlEntities(): String =
             else -> null
         }
         when {
-            codePoint != null && Character.isValidCodePoint(codePoint) -> String(Character.toChars(codePoint))
+            codePoint != null && Character.isValidCodePoint(codePoint) -> String(
+                Character.toChars(
+                    codePoint
+                )
+            )
+
             else -> NAMED_HTML_ENTITIES[entity] ?: match.value
         }
     }.filterNot { it.category == CharCategory.FORMAT }.trim()
@@ -267,7 +280,10 @@ internal fun String.unescapeEmbeddedUrl(passes: Int = 1): String =
     decodeJsonEscapes(passes).replace("&amp;", "&").trim()
 
 private val ATTRIBUTION_TEXT =
-    Regex("""^(source|via|credit|credits|image|photo|video|gif)\b\s*[:\-–]?\s*\S+$""", RegexOption.IGNORE_CASE)
+    Regex(
+        """^(source|via|credit|credits|image|photo|video|gif)\b\s*[:\-–]?\s*\S+$""",
+        RegexOption.IGNORE_CASE
+    )
 private val BARE_ADDRESS = Regex("""^(https?://|www\.)\S+$""", RegexOption.IGNORE_CASE)
 
 /**
@@ -289,13 +305,19 @@ private val PLAYER_CONTROL_TEXT = Regex(
  * ("Source www.reddit.com"), a bare address, a player's control label - no title.
  */
 /** The label of the field a title was read from: tnaflix's "Description: Teenage ...". */
-private val FIELD_LABEL = Regex("""^(description|title|video title|caption)\s*:\s*""", RegexOption.IGNORE_CASE)
+private val FIELD_LABEL =
+    Regex("""^(description|title|video title|caption)\s*:\s*""", RegexOption.IGNORE_CASE)
 
 internal fun String.asMediaTitle(): String {
-    val text = (JSON_TAIL.find(this)?.let { take(it.range.first) } ?: this).decodeHtmlEntities().trim().dropWhile { !it.isLetterOrDigit() && it !in "\"'(#@¿¡[" }.trim()
-        .replaceFirst(FIELD_LABEL, "")
-        .withoutSiteSuffix()
-    val notAName = ATTRIBUTION_TEXT.matches(text) || BARE_ADDRESS.matches(text) || PLAYER_CONTROL_TEXT.containsMatchIn(text)
+    val text =
+        (JSON_TAIL.find(this)?.let { take(it.range.first) } ?: this).decodeHtmlEntities().trim()
+            .dropWhile { !it.isLetterOrDigit() && it !in "\"'(#@¿¡[" }.trim()
+            .replaceFirst(FIELD_LABEL, "")
+            .withoutSiteSuffix()
+    val notAName =
+        ATTRIBUTION_TEXT.matches(text) || BARE_ADDRESS.matches(text) || PLAYER_CONTROL_TEXT.containsMatchIn(
+            text
+        )
     return if (notAName) "" else text
 }
 
@@ -310,7 +332,13 @@ internal fun String.asMediaTitle(): String {
  */
 private fun String.withoutSiteSuffix(): String {
     var title = split(" | ").fold(mutableListOf<String>()) { parts, part ->
-        parts.apply { if (lastOrNull()?.equals(part.trim(), ignoreCase = true) != true) add(part.trim()) }
+        parts.apply {
+            if (lastOrNull()?.equals(
+                    part.trim(),
+                    ignoreCase = true
+                ) != true
+            ) add(part.trim())
+        }
     }.joinToString(" | ")
     while (true) {
         val shorter = title.withoutAuthorLabel() ?: title.withoutOneSiteSuffix() ?: return title
@@ -326,7 +354,9 @@ private fun String.withoutAuthorLabel(): String? =
 
 private fun String.withoutOneSiteSuffix(): String? {
     for (name in Constants.Titles.SITE_SUFFIXES) {
-        val separator = SITE_SUFFIX_SEPARATORS.firstOrNull { endsWith(it + name, ignoreCase = true) } ?: continue
+        val separator =
+            SITE_SUFFIX_SEPARATORS.firstOrNull { endsWith(it + name, ignoreCase = true) }
+                ?: continue
         return dropLast(separator.length + name.length).trim()
     }
     return null
@@ -354,8 +384,10 @@ private val TITLE_TAG = Regex("""<title[^>]*>([^<]*)</title>""")
  * locale dependent label such as "Facebook"), then og:image:alt, then `<title>`. Empty when none.
  */
 internal fun String.titleFromHtml(): String {
-    OG_TITLE_TAG.find(this)?.groupValues?.get(1)?.withoutReelStats()?.takeIf { it.isNotBlank() }?.let { return it }
-    OG_IMAGE_ALT_TAG.find(this)?.groupValues?.get(1)?.withoutReelStats()?.takeIf { it.isNotBlank() }?.let { return it }
+    OG_TITLE_TAG.find(this)?.groupValues?.get(1)?.withoutReelStats()?.takeIf { it.isNotBlank() }
+        ?.let { return it }
+    OG_IMAGE_ALT_TAG.find(this)?.groupValues?.get(1)?.withoutReelStats()?.takeIf { it.isNotBlank() }
+        ?.let { return it }
     return TITLE_TAG.find(this)?.groupValues?.get(1)?.decodeHtmlEntities().orEmpty()
 }
 
@@ -376,9 +408,11 @@ internal fun String.metaProperty(property: String): String? =
 
 // region Json
 
-internal fun JsonElement?.obj(key: String): JsonObject? = (this as? JsonObject)?.get(key) as? JsonObject
+internal fun JsonElement?.obj(key: String): JsonObject? =
+    (this as? JsonObject)?.get(key) as? JsonObject
 
-internal fun JsonElement?.array(key: String): JsonArray? = (this as? JsonObject)?.get(key) as? JsonArray
+internal fun JsonElement?.array(key: String): JsonArray? =
+    (this as? JsonObject)?.get(key) as? JsonArray
 
 /** A primitive's text, whether the JSON wrote it as a string or a number; `null` for JSON null. */
 internal fun JsonElement?.text(key: String): String? =
@@ -477,7 +511,8 @@ internal fun ByteArray.sniffedExtension(): String? {
 
 /** Markup: past a byte-order mark and white space, the first byte is `<`. No media file starts so. */
 internal fun ByteArray.looksLikeMarkup(): Boolean {
-    var at = if (size >= 3 && this[0] == 0xEF.toByte() && this[1] == 0xBB.toByte() && this[2] == 0xBF.toByte()) 3 else 0
+    var at =
+        if (size >= 3 && this[0] == 0xEF.toByte() && this[1] == 0xBB.toByte() && this[2] == 0xBF.toByte()) 3 else 0
     while (at < size && this[at].toInt().toChar().isWhitespace()) at++
     return at < size && this[at] == '<'.code.toByte()
 }
@@ -507,7 +542,9 @@ internal fun File.freeFile(baseName: String, extension: String): File {
 internal fun List<File>.joinInto(target: File) {
     target.parentFile?.mkdirs()
     target.outputStream().buffered(Constants.Download.BUFFER_BYTES).use { output ->
-        forEach { part -> part.inputStream().use { it.copyTo(output, Constants.Download.BUFFER_BYTES) } }
+        forEach { part ->
+            part.inputStream().use { it.copyTo(output, Constants.Download.BUFFER_BYTES) }
+        }
     }
 }
 
@@ -545,7 +582,11 @@ internal fun String.isSubtitleUrl(): Boolean {
  */
 internal fun String.isPlaylistEntryUrl(): Boolean {
     val path = substringBefore('?')
-    if (path.endsWith(".m3u8", ignoreCase = true) || path.endsWith(".m3u", ignoreCase = true)) return true
+    if (path.endsWith(".m3u8", ignoreCase = true) || path.endsWith(
+            ".m3u",
+            ignoreCase = true
+        )
+    ) return true
     val hasExtension = path.substringAfterLast('/').substringAfterLast('.', "").isNotEmpty()
     return !hasExtension && path.contains("/hls/", ignoreCase = true)
 }
@@ -556,7 +597,8 @@ internal fun String.isPlaylistEntryUrl(): Boolean {
 
 private val RUMBLE_VIDEO_PATH = Regex("""^/v[0-9a-z]{3,}(-|\.html)""")
 private val TIKTOK_VIDEO_PATH = Regex("""/video/\d""")
-private val MEDIA_FILE_ENDING = Regex("""\.(mp4|m4v|mov|webm|mkv|m3u8|mpd|ts|mp3|m4a|aac|ogg|jpg|jpeg|png|gif|webp)$""")
+private val MEDIA_FILE_ENDING =
+    Regex("""\.(mp4|m4v|mov|webm|mkv|m3u8|mpd|ts|mp3|m4a|aac|ogg|jpg|jpeg|png|gif|webp)$""")
 private val IMAGE_FILE_ENDING = Regex("""\.(jpg|jpeg|webp|png)$""")
 
 /** This url cut to the part the sniffing rules look at: WebView urls can be megabytes. */
@@ -614,7 +656,7 @@ internal fun String.isImdbVideoPage(): Boolean =
 internal fun String.isStaticAssetUrl(): Boolean {
     val path = sniffable().substringBefore('?').substringBefore('#')
     return path.substringAfterLast('/').substringAfterLast('.', "").lowercase(Locale.US) in
-        Constants.Browser.STATIC_ASSET_EXTENSIONS
+            Constants.Browser.STATIC_ASSET_EXTENSIONS
 }
 
 private val ROTATING_AD_HOST = Regex("""[a-z0-9]{8}\.(bkcdn|bxcdn)\.net""")
@@ -623,17 +665,27 @@ private val SHA1_FILE = Regex("""(^|/)[0-9a-f]{40}\.mp4$""")
 /** An advert, a tracker, or a creative: never the media the user asked for. */
 internal fun String.isAdvertMediaUrl(): Boolean {
     val url = sniffable().lowercase(Locale.US)
-    val host = url.substringAfter("//", "").substringBefore('/').substringBefore('?').substringBefore(':')
+    val host =
+        url.substringAfter("//", "").substringBefore('/').substringBefore('?').substringBefore(':')
     if (host.isNotBlank() && host.isUnderAnyOf(Constants.Browser.ADVERT_HOSTS)) return true
-    val path = url.substringAfter("//", url).substringAfter('/', "").substringBefore('?').substringBefore('#')
+    val path = url.substringAfter("//", url).substringAfter('/', "").substringBefore('?')
+        .substringBefore('#')
     if (path.split('/').any { it in Constants.Browser.ADVERT_PATH_SEGMENTS }) return true
     // The pre-rolls and banner loops on xvideos, youjizz, thisvid and drtuber:
     // `z6v2p9a8.bkcdn.net/library/<id>/<sha1>.mp4`, `n2j9y0x0.bxcdn.net/<sha1>.mp4`. Only that
     // shape - a random label and a hash for a name - since the CDN's name alone says nothing.
     if (ROTATING_AD_HOST.matches(host) && SHA1_FILE.containsMatchIn(path)) return true
     // `dclk_video_ads`: a Google video advert, served through YouTube's own redirector (ted).
-    return listOf("/ad-creative", "/vast/", "metrics.brightcove.com", "media-backend.bitchute.com", "dclk_video_ads",
-        "/tracker?", "/beacon", "/collect?").any { url.contains(it) }
+    return listOf(
+        "/ad-creative",
+        "/vast/",
+        "metrics.brightcove.com",
+        "media-backend.bitchute.com",
+        "dclk_video_ads",
+        "/tracker?",
+        "/beacon",
+        "/collect?"
+    ).any { url.contains(it) }
 }
 
 /** A piece of a stream; its playlist is the media. */
@@ -642,7 +694,8 @@ internal fun String.isHlsSegmentUrl(): Boolean {
     return path.endsWith(".ts", ignoreCase = true) || path.endsWith(".m4s", ignoreCase = true)
 }
 
-internal fun String.isBrightcovePlaybackApi(): Boolean = sniffable().contains("edge.api.brightcove.com/playback/")
+internal fun String.isBrightcovePlaybackApi(): Boolean =
+    sniffable().contains("edge.api.brightcove.com/playback/")
 
 /**
  * A stream the sniffer must leave alone: Dailymotion's and Pinterest's variants, which the parser
@@ -651,16 +704,18 @@ internal fun String.isBrightcovePlaybackApi(): Boolean = sniffable().contains("e
 internal fun String.isIgnoredStream(): Boolean {
     val url = sniffable()
     val restricted = (url.contains(".xhcdn.com") && !url.contains("_TPL_.av1.mp4.m3u")) ||
-        url.contains("media-hls.doppiocdn.net") || url.contains("gcore-vid.xnxx-cdn.com") ||
-        (url.contains("-vid.xnxx-") && !url.contains("hls.m3u8"))
+            url.contains("media-hls.doppiocdn.net") || url.contains("gcore-vid.xnxx-cdn.com") ||
+            (url.contains("-vid.xnxx-") && !url.contains("hls.m3u8"))
     // Imdb autoplays a few seconds of a film on its page as `hls-preview-<id>.m3u8`; the trailer
     // itself is on the video's own page, and is served as a file.
     // Imdb plays a few seconds of a video in its listings (`/mc/vi951634457/previews/...`), all of
     // them the same length and size; the video itself is on its own page.
     return restricted || url.contains("hls-preview") ||
-        (url.contains("imdb-video.media-imdb.com") && url.contains("/previews/")) ||
-        url.contains("pubads.g.doubleclick.net") || url.contains("audio.m3u8") ||
-        url.contains("https://vod3.cf.dmcdn.net") || (url.contains("https://v1.pinimg.com") && url.contains("w.m3u8"))
+            (url.contains("imdb-video.media-imdb.com") && url.contains("/previews/")) ||
+            url.contains("pubads.g.doubleclick.net") || url.contains("audio.m3u8") ||
+            url.contains("https://vod3.cf.dmcdn.net") || (url.contains("https://v1.pinimg.com") && url.contains(
+        "w.m3u8"
+    ))
 }
 
 /** Requests the sniffer never takes, whatever page made them. */
@@ -668,13 +723,14 @@ internal fun String.isRefusedRequest(): Boolean {
     val url = sniffable()
     // Fluid Player loads a blank clip of its own before every video; it is never the media.
     return url.contains(".tsyndicate.com/media=") || url.contains("doppiocdn.net/hls/") ||
-        url.contains("cdn.fluidplayer.com/static/")
+            url.contains("cdn.fluidplayer.com/static/")
 }
 
 /** A url whose path names a video file ([Constants.Browser.VIDEO_FILE_EXTENSIONS]), not a piece of a stream. */
 internal fun String.isVideoFileUrl(): Boolean {
     // KVS, the script most tube sites run on, serves its files as `/get_file/.../123.mp4/`.
-    val path = sniffable().substringBefore('?').substringBefore('#').lowercase(Locale.US).trimEnd('/')
+    val path =
+        sniffable().substringBefore('?').substringBefore('#').lowercase(Locale.US).trimEnd('/')
     return path.hasVideoFileExtension() && !path.isStreamPiecePath()
 }
 
@@ -692,42 +748,46 @@ private val STREAM_INIT_NAME = Regex("""(^|[-_])init([-_.]|\d)""")
 private fun String.isStreamPiecePath(): Boolean {
     val segments = split('/')
     return STREAM_INIT_NAME.containsMatchIn(segments.last()) ||
-        segments.dropLast(1).any { it.hasVideoFileExtension() }
+            segments.dropLast(1).any { it.hasVideoFileExtension() }
 }
 
 /** A media file on a CDN the sniffer knows, downloadable as it is. */
 internal fun String.isDirectMediaUrl(): Boolean {
     val url = sniffable()
     return (url.contains("scontent") && url.contains(".mp4?")) || url.contains("instagram.flhe2-4.fna.fbcdn.net/") ||
-        (url.startsWith("https://img-9gag-fun.9cache.com/") && url.endsWith(".webm")) ||
-        url.startsWith("https://dms.licdn.com/") ||
-        (url.contains(".vkcdn5.com/") && url.contains("mp4")) ||
-        isTikTokVideoFileUrl() ||
-        url.startsWith("https://www.dailymotion.com/cdn/manifest/video/") ||
-        (url.startsWith("https://cloudyvideo.com/m3/") && !url.endsWith(".png") && url.length > 35) ||
-        (url.startsWith("https://myfilestorage.xyz/") && url.endsWith(".mp4")) ||
-        ((url.contains("videos-cloudfront.jwpsrv.com/") || url.contains("content.jwplatform.com/videos/")) && url.endsWith(".mp4")) ||
-        (url.contains("aws-") && url.contains(".mp4")) ||
-        (url.contains("cdn-") && url.contains(".mp4?") && url.contains("=moj")) ||
-        (url.contains("rumble.cloud") && url.contains(".mp4") && !url.contains(".tar?")) ||
-        (url.contains("https://www.udemy.com/api-2.0/") && url.contains("lectures/") && url.contains("download_urls")) ||
-        (url.contains("imdb-video.media-imdb.com/") && url.contains(".mp4")) ||
-        (url.contains("hls-reels/reels/") && url.contains("playlist.m3u8") && url.contains("tamashaweb")) ||
-        (url.contains("va.media.tumblr.com/") && url.contains(".mp4")) ||
-        (url.contains(".ttvnw.net/vod/") && url.contains(".m3u8?")) || url.contains("production.assets.clips.twitchcdn.net") ||
-        (url.contains("videocdn.alibaba.") && url.contains("video") && url.contains(".mp4")) ||
-        isThreadsVideoFileUrl() ||
-        (url.contains(".bitchute.com/") && url.contains(".mp4") && !url.contains("media-backend.bitchute.com")) ||
-        (url.contains("player.odycdn.com/") && (url.contains(".mp4") || url.contains(".m3u8")))
+            (url.startsWith("https://img-9gag-fun.9cache.com/") && url.endsWith(".webm")) ||
+            url.startsWith("https://dms.licdn.com/") ||
+            (url.contains(".vkcdn5.com/") && url.contains("mp4")) ||
+            isTikTokVideoFileUrl() ||
+            url.startsWith("https://www.dailymotion.com/cdn/manifest/video/") ||
+            (url.startsWith("https://cloudyvideo.com/m3/") && !url.endsWith(".png") && url.length > 35) ||
+            (url.startsWith("https://myfilestorage.xyz/") && url.endsWith(".mp4")) ||
+            ((url.contains("videos-cloudfront.jwpsrv.com/") || url.contains("content.jwplatform.com/videos/")) && url.endsWith(
+                ".mp4"
+            )) ||
+            (url.contains("aws-") && url.contains(".mp4")) ||
+            (url.contains("cdn-") && url.contains(".mp4?") && url.contains("=moj")) ||
+            (url.contains("rumble.cloud") && url.contains(".mp4") && !url.contains(".tar?")) ||
+            (url.contains("https://www.udemy.com/api-2.0/") && url.contains("lectures/") && url.contains(
+                "download_urls"
+            )) ||
+            (url.contains("imdb-video.media-imdb.com/") && url.contains(".mp4")) ||
+            (url.contains("hls-reels/reels/") && url.contains("playlist.m3u8") && url.contains("tamashaweb")) ||
+            (url.contains("va.media.tumblr.com/") && url.contains(".mp4")) ||
+            (url.contains(".ttvnw.net/vod/") && url.contains(".m3u8?")) || url.contains("production.assets.clips.twitchcdn.net") ||
+            (url.contains("videocdn.alibaba.") && url.contains("video") && url.contains(".mp4")) ||
+            isThreadsVideoFileUrl() ||
+            (url.contains(".bitchute.com/") && url.contains(".mp4") && !url.contains("media-backend.bitchute.com")) ||
+            (url.contains("player.odycdn.com/") && (url.contains(".mp4") || url.contains(".m3u8")))
 }
 
 /** A TikTok video file on its CDN. */
 internal fun String.isTikTokVideoFileUrl(): Boolean {
     val url = sniffable()
     return url.startsWith("https://v16-webapp-prime.tiktok.com/video") ||
-        url.startsWith("https://v16-webapp-prime.us.tiktok.com/video/") ||
-        url.startsWith("https://v19-webapp-prime.tiktok.com/video") ||
-        (url.contains(".tiktokcdn.") && !url.contains("jpeg") && url.contains("/video/"))
+            url.startsWith("https://v16-webapp-prime.us.tiktok.com/video/") ||
+            url.startsWith("https://v19-webapp-prime.tiktok.com/video") ||
+            (url.contains(".tiktokcdn.") && !url.contains("jpeg") && url.contains("/video/"))
 }
 
 /**
@@ -741,8 +801,8 @@ internal fun String?.isUsableThumbnail(): Boolean {
     if (url.startsWith("data:image/")) return true
     if (!url.isHttpUrl()) return false
     val path = url.substringBefore('?').lowercase(Locale.US)
-    return !url.isHlsPlaylistUrl() && Constants.Storage.KNOWN_MEDIA_EXTENSIONS
-        .filterNot { it in Constants.Storage.IMAGE_EXTENSIONS }.none { path.endsWith(".$it") }
+    return !url.isHlsPlaylistUrl() && Storage.KNOWN_MEDIA_EXTENSIONS
+        .filterNot { it in Storage.IMAGE_EXTENSIONS }.none { path.endsWith(".$it") }
 }
 
 /** Artwork a script can hand over: a link, or a frame it captured as a data: image. */
@@ -750,7 +810,11 @@ internal fun String.isArtworkUrl(): Boolean = startsWith("http") || startsWith("
 
 /** An image file by its ending; read from the tail, since that is what decides it. */
 internal fun String.looksLikeImageUrl(): Boolean =
-    IMAGE_FILE_ENDING.containsMatchIn(takeLast(Constants.Browser.MAX_SNIFFED_URL_LENGTH).substringBefore('?').lowercase(Locale.US))
+    IMAGE_FILE_ENDING.containsMatchIn(
+        takeLast(Constants.Browser.MAX_SNIFFED_URL_LENGTH).substringBefore(
+            '?'
+        ).lowercase(Locale.US)
+    )
 
 /** Names a media file, or at least not a page that only plays one (an embed or a player). */
 internal fun String.namesMediaFile(): Boolean {
@@ -762,12 +826,14 @@ internal fun String.namesMediaFile(): Boolean {
 
 /** The same page, ignoring query, fragment, case and a trailing slash. */
 internal fun String.isSamePageAs(other: String): Boolean {
-    fun bare(url: String) = url.substringBefore('?').substringBefore('#').removeSuffix("/").lowercase(Locale.US)
+    fun bare(url: String) =
+        url.substringBefore('?').substringBefore('#').removeSuffix("/").lowercase(Locale.US)
     return bare(this) == bare(other)
 }
 
 /** The same page for the purpose of a tap: everything before the query. */
-internal fun String.isSamePathAs(other: String): Boolean = substringBefore('?') == other.substringBefore('?')
+internal fun String.isSamePathAs(other: String): Boolean =
+    substringBefore('?') == other.substringBefore('?')
 
 /**
  * A permalink's slug as words: `/v7exqzu-sorry-i-annoyed-you.html` → `sorry i annoyed you`. An id
@@ -775,8 +841,9 @@ internal fun String.isSamePathAs(other: String): Boolean = substringBefore('?') 
  * is not three words or more.
  */
 internal fun String?.titleFromSlug(): String {
-    val segment = this?.substringBefore('?')?.substringBefore('#')?.trimEnd('/')?.substringAfterLast('/')
-        ?.removeSuffix(".html") ?: return ""
+    val segment =
+        this?.substringBefore('?')?.substringBefore('#')?.trimEnd('/')?.substringAfterLast('/')
+            ?.removeSuffix(".html") ?: return ""
     val parts = segment.split('-').filter { it.isNotBlank() }
     if (parts.size < 3) return ""
     val first = parts.first()
