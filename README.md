@@ -58,7 +58,7 @@ dependencyResolutionManagement {
 ```kotlin
 // app/build.gradle.kts
 dependencies {
-    implementation("com.github.Dev-Husnain.MediaDownloaderLibrary:media_downloader:0.1.0")
+    implementation("com.github.Dev-Husnain:MediaDownloaderLibrary:0.1.0")
 }
 ```
 
@@ -147,8 +147,11 @@ then `./gradlew :app:installDebug`.
 ./gradlew :media_downloader:publishToMavenLocal  # for a local consumer
 ```
 
-Releases are cut by tagging: JitPack builds the tag and serves
-`com.github.Dev-Husnain.MediaDownloaderLibrary:media_downloader:<tag>`.
+Releases are cut by tagging. JitPack builds the tag and, because the repository publishes a
+single artifact, serves it under the repository's own name -
+`com.github.Dev-Husnain:MediaDownloaderLibrary:<tag>` - not the module path. The build log at
+`jitpack.io/com/github/Dev-Husnain/MediaDownloaderLibrary/<tag>/build.log` always prints the
+coordinate it actually served.
 
 ## License
 
