@@ -23,6 +23,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -34,6 +36,9 @@ import com.markhoor.mediadownloader.presentation.browser.MediaBrowser
 import com.markhoor.mediadownloader.presentation.browser.PageMediaState
 import com.media.downloader.ui.common.QualityPickerSheet
 import java.net.URLEncoder
+
+/** The red the module's own in-page buttons use, so both read as the same affordance. */
+private val DownloadButtonColor = Color(0xFFE53935)
 
 /**
  * The module's browser in a Compose screen.
@@ -125,11 +130,17 @@ fun BrowserScreen(
         }
 
         // Shown only where the page script did not already draw its own button on the media.
+        // Deliberately loud: it floats over whatever the page is showing - a banner, a bright
+        // advert - and in the theme's own colours it disappeared into a purple promo strip.
         if (state.showDownloadButton) {
             ExtendedFloatingActionButton(
                 onClick = { vm.onDownloadButtonClick() },
-                modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
-            ) { Text("Download") }
+                containerColor = DownloadButtonColor,
+                contentColor = Color.White,
+                modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp),
+            ) {
+                Text("↓  Download", fontWeight = FontWeight.Bold)
+            }
         }
     }
 
