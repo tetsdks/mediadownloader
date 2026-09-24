@@ -761,6 +761,12 @@ class BrowserViewModel : ViewModel {
 |---|---|
 | `attach(webView, …)` | Drives **your own** WebView (from your layout). The module installs its own `WebViewClient`/`WebChromeClient`, forwards **every** callback to the ones you pass, and turns on JavaScript and DOM storage. **Don't call `webView.webViewClient = …` yourself afterwards**; pass your clients here instead. A browser attached before is detached first. |
 | `createBrowser(context, …)` | The module creates the WebView; add `MediaBrowser.webView` to your layout. It's destroyed when `lifecycleOwner` is. |
+
+A WebView the module creates is also allowed to start media **without a tap**, and is given a wide
+viewport. Detection has nothing to find until a player asks for its file, and many only do that on
+play: with the WebView's defaults a video page sits on its poster and looks unsupported. A WebView
+you pass to `attach` is left exactly as you configured it - set
+`settings.mediaPlaybackRequiresUserGesture = false` yourself if you want the same behaviour.
 | `onDownloadButtonClick()` | Your floating download button was pressed; the page's media is shown when there is any. Same as `MediaBrowser.onDownloadButtonClick()`. |
 | `uiState` | Page and media state, below. |
 | `events` | One-shot moments, below. **Collect once**, from the screen. |
@@ -802,6 +808,9 @@ sealed interface PageMediaState {
 
 - `showDownloadButton`: **your** floating button belongs on screen now. There is media, the site
   allows it, and no in-page button already sits on the media. Bind your button's visibility to it.
+  "Already sits on the media" means a button that is actually drawn: one the script has put away
+  because what it was on is gone does not hold your button back. That is what makes a page whose
+  player the script cannot reach - a dailymotion video, whose player is in an iframe - show yours.
 - `Found.isDescribing`: name, qualities or sizes are still arriving. What's shown can already be
   downloaded; update the sheet as the state changes.
 

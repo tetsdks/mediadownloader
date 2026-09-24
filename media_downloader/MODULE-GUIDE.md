@@ -406,6 +406,19 @@ its wiring in `MediaDownloaderComponent`.
     anything a background lookup throws is logged under `MediaDownloader`, never raised into the
     host's scope, which has no handler and would crash the app.
   - A notification the system refuses is logged; the download carries on.
+  - **The host's button waits for a button that is really there.** `genericButtonsDrawn` reports
+    whether the script is holding this page, and `nativeButtonWanted` puts the host's floating
+    button away while it is. Tracking outlives placement: an element can stay connected while what
+    it showed is gone - a card swapped out under an SPA navigation - and `place()` then hides its
+    button with `display:none`. Counting those said the script had the page when the reader could
+    see no button at all. Measured on a dailymotion video page, whose player sits in an iframe the
+    script cannot reach: one hidden leftover from the feed left the page with no button of either
+    kind. The count therefore measures each button's own box, not the tracked element's - an
+    element off screen still measures its full size, so scrolling is untouched.
+  - **A WebView the module makes may start media by itself.** `MediaBrowser.configure` sets
+    `mediaPlaybackRequiresUserGesture = false` (and a wide viewport) only when `ownsWebView`:
+    detection has nothing to find until a player asks for its file, and many only do that on play.
+    A host's own WebView is never changed underneath it.
   - **A folder that cannot be written refuses the download before it is made.**
     `DownloadStorage.writeRefusalOrNull()` *writes* a hidden probe file into
     `Download/<root>` rather than reading the permission, because on Android 10 a granted

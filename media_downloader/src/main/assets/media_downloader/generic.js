@@ -1973,7 +1973,21 @@ function reportButtons(){
        over the comments; scrolling back reported one again and took it away. That is the button
        appearing and disappearing while the page is scrolled. A button that is merely off screen
        is still this page's button, and comes back on its own. */
-    var has = tracked.length > 0 ? 1 : 0;
+    /* A button place() has put away does not count. Tracking outlives placement: an element can
+       stay connected while what it showed is gone - a card swapped out under an SPA navigation, a
+       player torn down and left behind - and place() then hides its button with display:none.
+       Counting it said "the script has this page" while the reader could see no button at all,
+       and the app put its own away on the strength of it. Measured on a dailymotion video page,
+       whose player sits in an iframe this script cannot reach: one hidden leftover left the page
+       with no button of either kind. Scrolling is untouched - a button off screen keeps its size,
+       and the point above still stands. */
+    var has = 0;
+    for(var mksI = 0; mksI < tracked.length; mksI++){
+        try{
+            var mksR = tracked[mksI].b.getBoundingClientRect();
+            if(mksR.width > 0 && mksR.height > 0){ has = 1; break; }
+        }catch(e){ /* button gone mid-scan */ }
+    }
     var mksNow = Date.now();
     /* And "nothing here" has to still be true two seconds later before it is said out loud.
        Every script starts holding nothing and needs a scan or two to find the page's media,

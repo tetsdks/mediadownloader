@@ -16,6 +16,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -52,6 +53,12 @@ fun BrowserScreen(
 ) {
     val state by vm.uiState.collectAsStateWithLifecycle()
     var address by rememberSaveable { mutableStateOf("") }
+
+    // Follow the page. Without this the field keeps whatever was typed last, so after following a
+    // link it names a page you are no longer on - and Reload looks like it went somewhere else.
+    LaunchedEffect(state.url) {
+        if (state.url.isNotBlank()) address = state.url
+    }
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
