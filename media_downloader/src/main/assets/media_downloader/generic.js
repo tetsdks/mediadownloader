@@ -19,7 +19,7 @@ if(!(document.head || document.documentElement)){ return; }
 
 var css = document.createElement('style');
 css.textContent = '.mks-dl-btn{position:fixed !important;width:55px !important;' +
-    'height:55px !important;z-index:2147483647 !important;background-size:cover !important;' +
+    'height:55px !important;z-index:2147483646 !important;background-size:cover !important;' +
     'border-radius:8px !important;opacity:0.95 !important;display:none !important}';
 /* head is not there yet on a very early injection, and reaching through null used to throw
    after the guard had already been set - which then blocked every later, healthy injection */
@@ -893,6 +893,119 @@ function mksUsablePoster(u){
     return v;
 }
 
+/* The press was taken and the app is looking: a disc says so, drawn over the button the finger
+   is already on. An answer can be a second or two away - a parser reading the card's page, a
+   player being made to ask for its stream again - and with nothing changing on screen the only
+   reading is that the press missed.
+
+   One disc for the whole page, laid over the button rather than built into it: a feed replaces
+   the media it shows - youtube swaps the preview player as the reader scrolls - and a button
+   whose video has gone is removed and built again, taking anything drawn inside it with it.
+
+   Turned by a timer rather than a keyframe animation, and drawn out of borders rather than an
+   image: a page may forbid inline styles outright, which is why everything about the buttons is
+   set through the CSSOM too. */
+var mksWait = null;
+var mksWaitRing = null;
+var mksWaitTurn = 0;
+var mksWaitUntil = 0;
+function mksWaitShow(b){
+    try{
+        var r = b.getBoundingClientRect();
+        if(r.width <= 0 || r.height <= 0) return;
+        if(!mksWait){
+            mksWait = document.createElement('div');
+            mksWait.style.setProperty('position', 'fixed', 'important');
+            mksWait.style.setProperty('z-index', '2147483647', 'important');
+            mksWait.style.setProperty('border-radius', '50%', 'important');
+            mksWait.style.setProperty('background-color', '#ef2b2b', 'important');
+            mksWait.style.setProperty('box-shadow', '0 2px 6px rgba(0,0,0,0.45)', 'important');
+            /* The button underneath stays pressable: this only ever reports what is happening. */
+            mksWait.style.setProperty('pointer-events', 'none', 'important');
+            mksWaitRing = document.createElement('div');
+            mksWaitRing.style.setProperty('position', 'absolute', 'important');
+            mksWaitRing.style.setProperty('left', '27%', 'important');
+            mksWaitRing.style.setProperty('top', '27%', 'important');
+            mksWaitRing.style.setProperty('width', '46%', 'important');
+            mksWaitRing.style.setProperty('height', '46%', 'important');
+            mksWaitRing.style.setProperty('box-sizing', 'border-box', 'important');
+            mksWaitRing.style.setProperty('border', '3px solid rgba(255,255,255,0.35)', 'important');
+            mksWaitRing.style.setProperty('border-top-color', '#ffffff', 'important');
+            mksWaitRing.style.setProperty('border-radius', '50%', 'important');
+            mksWait.appendChild(mksWaitRing);
+        }
+        /* Put back at the end of the body every time, not only when it is built: the buttons carry
+           the same z-index and the feed keeps adding new ones, and between two elements that tie
+           the one later in the document is the one that is painted - so the button that was
+           pressed sat over the disc and nothing appeared to happen at all. */
+        (document.body || document.documentElement).appendChild(mksWait);
+        mksWait.style.setProperty('left', Math.round(r.left) + 'px', 'important');
+        mksWait.style.setProperty('top', Math.round(r.top) + 'px', 'important');
+        mksWait.style.setProperty('width', Math.round(r.width) + 'px', 'important');
+        mksWait.style.setProperty('height', Math.round(r.height) + 'px', 'important');
+        mksWait.style.setProperty('display', 'block', 'important');
+        if(!mksWaitTurn){
+            var at = 0;
+            mksWaitTurn = setInterval(function(){
+                at = (at + 30) % 360;
+                mksWaitRing.style.setProperty('transform', 'rotate(' + at + 'deg)', 'important');
+            }, 70);
+        }
+        /* Never left turning. The app says when it has stopped looking, and this is the backstop
+           for a page it can no longer reach - a little past NOTHING_FOUND_MS. */
+        if(mksWaitUntil){ clearTimeout(mksWaitUntil); }
+        mksWaitUntil = setTimeout(mksWaitHide, 27000);
+    }catch(err){ }
+}
+function mksWaitHide(){
+    try{
+        if(mksWaitTurn){ clearInterval(mksWaitTurn); mksWaitTurn = 0; }
+        if(mksWaitUntil){ clearTimeout(mksWaitUntil); mksWaitUntil = 0; }
+        if(mksWait){ mksWait.style.setProperty('display', 'none', 'important'); }
+    }catch(err){ }
+}
+
+/* The app's word that it has stopped looking, however the search ended. */
+window.mksSearchDone = mksWaitHide;
+
+/* Presses are taken at the window, not on the button.
+   Capture runs from the top of the tree down, so a page listening on the document or the window
+   sees a press before any listener on the button itself: youtube's feed opens the video from a
+   handler of that kind, and the button's own listeners - which stop everything they see - were
+   already too late to matter. This one sits as high as there is, and does nothing at all unless
+   what was pressed is one of this script's own buttons. */
+var mksGuardOn = false;
+var mksArmedBtn = null;
+var mksDownEvents = ['pointerdown', 'touchstart', 'mousedown'];
+var mksUpEvents = ['pointerup', 'touchend', 'mouseup', 'click'];
+function mksPressed(target){
+    for(var n = target, i = 0; n && n.nodeType === 1 && i < 3; i++, n = n.parentNode){
+        if(n.mksFire) return n;
+    }
+    return null;
+}
+function mksInstallPressGuard(){
+    if(mksGuardOn) return;
+    mksGuardOn = true;
+    mksDownEvents.concat(mksUpEvents).forEach(function(name){
+        try{
+            window.addEventListener(name, function(e){
+                var b = mksPressed(e.target);
+                if(!b) return;
+                e.preventDefault();
+                e.stopPropagation();
+                if(e.stopImmediatePropagation){ e.stopImmediatePropagation(); }
+                if(mksDownEvents.indexOf(name) >= 0){ mksArmedBtn = b; return; }
+                /* A click with no press before it is the page's own doing - a synthetic one - and
+                   the work belongs to the release that follows a real press. */
+                if(name !== 'click' && mksArmedBtn !== b){ return; }
+                mksArmedBtn = null;
+                b.mksFire(e);
+            }, true);
+        }catch(err){ }
+    });
+}
+
 function makeBtn(el, card){
     var b = document.createElement('div');
     b.className = 'mks-dl-btn';
@@ -903,7 +1016,11 @@ function makeBtn(el, card){
        built, placed and clickable while being invisible to the reader. Properties set through
        the CSSOM like these are not what a style-src directive blocks. */
     b.style.setProperty('position', 'fixed', 'important');
-    b.style.setProperty('z-index', '2147483647', 'important');
+    /* One below the top, which is where the waiting disc is drawn. Buttons are built and rebuilt
+       as a feed changes what it shows, so each new one came after the disc in the document and
+       won the tie between two equal z-indexes - the disc was there, exactly over the button that
+       had been pressed, and painted underneath it. */
+    b.style.setProperty('z-index', '2147483646', 'important');
     b.style.setProperty('border-radius', '50%', 'important');
     b.style.setProperty('background-color', '#ef2b2b', 'important');
     b.style.setProperty('background-repeat', 'no-repeat', 'important');
@@ -920,7 +1037,17 @@ function makeBtn(el, card){
         e.preventDefault();
         e.stopPropagation();
         if(e.stopImmediatePropagation){ e.stopImmediatePropagation(); }
+        /* This press replaces whatever the last one was waiting for, so only one button is ever
+           marked - the one the reader just touched. */
+        mksWaitShow(b);
         try{
+            /* A player painted over its card rather than built inside it: youtube's feed lays its
+               preview in a layer of its own, so every walk upwards from the <video> leaves the
+               card behind and the press could only hand over the feed's own url - which names no
+               video, and the app was left looking for media on a listing. Asked of the layout
+               instead, and only where the parser reads the site, because there the card's page is
+               exactly what the press is for. */
+            if(!card && window.mksParserSite && !window.mksSingle){ card = cardUnderMedia(el); }
             /* On a page that holds one piece of media, that page is the media's own page -
                there is no card to point at, and a link picked off it is some other page of the
                site. Vimeo's player sits beside links to its own marketing pages, and one of
@@ -1094,7 +1221,12 @@ function makeBtn(el, card){
        not enough on a site that acts on the press rather than the click - dailymotion opens its
        player full screen on pointerdown, so the button appeared to do nothing at all while the
        video took over the screen. Every press event is caught here, in the capture phase, and
-       stopped where it is; the work is done once, on the release. */
+       stopped where it is; the work is done once, on the release.
+
+       The guard at the window does this first and stops the event before it ever reaches these;
+       they stay as the fallback for anything it does not see. */
+    b.mksFire = fire;
+    mksInstallPressGuard();
     var mksArmed = false;
     ['pointerdown', 'touchstart', 'mousedown'].forEach(function(name){
         b.addEventListener(name, function(e){
@@ -1377,6 +1509,29 @@ function findCardLink(el){
         }
         node = mksUp(node);
     }
+    /* Nothing above the media and nothing beside it - so ask the layout instead. Youtube's feed
+       plays its preview in a layer of its own, laid over the card rather than inside it, so every
+       walk from the <video> upwards leaves the card entirely and the press could only ever hand
+       over the feed's own url. What the reader sees is one card, and the link painted under the
+       media is that card's. */
+    return cardUnderMedia(el);
+}
+
+/* The card link painted beneath [el]'s own box, or null. Only links that pass the card test are
+   taken, so a player laid over the page furniture still comes back with nothing. */
+function cardUnderMedia(el){
+    try{
+        if(!document.elementsFromPoint) return null;
+        var r = el.getBoundingClientRect();
+        var L = Math.max(r.left, 0), T = Math.max(r.top, 0);
+        var R = Math.min(r.right, window.innerWidth), B = Math.min(r.bottom, window.innerHeight);
+        if(R <= L || B <= T) return null;
+        var stack = document.elementsFromPoint(Math.round((L + R) / 2), Math.round((T + B) / 2));
+        for(var i = 0; i < stack.length; i++){
+            var a = stack[i].closest ? stack[i].closest('a[href]') : null;
+            if(a && isCardHref(a.href)) return a;
+        }
+    }catch(err){ }
     return null;
 }
 
@@ -1396,6 +1551,12 @@ function isCardHref(h){
     var path = h.substring(location.origin.length).split('?')[0].split('#')[0];
     var parts = path.split('/').filter(function(x){ return !!x; });
     if(parts.length >= 2) return true;
+    /* A site the parser reads names its posts as it pleases, and the parser is what reads them:
+       youtube files every video under /watch and hangs its id in the query, so the anchor wrapping
+       a feed card read as page furniture - the walk climbed past it and the press handed over the
+       feed's own url, which names no video at all. A query carrying something is what separates
+       that from a section: /watch?v=ID is a post, /explore is not. */
+    if(window.mksParserSite && parts.length === 1 && (h.split('?')[1] || '').indexOf('=') > 0) return true;
     /* One segment can still be a video's own page. Rumble names them
        /v6xyz-a-dead-slave-cost-1000.html - a single segment - so the walk above never
        recognised the anchor the card is actually wrapped in, climbed past it, and took a link

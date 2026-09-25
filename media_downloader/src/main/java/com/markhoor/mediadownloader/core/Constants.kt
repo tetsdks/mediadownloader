@@ -264,6 +264,13 @@ internal object Constants {
         /** How long a request for media waits for anything before the page is said to have none. */
         const val NOTHING_FOUND_MS = 25_000L
 
+        /**
+         * Tells a page script the search it was waiting on is over, so it can stop marking the
+         * button that was pressed. Guarded: the site scripts define no such function, and a page
+         * may have none of ours left on it at all.
+         */
+        const val SEARCH_DONE_SCRIPT = "window.mksSearchDone&&window.mksSearchDone();"
+
         /** How long a tap on a card waits for its restarted player before taking the last stream seen. */
         const val SNIFFER_FALLBACK_MS = 3_500L
 
