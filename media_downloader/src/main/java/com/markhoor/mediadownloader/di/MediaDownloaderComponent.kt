@@ -142,6 +142,8 @@ internal class MediaDownloaderComponent(
     val downloadEngine: DownloadEngine by lazy {
         val fileFetcher = HttpFileFetcher(HttpClientFactory.createForDownloads())
         val lowEnd = deviceProfile.isLowEnd
+        // One remuxer: a stream's tracks and a direct download's two files are joined the same way.
+        val remuxer = MediaMuxerRemuxer()
         DownloadEngine(
             direct = DirectFileDownloader(
                 fetcher = fileFetcher,
@@ -150,9 +152,10 @@ internal class MediaDownloaderComponent(
             hls = HlsStreamDownloader(
                 fetcher = fileFetcher,
                 playlistFetcher = httpFetcher,
-                remuxer = MediaMuxerRemuxer(),
+                remuxer = remuxer,
                 maxParallelSegments = if (lowEnd) Device.LOW_END_PARALLEL_SEGMENTS else Download.MAX_PARALLEL_SEGMENTS,
             ),
+            remuxer = remuxer,
             ioDispatcher = ioDispatcher,
         )
     }

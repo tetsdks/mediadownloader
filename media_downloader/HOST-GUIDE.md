@@ -482,7 +482,7 @@ data class MediaQualityModel(
 | `label` | What to call it: `1080p`, `720p`, `HD`, `SD`, `Watermark`, `Image`, `Media_2` (carousel item), `Page 2`… |
 | `type` | `Video`, `Image` or `Audio`. |
 | `sizeBytes` | Size when known. For a stream it is an estimate (show it as `~12 MB`); `null` when unknown. |
-| `audioUrl` | Separate sound for a stream that keeps it apart; the download merges it. |
+| `audioUrl` | Separate sound, for a quality that keeps it apart - common above the lowest resolution. The download fetches both and joins them; if the sound cannot be had, the video is still saved. |
 | `headers` | Request headers the download needs (`Referer`, `User-Agent`, cookies). Keep them with the quality; `download(media, quality)` passes them on. |
 
 ### 5.3 `MediaType`

@@ -421,6 +421,14 @@ its wiring in `MediaDownloaderComponent`.
     body at zero height, so `bottom` measured against nothing and the button was laid out 177px
     above the top of the screen - present, visible, 40x40, and not on the display. It is `fixed`
     there, at the maximum z-index, because instagram lays its own overlay over a reel.
+  - **A file whose sound is a second file is joined, not just the first url.** `audioUrl` used to
+    be read only on the HLS path; a direct download took the picture and left the sound where it
+    was, and the reader got a silent video. `DownloadEngine.downloadWithSound` fetches both and
+    hands them to the same `StreamRemuxer` a stream's tracks go through. The sound is allowed to
+    fail - a silent video beats no video - so anything short of both tracks arriving and joining
+    leaves the picture as the file. The sound is measured on a meter of its own and folded in at
+    the end: a direct download starts its meter from what is on disk for the file it is fetching,
+    so sharing one made the progress fall back to nothing the moment the picture finished.
   - **A WebView the module makes may start media by itself.** `MediaBrowser.configure` sets
     `mediaPlaybackRequiresUserGesture = false` (and a wide viewport) only when `ownsWebView`:
     detection has nothing to find until a player asks for its file, and many only do that on play.
