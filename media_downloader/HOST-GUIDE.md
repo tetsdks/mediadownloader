@@ -461,7 +461,7 @@ data class MediaModel(
 | `thumbnailUrl` | Artwork to show, when the site has any: an `https` image or a small `data:image/` url. Load it with Glide/Coil as usual. |
 | `qualities` | Every downloadable version, **in the order to list them** (best first for streams). |
 | `sourceUrl` | The page or link it was found on. |
-| `durationMillis` | Running time, when the site says. |
+| `durationMillis` | Running time, in milliseconds, for a video. Taken from whatever knows it: the site's own answer, else the stream's playlist, else the player the reader pressed. `null` for a picture, a live stream, and a video nothing could say a length for. |
 
 ### 5.2 `MediaQualityModel` — one downloadable version
 

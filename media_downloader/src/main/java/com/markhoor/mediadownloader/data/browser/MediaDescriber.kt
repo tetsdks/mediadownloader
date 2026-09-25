@@ -49,8 +49,15 @@ internal class MediaDescriber(
                 }
             }
             first.url.isHlsPlaylistUrl() && found.qualities.size == 1 ->
-                hlsQualityReader.qualitiesOf(first.url, first.headers).takeIf { it.isNotEmpty() }
-                    ?.let { found.copy(qualities = it) }
+                hlsQualityReader.qualitiesOf(first.url, first.headers).takeIf { it.qualities.isNotEmpty() }
+                    ?.let { stream ->
+                        // The playlist states how long it runs, and on a sniffed stream nothing else
+                        // does unless the player that was pressed happened to know.
+                        found.copy(
+                            qualities = stream.qualities,
+                            durationMillis = stream.durationMillis ?: found.durationMillis,
+                        )
+                    }
             else -> null
         }
         val source = richer ?: found

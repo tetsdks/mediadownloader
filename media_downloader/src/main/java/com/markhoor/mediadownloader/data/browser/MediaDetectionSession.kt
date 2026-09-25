@@ -347,6 +347,10 @@ internal class MediaDetectionSession(
         // A tap with no artwork keeps what the page said about itself, when it is this page.
         if (tapThumb.isNotBlank() || page.cardPage != site) page.cardThumb = tapThumb
         page.cardPage = cardPageUrl
+        // The player on the page knows how long its media runs as soon as it has read the header,
+        // and on most sites nothing else here ever does: no parser reads them, and a file's own
+        // length would cost a request and a read. A parser's answer still wins over this.
+        page.cardDurationMillis = message.durationMillis
         page.tappedPage = site
         // A slug names the media when it is the media's own page: a card's, or a page holding one
         // video. The page a press came from is neither when it is a listing - imdb's "fall tv
@@ -739,6 +743,7 @@ internal class MediaDetectionSession(
         thumbnailUrl = thumbnail.ifBlank { null },
         qualities = listOf(MediaQualityModel(url = url, label = QualityLabels.HD, type = type, headers = headers)),
         sourceUrl = page.siteUrl,
+        durationMillis = page.cardDurationMillis.takeIf { type == MediaType.Video },
     )
 
     // endregion
@@ -818,6 +823,9 @@ internal class MediaDetectionSession(
         var cardTitle = ""
         var cardThumb = ""
         var cardPage = ""
+
+        /** How long the player that was pressed says its media runs; see [mediaOf]. */
+        var cardDurationMillis: Long? = null
         var awaitingMedia = false
 
         /** The page's one stream, while it has only one; see [rememberPageStream]. */

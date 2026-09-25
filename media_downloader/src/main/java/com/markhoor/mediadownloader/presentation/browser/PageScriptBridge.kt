@@ -39,6 +39,7 @@ internal class PageScriptBridge(private val detector: MediaDetector) {
     fun feedCardChanged(title: String?, thumbnail: String?, mediaUrl: String?, isImage: Boolean) =
         send(ScriptMessage.CardChanged(title?.take(Download.MAX_STORED_TITLE_LENGTH), thumb(thumbnail), link(mediaUrl), isImage))
 
+    // Two signatures, not a default: a script written against the shorter one still has to find it.
     @JavascriptInterface
     fun genericMediaRequested(
         pageUrl: String?,
@@ -47,9 +48,22 @@ internal class PageScriptBridge(private val detector: MediaDetector) {
         mediaUrl: String?,
         playing: Boolean,
         isImage: Boolean,
+    ) = genericMediaRequested(pageUrl, title, thumbnail, mediaUrl, playing, isImage, 0.0)
+
+    /** [seconds] is what the player on the page says its media runs; 0 when it does not know. */
+    @JavascriptInterface
+    fun genericMediaRequested(
+        pageUrl: String?,
+        title: String?,
+        thumbnail: String?,
+        mediaUrl: String?,
+        playing: Boolean,
+        isImage: Boolean,
+        seconds: Double,
     ) = send(
         ScriptMessage.MediaRequested(
             link(pageUrl), title?.take(Download.MAX_STORED_TITLE_LENGTH), thumb(thumbnail), link(mediaUrl), playing, isImage,
+            runningMillis(seconds),
         ),
     )
 
@@ -200,4 +214,13 @@ internal class PageScriptBridge(private val detector: MediaDetector) {
 
     /** A thumbnail may be a small inline image; one past what a download keeps is dropped. */
     private fun thumb(url: String?): String? = url?.takeIf { it.length <= Download.MAX_STORED_URL_LENGTH }
+
+    /**
+     * A running time worth passing on. A player that has loaded no media yet reports 0, a live
+     * stream reports infinity, and a broken one reports NaN - none of those is a length, and only a
+     * real one is worth showing beside a video's name.
+     */
+    private fun runningMillis(seconds: Double): Long? = seconds
+        .takeIf { it.isFinite() && it > 0.0 && it < Browser.LONGEST_BELIEVABLE_SECONDS }
+        ?.let { (it * 1_000).toLong() }
 }

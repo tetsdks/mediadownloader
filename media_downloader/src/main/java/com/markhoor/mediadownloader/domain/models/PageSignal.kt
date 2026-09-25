@@ -65,6 +65,9 @@ internal sealed interface ScriptMessage {
         val mediaUrl: String?,
         val isPlaying: Boolean,
         val isImage: Boolean,
+        /** How long the player says its media runs, when it knows; `null` on a picture or a stream
+         *  whose length is not loaded yet. */
+        val durationMillis: Long? = null,
     ) : ScriptMessage
 
     /**

@@ -243,6 +243,44 @@ class MediaDetectionSessionTest {
     }
 
     @Test
+    fun `the running time the pressed player reported is offered with its video`() = runTest {
+        // Nothing on this page states a length: the player on it is the only thing that knows.
+        val (session) = harness()
+        session.commit(rumblePage)
+        session.onSignal(PageSignal.RequestSeen(videoUrl, emptyMap()))
+        session.state.first { it.media != null }
+
+        session.onSignal(
+            PageSignal.Script(
+                ScriptMessage.MediaRequested(
+                    null, "A clip", null, null, isPlaying = true, isImage = false, durationMillis = 92_500,
+                ),
+            ),
+        )
+
+        assertEquals(92_500L, session.state.first { it.media?.durationMillis != null }.media?.durationMillis)
+    }
+
+    @Test
+    fun `a picture is offered with no running time, whatever the press carried`() = runTest {
+        val (session) = harness()
+        session.commit(rumblePage)
+
+        session.onSignal(
+            PageSignal.Script(
+                ScriptMessage.MediaRequested(
+                    null, "A photo", null, "https://cdn.test/a-photo.jpg",
+                    isPlaying = false, isImage = true, durationMillis = 92_500,
+                ),
+            ),
+        )
+
+        val offered = session.state.first { it.media != null }.media
+        assertEquals(MediaType.Image, offered?.qualities?.single()?.type)
+        assertNull(offered?.durationMillis)
+    }
+
+    @Test
     fun `a tap on a blob player takes the page's one stream, and a looping clip heard next does not replace it`() = runTest {
         val harness = harness()
         val page = "https://www.reddit.com/r/videos/comments/abc/a_post/"
