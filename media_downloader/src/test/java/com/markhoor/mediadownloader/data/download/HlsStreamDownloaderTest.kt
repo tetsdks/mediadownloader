@@ -292,6 +292,7 @@ class HlsStreamDownloaderTest {
         val engine = DownloadEngine(
             direct = DirectFileDownloader(HttpFileFetcher(server.client)),
             hls = downloader(server, remuxer),
+            remuxer = remuxer,
             ioDispatcher = Dispatchers.Unconfined,
         )
 

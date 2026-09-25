@@ -135,6 +135,10 @@ internal object Constants {
     object Scratch {
         const val PART_PREFIX = "part-"
         const val VIDEO_DIR = "video"
+
+        /** Where a direct download keeps the two tracks it is about to join. */
+        const val VIDEO_TRACK = "video.track"
+        const val AUDIO_TRACK = "audio.track"
         const val AUDIO_DIR = "audio"
         const val INIT_NAME = "init.seg"
         const val DONE_SUFFIX = ".seg"
