@@ -8,7 +8,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -95,6 +97,10 @@ fun BrowserScreen(
                     progress = { state.progress / 100f },
                     modifier = Modifier.fillMaxWidth(),
                 )
+            } else if (state.media is PageMediaState.Searching) {
+                // The press has been taken and the library is reading the page. It can take a few
+                // seconds, and with nothing moving on screen the only reading is that the tap missed.
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
             }
 
             Row(
@@ -115,7 +121,8 @@ fun BrowserScreen(
                     },
                 )
                 if (state.media is PageMediaState.Searching) {
-                    Text("Looking for media…", style = MaterialTheme.typography.bodySmall)
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                    Text("Looking for media…", style = MaterialTheme.typography.bodyMedium)
                 }
             }
 

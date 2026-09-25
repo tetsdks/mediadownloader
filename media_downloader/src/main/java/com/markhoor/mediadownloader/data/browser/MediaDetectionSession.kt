@@ -785,10 +785,15 @@ internal class MediaDetectionSession(
 
     /** Applies [change] and works out again whether the host's own button belongs on the page. */
     private fun publish(change: (DetectionState) -> DetectionState) {
+        var searchEnded = false
         _state.update { current ->
             val next = change(current)
+            searchEnded = current.isSearching && !next.isSearching
             next.copy(showDownloadButton = nativeButtonWanted(next))
         }
+        // The script marks the button that was pressed while the search runs, so a reader can see
+        // the press was taken; this is what tells it to stop, whatever the search came to.
+        if (searchEnded) _commands.trySend(PageCommand.RunScript(Browser.SEARCH_DONE_SCRIPT))
     }
 
     /**
