@@ -867,6 +867,19 @@ function coverNear(v){
     return '';
 }
 
+/* How long the media on the card runs, in seconds, or 0 where nothing can say.
+   The player itself is the only thing on a page that knows, and it knows as soon as it has read
+   its own header - so a press hands the time over and the app has it for every site, not just the
+   few whose parser states it. A player with nothing loaded reports 0 and a live one infinity;
+   both are sent as they are and refused on the other side, where the rule can be tested. */
+function mksRunningTime(el){
+    try{
+        if(!el || el.tagName !== 'VIDEO') return 0;
+        var d = el.duration;
+        return (typeof d === 'number') ? d : 0;
+    }catch(e){ return 0; }
+}
+
 /* card: the anchor a poster sits in, null when the element is a live <video> */
 /* A poster the page can actually be asked for. A data: uri here is the placeholder a site
    paints while the real cover loads - nytimes sets every video's poster to a few hundred bytes
@@ -1025,7 +1038,7 @@ function makeBtn(el, card){
             if(mksFrame){ href = location.href; }
             MediaDownloaderBridge.genericMediaRequested(
                 href, mksName, poster, mksMedia,
-                el.tagName === 'VIDEO' || !!mksPic, !!mksPic);
+                el.tagName === 'VIDEO' || !!mksPic, !!mksPic, mksRunningTime(el));
             if(el.tagName === 'VIDEO'){
                 /* Restart so the player asks for the stream again and the sniffer sees it. A player
                    streaming through MSE has its media buffered and asks for nothing when merely

@@ -308,6 +308,13 @@ internal object Constants {
         /** Longer than this is a data: or blob: url, never a request worth reading. */
         const val MAX_SNIFFED_URL_LENGTH = 8_192
 
+        /**
+         * Longer than this is not a running time: a player reports a live stream as infinity, and
+         * a manifest that states its pieces badly can add up to years. A day is past any video a
+         * site offers to download and well short of those.
+         */
+        const val LONGEST_BELIEVABLE_SECONDS = 24.0 * 60 * 60
+
         /** Candidate playlists asked for at once when looking beside a segment. */
         const val PLAYLIST_PROBES_AT_ONCE = 21
         const val PLAYLIST_PROBES_AT_ONCE_LOW_END = 7

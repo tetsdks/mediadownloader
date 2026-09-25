@@ -34,6 +34,7 @@ class PageScriptBridgeTest {
 
     private val detector = RecordingDetector()
     private val bridge = PageScriptBridge(detector)
+    private val url = "https://cdn.test/v.mp4"
 
     @Test
     fun `page text is cut to a title's length and an oversized url is dropped, not cut`() {
@@ -50,6 +51,22 @@ class PageScriptBridgeTest {
         val found = detector.messages.filterIsInstance<ScriptMessage.MediaFound>().single()
         assertEquals(null, found.mediaUrl)
         assertEquals(1_000, found.title?.length)
+    }
+
+    @Test
+    fun `the running time a player reports is passed on, and nonsense is not`() {
+        // In order: a real length, a player with nothing loaded, a live stream, a broken one, and
+        // a script written before this argument existed.
+        bridge.genericMediaRequested(url, null, null, url, playing = true, isImage = false, seconds = 92.5)
+        bridge.genericMediaRequested(url, null, null, url, playing = true, isImage = false, seconds = 0.0)
+        bridge.genericMediaRequested(
+            url, null, null, url, playing = true, isImage = false, seconds = Double.POSITIVE_INFINITY,
+        )
+        bridge.genericMediaRequested(url, null, null, url, playing = true, isImage = false, seconds = Double.NaN)
+        bridge.genericMediaRequested(url, null, null, url, playing = true, isImage = false)
+
+        val times = detector.messages.filterIsInstance<ScriptMessage.MediaRequested>().map { it.durationMillis }
+        assertEquals(listOf(92_500L, null, null, null, null), times)
     }
 
     @Test

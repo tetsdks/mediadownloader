@@ -6,6 +6,7 @@ import com.markhoor.mediadownloader.core.cleanTitle
 import com.markhoor.mediadownloader.core.isHlsPlaylistUrl
 import com.markhoor.mediadownloader.core.isHttpUrl
 import com.markhoor.mediadownloader.core.sensibleSize
+import com.markhoor.mediadownloader.data.hls.HlsMedia
 import com.markhoor.mediadownloader.data.hls.HlsQualityReader
 import com.markhoor.mediadownloader.data.network.MediaSizeProbe
 import com.markhoor.mediadownloader.data.scraper.ScrapedMediaDto
@@ -45,19 +46,21 @@ internal class MediaParserRepositoryImpl(
     }
 
     private suspend fun mediaModelOf(scraped: ScrapedMediaDto, sourceUrl: String): MediaModel {
-        val qualities = expandedQualities(scraped)
-        val sized = coroutineScope { qualities.map { async { withSensibleSize(it) } }.awaitAll() }
+        val expanded = expandedQualities(scraped)
+        val sized = coroutineScope { expanded.qualities.map { async { withSensibleSize(it) } }.awaitAll() }
         return MediaModel(
             title = scraped.title?.cleanTitle()?.asMediaTitle().orEmpty(),
             thumbnailUrl = scraped.thumbnailUrl?.takeIf { it.isHttpUrl() },
             qualities = sized,
             sourceUrl = sourceUrl,
-            durationMillis = scraped.durationMillis,
+            // What the site said, and failing that what its stream turned out to be: several sites
+            // hand over a playlist and say nothing else about the video at all.
+            durationMillis = scraped.durationMillis ?: expanded.durationMillis,
         )
     }
 
     /** The scraped qualities, or - when the only one is an HLS playlist - the qualities it lists. */
-    private suspend fun expandedQualities(scraped: ScrapedMediaDto): List<MediaQualityModel> {
+    private suspend fun expandedQualities(scraped: ScrapedMediaDto): HlsMedia {
         val qualities = scraped.qualities.filter { it.url.isNotBlank() }.map { quality ->
             MediaQualityModel(
                 url = quality.url,
@@ -68,8 +71,10 @@ internal class MediaParserRepositoryImpl(
                 headers = scraped.headers,
             )
         }
-        val stream = qualities.singleOrNull()?.takeIf { it.url.isHlsPlaylistUrl() } ?: return qualities
-        return hlsQualityReader.qualitiesOf(stream.url, stream.headers).ifEmpty { qualities }
+        val stream = qualities.singleOrNull()?.takeIf { it.url.isHlsPlaylistUrl() }
+            ?: return HlsMedia(qualities, null)
+        val read = hlsQualityReader.qualitiesOf(stream.url, stream.headers)
+        return if (read.qualities.isEmpty()) HlsMedia(qualities, read.durationMillis) else read
     }
 
     /** A file is asked its size; a stream's size was already worked out from its playlist. */

@@ -1,5 +1,6 @@
 package com.markhoor.mediadownloader.data.hls
 
+import com.markhoor.mediadownloader.core.Constants.Browser
 import com.markhoor.mediadownloader.core.Constants.MediaSize
 import com.markhoor.mediadownloader.core.Constants.QualityLabels
 import com.markhoor.mediadownloader.core.qualityNameFromResolution
@@ -7,6 +8,17 @@ import com.markhoor.mediadownloader.data.network.HttpFetcher
 import com.markhoor.mediadownloader.data.network.MediaSizeProbe
 import com.markhoor.mediadownloader.domain.models.MediaQualityModel
 import com.markhoor.mediadownloader.domain.models.MediaType
+
+/**
+ * What an HLS playlist turned out to hold: its encodes, and how long they run.
+ *
+ * The running time falls out of reading the playlist, which is done for the sizes anyway, so it
+ * costs nothing to say. A live playlist has none and says `null`.
+ */
+internal data class HlsMedia(
+    val qualities: List<MediaQualityModel>,
+    val durationMillis: Long?,
+)
 
 /**
  * The qualities an HLS playlist offers, labelled and sized.
@@ -23,13 +35,18 @@ internal class HlsQualityReader(
 
     private val labelInUrl = Regex("""(\d{3,4})p""")
 
-    /** The qualities behind [playlistUrl], or an empty list when it cannot be read. */
-    suspend fun qualitiesOf(playlistUrl: String, headers: Map<String, String>): List<MediaQualityModel> {
-        val text = fetcher.getText(playlistUrl, headers).getOrNull() ?: return emptyList()
+    /** What is behind [playlistUrl], or nothing at all when it cannot be read. */
+    suspend fun qualitiesOf(playlistUrl: String, headers: Map<String, String>): HlsMedia {
+        val text = fetcher.getText(playlistUrl, headers).getOrNull()
+            ?: return HlsMedia(emptyList(), null)
         return if (HlsPlaylistParser.isMaster(text)) {
             masterQualities(text, playlistUrl, headers)
         } else {
-            listOf(mediaPlaylistQuality(text, playlistUrl, headers))
+            val playlist = HlsPlaylistParser.parseMedia(text, playlistUrl)
+            HlsMedia(
+                qualities = listOf(mediaPlaylistQuality(playlist, playlistUrl, headers)),
+                durationMillis = runningMillis(playlist.durationSeconds.takeIf { playlist.isComplete }),
+            )
         }
     }
 
@@ -37,31 +54,33 @@ internal class HlsQualityReader(
         text: String,
         playlistUrl: String,
         headers: Map<String, String>,
-    ): List<MediaQualityModel> {
+    ): HlsMedia {
         // Best first, and one entry per label: a master can list the same height twice at two
         // rates ("360p", "360p"), and the sheet cannot tell the user which is which.
         val variants = HlsPlaylistParser.parseMaster(text, playlistUrl)
             .sortedWith(compareByDescending<HlsVariantDto> { shortSideOf(it) }.thenByDescending { rateOf(it) })
             .distinctBy(::labelOf)
         val seconds = variants.firstOrNull()?.let { runningSeconds(it.url, headers) } ?: 0.0
-        return variants.map { variant ->
-            MediaQualityModel(
-                url = variant.url,
-                label = labelOf(variant),
-                type = MediaType.Video,
-                sizeBytes = estimatedBytes(variant, seconds),
-                audioUrl = variant.audioUrl,
-                headers = headers,
-            )
-        }
+        return HlsMedia(
+            qualities = variants.map { variant ->
+                MediaQualityModel(
+                    url = variant.url,
+                    label = labelOf(variant),
+                    type = MediaType.Video,
+                    sizeBytes = estimatedBytes(variant, seconds),
+                    audioUrl = variant.audioUrl,
+                    headers = headers,
+                )
+            },
+            durationMillis = runningMillis(seconds),
+        )
     }
 
     private suspend fun mediaPlaylistQuality(
-        text: String,
+        playlist: HlsMediaPlaylistDto,
         playlistUrl: String,
         headers: Map<String, String>,
     ): MediaQualityModel {
-        val playlist = HlsPlaylistParser.parseMedia(text, playlistUrl)
         return MediaQualityModel(
             url = playlistUrl,
             label = labelInUrl.find(playlistUrl)?.let { "${it.groupValues[1]}p" } ?: QualityLabels.HD,
@@ -80,6 +99,11 @@ internal class HlsQualityReader(
         if (bytesPerSecond < MediaSize.MIN_SAMPLED_BYTES_PER_SECOND) return null
         return (bytesPerSecond * playlist.durationSeconds).toLong().takeIf { it > 0 }
     }
+
+    /** Seconds a playlist states, as a length worth showing; a live one states none. */
+    private fun runningMillis(seconds: Double?): Long? = seconds
+        ?.takeIf { it.isFinite() && it > 0.0 && it < Browser.LONGEST_BELIEVABLE_SECONDS }
+        ?.let { (it * 1_000).toLong() }
 
     private suspend fun runningSeconds(variantUrl: String, headers: Map<String, String>): Double {
         val text = fetcher.getText(variantUrl, headers).getOrNull() ?: return 0.0
