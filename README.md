@@ -58,7 +58,7 @@ dependencyResolutionManagement {
 ```kotlin
 // app/build.gradle.kts
 dependencies {
-    implementation("com.github.Dev-Husnain:MediaDownloaderLibrary:0.1.0")
+    implementation("com.github.Dev-Husnain:MediaDownloaderLibrary:0.1.1")
 }
 ```
 
