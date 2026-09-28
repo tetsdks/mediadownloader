@@ -47,21 +47,32 @@ No DI framework: nothing to register in Koin/Hilt.
 
 ### 2.1 Gradle
 
-**1. Copy the folder** `media_downloader/` into the project root, next to `app/`.
-
-**2. `settings.gradle.kts`:**
-
-```kotlin
-include(":media_downloader")
-```
-
-**3. App `build.gradle.kts`:**
+**As a dependency**, which is how it is meant to be taken. A release is a git tag, and JitPack
+serves it:
 
 ```kotlin
-dependencies {
-    implementation(project(":media_downloader"))
+// settings.gradle.kts
+dependencyResolutionManagement {
+    repositories {
+        google()
+        mavenCentral()
+        maven { url = uri("https://jitpack.io") }
+    }
 }
 ```
+
+```kotlin
+// app/build.gradle.kts
+dependencies {
+    implementation("com.github.Dev-Husnain:MediaDownloaderLibrary:0.1.2")
+}
+```
+
+That is the whole of it: the libraries below come with it, and so do its manifest entries and its
+R8 rules. **The rest of this section is only for a project that keeps the module's source itself**
+- a fork, or a build that cannot reach JitPack - where `media_downloader/` is copied into the
+project root next to `app/`, added to `settings.gradle.kts` as `include(":media_downloader")` and
+depended on as `implementation(project(":media_downloader"))`.
 
 **4. Plugins.** The module uses three Gradle plugins. If the root `build.gradle.kts` doesn't
 declare them yet, add them there (`apply false`):
