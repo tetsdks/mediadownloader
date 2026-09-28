@@ -397,6 +397,24 @@ class ExampleSource : MediaSource {
 MediaDownloader.initialize(this, MediaDownloaderConfig(extraSources = listOf(ExampleSource())))
 ```
 
+A source that also reads **collections** - a playlist, an album, a board - implements
+`MediaCollectionSource` on the same class:
+
+```kotlin
+interface MediaCollectionSource {
+    /** Asked first, by link alone: a link this claims is never read as one piece of media. */
+    fun handlesCollection(url: String): Boolean
+
+    /** What it lists, or null when it holds nothing. */
+    suspend fun readCollection(url: String): MediaCollectionModel?
+}
+```
+
+What comes back is a list of **links**, not of downloads. Each entry is read for its own qualities
+when its turn to be fetched comes - see §4.4 - which is what lets a playlist of any length answer
+as quickly as a single video, and what keeps its urls fresh: a site mints them for whoever asked
+and they go stale within hours.
+
 Five rules to know:
 
 - **Write `handles` whenever the site is more than its posts.** The module asks it to tell a post's
@@ -455,6 +473,7 @@ fine. Before `initialize`:
 fun siteAccess(url: String): SiteAccess
 fun isAllowed(url: String): Boolean
 suspend fun parse(text: String): Result<MediaModel>
+suspend fun read(text: String): Result<ParsedLink>
 ```
 
 | Function | Returns | Notes |
@@ -462,12 +481,54 @@ suspend fun parse(text: String): Result<MediaModel>
 | `siteAccess(url)` | `Allowed`, `Blocked` or `Unsupported` | Whether downloads may be offered for that url's site under the current config. Cheap; fine on the main thread. |
 | `isAllowed(url)` | `Boolean` | Shorthand for `siteAccess(url) == SiteAccess.Allowed`. Use it to decide whether to show a "download" affordance for a link. |
 | `parse(text)` | `Result<MediaModel>` | Reads the media behind a link. `text` may be a bare url or text containing one (a share from another app). On failure the exception is always a `MediaParseException` (§6.1). Every quality is labelled and, where possible, sized. |
+| `read(text)` | `Result<ParsedLink>` | The same, for a host that does not know what it was handed: `ParsedLink.One` is a piece of media, `ParsedLink.Many` a collection - a playlist, an album - listing links to read later (§4.4). Use this rather than `parse` when a link may be either; `LinkParseViewModel` already does. |
 
 Sites the parser reads directly (paste or share a link): **Facebook, Instagram, Threads, TikTok,
 X/Twitter (needs the key), Pinterest (incl. `pin.it`), Dailymotion, LinkedIn**. Other supported
 sites are handled by the browser (§7.3).
 
-### 4.3 Downloads
+### 4.3 Collections - playlists and the like
+
+```kotlin
+fun downloadCollection(collection: MediaCollectionModel, preferredQuality: String? = null)
+fun stopAddingCollection()
+fun collectionProgress(): StateFlow<CollectionProgress>
+```
+
+`read(text)` answers `ParsedLink.Many` when a link names many pieces of media. What comes back is a
+list of **links and their titles, in the collection's own order** - nothing has been fetched beyond
+the list itself.
+
+`downloadCollection` queues the lot and **returns at once**: the reading and queueing carry on in
+the module's own scope, so leaving the screen does not stop them. One entry at a time, in order,
+each read for its qualities only when its turn comes - a video's urls are minted for whoever asked
+and go stale, so reading fifty up front would leave the back of the list expired before it was
+reached.
+
+What the module does with each entry:
+
+| | |
+|---|---|
+| **Folder** | `Download/<root>/Websites/<collection title>/` - its own folder, named after it |
+| **Name** | `01 - <video title>`, `02 - …`, as wide as the collection is long, **in the collection's order** - which is what keeps the order visible, since the downloads will not finish in it |
+| **Quality** | `preferredQuality` is a label to aim for (`"720p"`); an entry that does not offer it gets the closest it does - the tallest that is no taller, else the smallest above |
+| **Failures** | an entry that cannot be read is counted in `collectionProgress()` and skipped; the rest carry on |
+
+The downloads themselves are ordinary downloads: they appear in `observeDownloads()`, pause,
+resume and delete like any other. `collectionProgress()` is only about *adding* them - it is what a
+host says "adding 3 of 50" from.
+
+```kotlin
+when (val parsed = MediaDownloader.read(pasted).getOrThrow()) {
+    is ParsedLink.One -> showQualities(parsed.media)
+    is ParsedLink.Many -> MediaDownloader.downloadCollection(parsed.collection, "720p")
+}
+```
+
+Which links count as collections is up to the sources the host supplies (§3.2); the module reads
+none of its own.
+
+### 4.4 Downloads
 
 ```kotlin
 suspend fun download(request: DownloadRequest): Result<Long>
@@ -529,7 +590,41 @@ data class MediaModel(
 | `sourceUrl` | The page or link it was found on. |
 | `durationMillis` | Running time, in milliseconds, for a video. Taken from whatever knows it: the site's own answer, else the stream's playlist, else the player the reader pressed. `null` for a picture, a live stream, and a video nothing could say a length for. |
 
-### 5.2 `MediaQualityModel` — one downloadable version
+### 5.2 `MediaCollectionModel` — a playlist, as a list of links
+
+```kotlin
+data class MediaCollectionModel(
+    val title: String,
+    val sourceUrl: String,
+    val items: List<MediaCollectionItem>,
+)
+
+data class MediaCollectionItem(
+    val url: String,
+    val title: String,
+    val thumbnailUrl: String? = null,
+    val durationMillis: Long? = null,
+)
+
+sealed interface ParsedLink {
+    data class One(val media: MediaModel) : ParsedLink
+    data class Many(val collection: MediaCollectionModel) : ParsedLink
+}
+
+data class CollectionProgress(
+    val title: String = "",
+    val added: Int = 0,
+    val failed: Int = 0,
+    val total: Int = 0,
+    val isAdding: Boolean = false,
+)
+```
+
+`title` is also the folder the collection's downloads are saved in, and `items` is in the order the
+collection lists them - the order they are numbered and queued in. Nothing in `items` has been
+fetched; each entry is read when its turn comes (§4.3).
+
+### 5.3 `MediaQualityModel` — one downloadable version
 
 ```kotlin
 data class MediaQualityModel(
@@ -551,13 +646,13 @@ data class MediaQualityModel(
 | `audioUrl` | Separate sound, for a quality that keeps it apart - common above the lowest resolution. The download fetches both and joins them; if the sound cannot be had, the video is still saved. |
 | `headers` | Request headers the download needs (`Referer`, `User-Agent`, cookies). Keep them with the quality; `download(media, quality)` passes them on. |
 
-### 5.3 `MediaType`
+### 5.4 `MediaType`
 
 ```kotlin
 enum class MediaType { Video, Image, Audio }
 ```
 
-### 5.4 `DownloadRequest` — what to download
+### 5.5 `DownloadRequest` — what to download
 
 Use `MediaDownloader.download(media, quality)` in most cases. Build a request directly when the
 media did not come from the module (your own content, e.g. Shorts) or to add a download paused.
@@ -597,7 +692,7 @@ data class DownloadRequest(
 | `siteFolder` | A folder under `Websites/` to save in, overriding the one picked from `sourceUrl`. One folder name, never a path. |
 | `expectedSizeBytes` | The size the user was shown before downloading (for a stream, an estimate). Progress starts from it, so the download shows the same size as the quality list until the real size is known. `DownloadRequest.of` / `download(media, quality)` fill it from `quality.sizeBytes`. |
 
-### 5.5 `DownloadModel` — one download, as the host shows it
+### 5.6 `DownloadModel` — one download, as the host shows it
 
 ```kotlin
 data class DownloadModel(
@@ -629,7 +724,7 @@ data class DownloadModel(
 | `isMediaGone` | The download failed because the media was never there to take - a private or deleted post, a link already spent - rather than because something went wrong on the way. Say so instead of offering a retry: trying again is told the same thing. |
 | `progressPercent` | Convenience: 0–100 or `null`. |
 
-### 5.6 `DownloadState`
+### 5.7 `DownloadState`
 
 ```kotlin
 enum class DownloadState { Queued, Downloading, Paused, WaitingForNetwork, Completed, Failed;
@@ -647,7 +742,7 @@ enum class DownloadState { Queued, Downloading, Paused, WaitingForNetwork, Compl
 
 `isActive` is `true` for `Queued`, `Downloading` and `WaitingForNetwork`.
 
-### 5.7 `SiteAccess`
+### 5.8 `SiteAccess`
 
 ```kotlin
 enum class SiteAccess { Allowed, Blocked, Unsupported }
@@ -1251,6 +1346,8 @@ Everything a host can reference. Anything not listed here is `internal` to the m
 
 **`com.markhoor.mediadownloader.domain.models`**
 - `MediaModel`, `MediaQualityModel`, `enum MediaType`
+- `MediaCollectionModel`, `MediaCollectionItem`, `sealed ParsedLink`, `CollectionProgress`
+- `interface MediaCollectionSource` — a supplied reader that also reads playlists
 - `DownloadRequest` (+ `DownloadRequest.of`), `DownloadModel`, `enum DownloadState`
 - `enum SiteAccess`
 - `sealed MediaParseException`: `SiteBlocked`, `SiteUnsupported`, `LinkNotRecognised`, `MediaNotFound`

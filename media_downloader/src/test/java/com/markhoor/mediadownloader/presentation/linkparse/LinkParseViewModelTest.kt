@@ -5,6 +5,7 @@ import com.markhoor.mediadownloader.domain.models.MediaParseException
 import com.markhoor.mediadownloader.domain.repo.MediaParserRepository
 import com.markhoor.mediadownloader.domain.usecase.CheckSiteAccessUseCase
 import com.markhoor.mediadownloader.domain.usecase.ParseLinkUseCase
+import com.markhoor.mediadownloader.domain.usecase.ReadLinkUseCase
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -32,8 +33,16 @@ class LinkParseViewModelTest {
     @After
     fun tearDown() = Dispatchers.resetMain()
 
-    private fun viewModel(repository: MediaParserRepository) =
-        LinkParseViewModel(lazyOf(ParseLinkUseCase(CheckSiteAccessUseCase(true, emptySet()), repository)), dispatcher)
+    private fun viewModel(
+        repository: MediaParserRepository,
+        collections: List<com.markhoor.mediadownloader.MediaCollectionSource> = emptyList(),
+    ): LinkParseViewModel {
+        val access = CheckSiteAccessUseCase(true, emptySet())
+        return LinkParseViewModel(
+            lazyOf(ReadLinkUseCase(access, ParseLinkUseCase(access, repository), collections)),
+            dispatcher,
+        )
+    }
 
     private fun test(block: suspend TestScope.() -> Unit) = runTest(dispatcher) { block() }
 
@@ -51,6 +60,35 @@ class LinkParseViewModelTest {
         answer.complete(Result.success(media))
         advanceUntilIdle()
         assertEquals(LinkParseUiState.Success(media), viewModel.uiState.value)
+    }
+
+    @Test
+    fun `a link that names many answers with the collection, not a video`() = test {
+        val collection = com.markhoor.mediadownloader.domain.models.MediaCollectionModel(
+            title = "Road trip songs",
+            sourceUrl = "https://www.pinterest.com/list/1/",
+            items = listOf(
+                com.markhoor.mediadownloader.domain.models.MediaCollectionItem(
+                    url = "https://www.pinterest.com/pin/1/",
+                    title = "one",
+                ),
+            ),
+        )
+        val source = object : com.markhoor.mediadownloader.MediaCollectionSource {
+            override fun handlesCollection(url: String) = url.contains("/list/")
+            override suspend fun readCollection(url: String) = collection
+        }
+        val viewModel = viewModel(
+            object : MediaParserRepository {
+                override suspend fun parse(url: String) = Result.success(media)
+            },
+            collections = listOf(source),
+        )
+
+        viewModel.parse("https://www.pinterest.com/list/1/")
+        advanceUntilIdle()
+
+        assertEquals(LinkParseUiState.Collection(collection), viewModel.uiState.value)
     }
 
     @Test
