@@ -152,4 +152,7 @@ A release is a git tag and nothing else - there is no version number to edit. Se
 
 ## License
 
-All rights reserved. Contact the author for use outside this repository.
+Copyright 2026 Hussnain Mehdi
+
+Licensed under the [Apache License, Version 2.0](LICENSE). You may use, change and ship this
+library, in closed-source apps too; keep the notice and the license text with it.
