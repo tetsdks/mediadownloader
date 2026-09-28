@@ -7,7 +7,7 @@ plugins {
 
 /**
  * What git says this working tree is: the tag when HEAD is exactly on one and nothing is modified,
- * and otherwise the tag with how far past it we are, the commit, and `-dirty` - e.g.
+ * and otherwise the tag with how far past it, we are, the commit, and `-dirty` - e.g.
  * `0.1.0-4-gab12cd3-dirty`. `--always` keeps it working before the first tag is ever made.
  *
  * Read through `providers.exec`, which the configuration cache understands; a plain command here
@@ -67,7 +67,7 @@ android {
     publishing {
         singleVariant("release") {
             withSourcesJar()
-            // No javadoc jar: it is empty for Kotlin-only sources.
+            // No Javadoc jar: it is empty for Kotlin-only sources.
         }
     }
 }
