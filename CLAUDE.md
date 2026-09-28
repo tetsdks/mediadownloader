@@ -39,8 +39,10 @@ both in step with code changes.
 
 Releases are cut by git tag; JitPack builds only the library (`jitpack.yml`: JDK 21,
 `publishToMavenLocal -x test`) and serves it as
-`com.github.Dev-Husnain:MediaDownloaderLibrary:<tag>` (the repo name, not the module path). Bump
-`version` in `media_downloader/build.gradle.kts` and the tag together.
+`com.github.Dev-Husnain:MediaDownloaderLibrary:<tag>` (the repo name, not the module path). **There
+is no version to edit in a build file** - the tag is the version (`git describe` only fills it in
+for local publishes). Cut one with `tools/release.sh <version> "what changed"`, which also rewrites
+the version the docs tell people to copy. `RELEASE.md` has the whole procedure.
 
 ## Architecture (library)
 

@@ -7,11 +7,21 @@ published. `media_downloader/build.gradle.kts` only falls back to `git describe`
 publishes, which is why a working-tree publish is called something like
 `0.1.0-2-gab12cd3-dirty` and can never quietly overwrite a real release in `~/.m2`.
 
-## The checklist
+## One command
+
+```bash
+tools/release.sh 0.2.0 "what changed"
+```
+
+It refuses to run on a dirty tree or off `main`, refuses a tag that already exists, builds and
+tests, rewrites the version the docs tell people to copy, commits that, then tags and pushes both.
+The step everyone forgets - the install snippet in `README.md` - is the one it does for you.
+
+## Or by hand
 
 ```bash
 # 1. Everything green, from a clean tree.
-./gradlew :media_downloader:test          # 223 tests, 0 failures, 1 skipped (network-gated)
+./gradlew :media_downloader:test          # 250 tests, 0 failures, 1 skipped (network-gated)
 ./gradlew :media_downloader:assembleRelease
 ./gradlew :app:assembleDebug              # the demo still builds against it
 
@@ -21,8 +31,9 @@ git push origin main
 git push origin 0.2.0
 ```
 
-Then, once JitPack has built it (a minute or two), update the version in `README.md` so the install
-snippet shows the newest release, and commit that.
+Then, once JitPack has built it (a minute or two), update the version in `README.md`,
+`media_downloader/HOST-GUIDE.md` and `CLAUDE.md` so the install snippets show the newest release,
+and commit that. The badge at the top of the README needs no edit - it reads the newest tag itself.
 
 ## Checking the release
 
