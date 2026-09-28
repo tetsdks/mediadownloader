@@ -79,6 +79,12 @@ data class DownloadModel(
  *   the real size is known.
  */
 data class DownloadRequest(
+    /**
+     * The file or playlist to fetch. **May be blank**, and then [sourceUrl] is read for it when the
+     * download's turn comes - which is how a whole playlist is queued at once: every entry is a row
+     * from the first moment, and each is read only when it is about to be fetched, so its urls are
+     * fresh. [qualityLabel] is then the quality to aim for rather than the one it turned out to be.
+     */
     val mediaUrl: String,
     val type: MediaType,
     val title: String,

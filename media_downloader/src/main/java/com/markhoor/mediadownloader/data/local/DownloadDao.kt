@@ -59,6 +59,27 @@ internal interface DownloadDao {
         state: DownloadState = DownloadState.Queued,
     ): Int
 
+    /**
+     * Fills in what reading the page answered, for a download that was queued with only a page to
+     * read - a playlist's entries are queued that way, and read one by one as their turns come.
+     */
+    @Query(
+        "UPDATE downloads SET mediaUrl = :mediaUrl, audioUrl = :audioUrl, headers = :headers, " +
+            "qualityLabel = :qualityLabel, isStream = :isStream, totalBytes = :totalBytes, " +
+            "title = :title, thumbnailUrl = :thumbnailUrl WHERE id = :id",
+    )
+    suspend fun setResolved(
+        id: Long,
+        mediaUrl: String,
+        audioUrl: String?,
+        headers: Map<String, String>,
+        qualityLabel: String,
+        isStream: Boolean,
+        totalBytes: Long?,
+        title: String,
+        thumbnailUrl: String?,
+    )
+
     @Query("UPDATE downloads SET downloadedBytes = :downloadedBytes, totalBytes = :totalBytes WHERE id = :id")
     suspend fun setProgress(id: Long, downloadedBytes: Long, totalBytes: Long?)
 

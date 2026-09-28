@@ -21,7 +21,10 @@ internal class EnqueueDownloadUseCase(
 
     suspend operator fun invoke(request: DownloadRequest): Result<Long> {
         val mediaUrl = request.mediaUrl.trim()
-        if (!mediaUrl.isHttpUrl() || mediaUrl.length > Download.MAX_STORED_URL_LENGTH) {
+        // A blank media url is a download that names only its page: the page is read for the file
+        // when the download runs. The page itself still has to be a link.
+        val readsItsPage = mediaUrl.isEmpty() && request.sourceUrl.isHttpUrl()
+        if (!readsItsPage && (!mediaUrl.isHttpUrl() || mediaUrl.length > Download.MAX_STORED_URL_LENGTH)) {
             return Result.failure(DownloadException.InvalidMediaUrl(mediaUrl.take(200)))
         }
         val blocked = listOfNotNull(request.sourceUrl, mediaUrl, request.audioUrl)
