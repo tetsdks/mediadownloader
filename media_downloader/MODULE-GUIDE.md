@@ -294,6 +294,12 @@ its wiring in `MediaDownloaderComponent`.
   query often carries a referrer. Google Play removes apps that download from YouTube or adult
   sites, so the app sets both from `BuildConfig` fields that are `false`.
 - **A string with no host is `Unsupported` in both modes.**
+- **A WebView the module makes is sized `MATCH_PARENT`, not left to its content.** Wrap content -
+  which is what a view with no layout parameters becomes inside a Compose `AndroidView` - makes
+  Chromium resolve `vh`/`dvh`/`svh` to zero, so a page cannot size the view that sizes it. Tiktok
+  lays its player out in `vh`: the video played, at the right resolution, inside a box zero pixels
+  high, and the page read as broken while the button detection produced worked. Anything that
+  renders blank in the browser is worth measuring a `100vh` element in before blaming detection.
 - **No adult-site scrapers.** The old url-parser carried six, unreachable behind the block
   list; they were not brought over.
 - **The tweeload key is configuration**, not source (`MediaDownloaderConfig.twitterApiKey`).
