@@ -33,6 +33,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.markhoor.mediadownloader.MediaDownloader
+import com.markhoor.mediadownloader.domain.models.MediaCollectionModel
 import com.markhoor.mediadownloader.domain.models.MediaModel
 import com.markhoor.mediadownloader.domain.models.MediaQualityModel
 import com.markhoor.mediadownloader.domain.models.StorageRefusal
@@ -172,6 +173,7 @@ fun DemoRoot(
                 DemoTab.Link -> LinkScreen(
                     vm = linkVm,
                     onDownload = gate::download,
+                    onDownloadAll = gate::downloadAll,
                     onOpenInBrowser = { url ->
                         tab = DemoTab.Browser
                         scope.launch { browser?.load(url) }
@@ -200,8 +202,18 @@ fun DemoRoot(
 }
 
 /** What both screens call. Nothing else starts a download. */
-class DownloadGate internal constructor(private val start: (MediaModel, MediaQualityModel) -> Unit) {
-    fun download(media: MediaModel, quality: MediaQualityModel) = start(media, quality)
+class DownloadGate internal constructor(private val start: (DownloadIntent) -> Unit) {
+    fun download(media: MediaModel, quality: MediaQualityModel) = start(DownloadIntent.One(media, quality))
+
+    /** A playlist and the like: the module reads and queues each entry itself. */
+    fun downloadAll(collection: MediaCollectionModel, quality: String?) =
+        start(DownloadIntent.All(collection, quality))
+}
+
+/** What the gate was asked to start, kept so it can be retried once a permission is granted. */
+sealed interface DownloadIntent {
+    data class One(val media: MediaModel, val quality: MediaQualityModel) : DownloadIntent
+    data class All(val collection: MediaCollectionModel, val quality: String?) : DownloadIntent
 }
 
 /**
@@ -217,7 +229,7 @@ private fun rememberDownloadGate(
     onStarted: () -> Unit,
 ): DownloadGate {
     val context = LocalContext.current
-    var pending by remember { mutableStateOf<Pair<MediaModel, MediaQualityModel>?>(null) }
+    var pending by remember { mutableStateOf<DownloadIntent?>(null) }
 
     val notificationLauncher = rememberLauncherForActivityResult(RequestPermission()) { }
     val storageLauncher = rememberLauncherForActivityResult(RequestPermission()) { granted ->
@@ -225,7 +237,7 @@ private fun rememberDownloadGate(
         pending = null
         scope.launch {
             if (granted && queued != null) {
-                downloadsVm.download(queued.first, queued.second)
+                queued.start(downloadsVm)
                 onStarted()
             } else {
                 snackbar.showSnackbar(storageRefusalMessage(StorageRefusal.PermissionNotGranted))
@@ -234,7 +246,7 @@ private fun rememberDownloadGate(
     }
 
     return remember(downloadsVm) {
-        DownloadGate { media, quality ->
+        DownloadGate { intent ->
             scope.launch {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
                     ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
@@ -244,12 +256,12 @@ private fun rememberDownloadGate(
                 }
                 when (MediaDownloader.storageRefusalOrNull()?.refusal) {
                     null -> {
-                        downloadsVm.download(media, quality)
+                        intent.start(downloadsVm)
                         onStarted()
                     }
 
                     StorageRefusal.PermissionNotGranted -> {
-                        pending = media to quality
+                        pending = intent
                         storageLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
                     }
 
@@ -265,5 +277,13 @@ private fun rememberDownloadGate(
                 }
             }
         }
+    }
+}
+
+/** One download goes through the ViewModel; a collection is the module's own to queue. */
+private suspend fun DownloadIntent.start(downloadsVm: DownloadsViewModel) {
+    when (this) {
+        is DownloadIntent.One -> downloadsVm.download(media, quality)
+        is DownloadIntent.All -> MediaDownloader.downloadCollection(collection, quality)
     }
 }

@@ -7,7 +7,8 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.markhoor.mediadownloader.MediaDownloader
 import com.markhoor.mediadownloader.domain.models.MediaParseException
-import com.markhoor.mediadownloader.domain.usecase.ParseLinkUseCase
+import com.markhoor.mediadownloader.domain.models.ParsedLink
+import com.markhoor.mediadownloader.domain.usecase.ReadLinkUseCase
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
@@ -26,12 +27,12 @@ import kotlinx.coroutines.withContext
  * never replace a newer one.
  */
 class LinkParseViewModel internal constructor(
-    parseLinkProvider: Lazy<ParseLinkUseCase>,
+    readLinkProvider: Lazy<ReadLinkUseCase>,
     private val ioDispatcher: CoroutineDispatcher,
 ) : ViewModel() {
 
     /** Built on first use, on [ioDispatcher]: the ViewModel itself is made on the main thread. */
-    private val parseLink: ParseLinkUseCase by parseLinkProvider
+    private val readLink: ReadLinkUseCase by readLinkProvider
 
     private val _uiState = MutableStateFlow<LinkParseUiState>(LinkParseUiState.Idle)
     val uiState: StateFlow<LinkParseUiState> = _uiState.asStateFlow()
@@ -40,15 +41,25 @@ class LinkParseViewModel internal constructor(
     private val jobLock = Any()
     private var parseJob: Job? = null
 
-    /** Reads the media behind [text] - a url, or text with a url in it. */
+    /**
+     * Reads what is behind [text] - a url, or text with a url in it. A link naming one piece of
+     * media answers [LinkParseUiState.Success]; a playlist or other collection answers
+     * [LinkParseUiState.Collection], which the host queues with
+     * `MediaDownloader.downloadCollection`.
+     */
     fun parse(text: String) = synchronized(jobLock) {
         parseJob?.cancel()
         _uiState.value = LinkParseUiState.Loading(text.trim())
         // Started only once it is recorded as the current request, and it writes its answer only
         // while it still is: an answer that lands as a newer request begins is dropped.
         val job = viewModelScope.launch(start = CoroutineStart.LAZY) {
-            val answer = withContext(ioDispatcher) { parseLink(text) }.fold(
-                onSuccess = { media -> LinkParseUiState.Success(media) },
+            val answer = withContext(ioDispatcher) { readLink(text) }.fold(
+                onSuccess = { parsed ->
+                    when (parsed) {
+                        is ParsedLink.One -> LinkParseUiState.Success(parsed.media)
+                        is ParsedLink.Many -> LinkParseUiState.Collection(parsed.collection)
+                    }
+                },
                 onFailure = { error ->
                     LinkParseUiState.Failure(
                         error as? MediaParseException ?: MediaParseException.MediaNotFound(text.trim(), error),
@@ -74,7 +85,7 @@ class LinkParseViewModel internal constructor(
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 val component = MediaDownloader.requireComponent()
-                LinkParseViewModel(lazy { component.parseLink }, component.ioDispatcher)
+                LinkParseViewModel(lazy { component.readLink }, component.ioDispatcher)
             }
         }
     }

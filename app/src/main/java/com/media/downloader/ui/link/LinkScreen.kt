@@ -7,8 +7,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -26,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.markhoor.mediadownloader.MediaDownloader
+import com.markhoor.mediadownloader.domain.models.MediaCollectionModel
 import com.markhoor.mediadownloader.domain.models.MediaModel
 import com.markhoor.mediadownloader.domain.models.MediaQualityModel
 import com.markhoor.mediadownloader.domain.models.SiteAccess
@@ -41,6 +44,7 @@ import com.media.downloader.ui.common.qualitySizeLabel
 fun LinkScreen(
     vm: LinkParseViewModel,
     onDownload: (MediaModel, MediaQualityModel) -> Unit,
+    onDownloadAll: (MediaCollectionModel, String?) -> Unit,
     onOpenInBrowser: (String) -> Unit,
 ) {
     val state by vm.uiState.collectAsStateWithLifecycle()
@@ -87,6 +91,9 @@ fun LinkScreen(
 
             is LinkParseUiState.Success -> MediaResult(current.media, onDownload)
 
+            // A playlist and the like: the module lists what is in it and queues the lot.
+            is LinkParseUiState.Collection -> CollectionResult(current.collection, onDownloadAll)
+
             is LinkParseUiState.Failure -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(parseFailureMessage(current.error), style = MaterialTheme.typography.bodyLarge)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -124,6 +131,69 @@ private fun MediaResult(media: MediaModel, onDownload: (MediaModel, MediaQuality
                         Text(qualitySizeLabel(quality), style = MaterialTheme.typography.bodySmall)
                     }
                     Button(onClick = { onDownload(media, quality) }) { Text("Download") }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * What a playlist link turned out to hold, and one button to queue all of it.
+ *
+ * A quality is chosen once for the whole list - each video gets the closest it offers - because
+ * asking fifty times is not an offer, it is a chore.
+ */
+@Composable
+private fun CollectionResult(
+    collection: MediaCollectionModel,
+    onDownloadAll: (MediaCollectionModel, String?) -> Unit,
+) {
+    var quality by rememberSaveable { mutableStateOf("720p") }
+    val progress by MediaDownloader.collectionProgress().collectAsStateWithLifecycle()
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            MediaThumbnail(collection.items.firstOrNull()?.thumbnailUrl, size = 72.dp)
+            Column(Modifier.padding(start = 12.dp)) {
+                Text(collection.title.ifBlank { "Playlist" }, style = MaterialTheme.typography.titleMedium)
+                Text("${collection.items.size} videos", style = MaterialTheme.typography.bodySmall)
+            }
+        }
+
+        Text("Quality for all of them", style = MaterialTheme.typography.bodySmall)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf("1080p", "720p", "480p", "360p").forEach { label ->
+                FilterChip(
+                    selected = quality == label,
+                    onClick = { quality = label },
+                    label = { Text(label) },
+                )
+            }
+        }
+
+        Button(
+            onClick = { onDownloadAll(collection, quality) },
+            enabled = !progress.isAdding,
+        ) { Text("Download all") }
+
+        if (progress.isAdding || progress.added > 0) {
+            Text(
+                "Adding ${progress.added + progress.failed} of ${progress.total}" +
+                    if (progress.failed > 0) " - ${progress.failed} couldn't be read" else "",
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+
+        // They are saved as "01 - …", "02 - …" in a folder named after the playlist, so the order
+        // is the playlist's however they finish.
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            itemsIndexed(collection.items) { index, item ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "${index + 1}.".padEnd(4),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Text(item.title.ifBlank { item.url }, maxLines = 2)
                 }
             }
         }

@@ -13,6 +13,10 @@ import com.markhoor.mediadownloader.domain.models.MediaModel
 import com.markhoor.mediadownloader.domain.models.MediaParseException
 import com.markhoor.mediadownloader.domain.models.MediaQualityModel
 import com.markhoor.mediadownloader.domain.models.SiteAccess
+import com.markhoor.mediadownloader.domain.models.CollectionProgress
+import com.markhoor.mediadownloader.domain.models.MediaCollectionModel
+import com.markhoor.mediadownloader.domain.models.ParsedLink
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
@@ -85,6 +89,21 @@ object MediaDownloader {
     suspend fun parse(text: String): Result<MediaModel> =
         componentResult { it.parseLink(text) }
 
+    /**
+     * What a pasted or shared link turns out to be: one piece of media ([ParsedLink.One]) or a
+     * collection listing many ([ParsedLink.Many]) - a playlist, an album, a board.
+     *
+     * Hand over whatever the reader pasted; nothing about the link has to be worked out first. A
+     * collection's entries are listed, not read: each is read for its own qualities when its turn
+     * to be fetched comes, so a link naming fifty videos answers as quickly as one naming a video.
+     * [downloadCollection] is what queues them.
+     *
+     * Only a collection a source can read comes back as one - see [MediaCollectionSource] - and
+     * everything else answers exactly as [parse] does, failure included.
+     */
+    suspend fun read(text: String): Result<ParsedLink> =
+        componentResult { it.readLink(text) }
+
     // endregion
 
     // region Downloads
@@ -104,6 +123,33 @@ object MediaDownloader {
         fileName: String? = null,
         siteFolder: String? = null,
     ): Result<Long> = download(DownloadRequest.of(media, quality, fileName, siteFolder))
+
+    /**
+     * Queues everything [collection] lists, in its order, and returns at once - the reading and
+     * queueing carry on in the module's own scope, so leaving the screen does not stop them.
+     *
+     * Each entry is read for its qualities when its turn comes and saved into a folder named after
+     * the collection, under a name that starts with its place in it (`01 - …`). [preferredQuality]
+     * is a label to aim for, such as `"720p"`; an entry that does not offer it gets the closest it
+     * does. Entries that cannot be read at all are counted in [collectionProgress] and skipped.
+     *
+     * Starting another collection replaces the one being added; what is already queued stays.
+     */
+    fun downloadCollection(collection: MediaCollectionModel, preferredQuality: String? = null) {
+        requireComponent().downloadCollection.start(collection, preferredQuality)
+    }
+
+    /** Stops adding the collection being added; its queued downloads carry on. */
+    fun stopAddingCollection() {
+        componentOrNull()?.downloadCollection?.stop()
+    }
+
+    /**
+     * How far the collection being added has got - "adding 3 of 50" - and what is left when it has
+     * finished. The downloads themselves are in [observeDownloads] like any other.
+     */
+    fun collectionProgress(): StateFlow<CollectionProgress> =
+        requireComponent().downloadCollection.progress
 
     /**
      * Why downloads cannot be saved right now, or `null` when they can - the folder is written to,

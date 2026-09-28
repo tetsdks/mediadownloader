@@ -3,6 +3,7 @@ package com.markhoor.mediadownloader.di
 import android.content.Context
 import android.util.Log
 import androidx.work.WorkManager
+import com.markhoor.mediadownloader.MediaCollectionSource
 import com.markhoor.mediadownloader.MediaDownloaderConfig
 import com.markhoor.mediadownloader.core.Constants.Browser
 import com.markhoor.mediadownloader.core.Constants.Device
@@ -51,8 +52,10 @@ import com.markhoor.mediadownloader.data.work.DownloadScheduler
 import com.markhoor.mediadownloader.domain.repo.DownloadRepository
 import com.markhoor.mediadownloader.domain.repo.MediaDetector
 import com.markhoor.mediadownloader.domain.usecase.CheckSiteAccessUseCase
+import com.markhoor.mediadownloader.domain.usecase.DownloadCollectionUseCase
 import com.markhoor.mediadownloader.domain.usecase.EnqueueDownloadUseCase
 import com.markhoor.mediadownloader.domain.usecase.ParseLinkUseCase
+import com.markhoor.mediadownloader.domain.usecase.ReadLinkUseCase
 import io.ktor.client.HttpClient
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -183,6 +186,20 @@ internal class MediaDownloaderComponent(
             checkSiteAccess,
             downloadRepository
         )
+    }
+
+    /** What a link turns out to be: one piece of media, or a collection listing many. */
+    val readLink: ReadLinkUseCase by lazy {
+        ReadLinkUseCase(
+            checkSiteAccess = checkSiteAccess,
+            parseLink = parseLink,
+            collectionSources = config.extraSources.filterIsInstance<MediaCollectionSource>(),
+        )
+    }
+
+    /** Adding a collection outlives the screen that asked for it, so it runs in the module's scope. */
+    val downloadCollection: DownloadCollectionUseCase by lazy {
+        DownloadCollectionUseCase(parseLink = parseLink, enqueue = enqueueDownload, scope = scope)
     }
 
     // endregion
