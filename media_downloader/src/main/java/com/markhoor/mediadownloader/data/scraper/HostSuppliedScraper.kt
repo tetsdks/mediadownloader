@@ -16,7 +16,14 @@ internal class HostSuppliedScraper(private val source: MediaSource) : SiteScrape
     /** Its hosts, normalised once: an app may write "www.YouTube.com/" and mean `youtube.com`. */
     val hosts: Set<String> = source.hosts.mapNotNull { it.normalizedHost() }.toSet()
 
-    fun reads(url: String): Boolean =
+    /**
+     * Whether this reads [url] at all: its host, and then the source's own word on the link. Both
+     * are needed - the host alone would make a site's feed look like one of its posts.
+     */
+    fun reads(url: String): Boolean = isOnItsHosts(url) && source.handles(url)
+
+    /** Its hosts, without asking the source about the link; this is what "its site" means. */
+    fun isOnItsHosts(url: String): Boolean =
         hosts.isNotEmpty() && url.normalizedHost()?.isUnderAnyOf(hosts) == true
 
     override suspend fun scrapeOrNull(url: String): ScrapedMediaDto? {

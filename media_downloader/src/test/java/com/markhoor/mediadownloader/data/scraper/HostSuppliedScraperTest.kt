@@ -21,9 +21,12 @@ class HostSuppliedScraperTest {
 
     private class FakeSource(
         override val hosts: Set<String>,
+        private val reads: (String) -> Boolean = { true },
         private val answer: (String) -> MediaModel? = { null },
     ) : MediaSource {
         val asked = mutableListOf<String>()
+
+        override fun handles(url: String): Boolean = reads(url)
 
         override suspend fun read(url: String): MediaModel? {
             asked += url
@@ -72,6 +75,17 @@ class HostSuppliedScraperTest {
     }
 
     @Test
+    fun `a source is asked which of its links it actually reads`() {
+        // Its site's feed is on its hosts and is not one of its posts. Without this the feed reads
+        // as a page holding one video: the script draws one button on it instead of one per card.
+        val source = FakeSource(setOf("example.com"), reads = { it.contains("/watch?v=") })
+        val resolver = resolverWith(source)
+
+        assertEquals(1, resolver.scrapersFor("https://example.com/watch?v=1").size)
+        assertTrue("the feed is not a post", resolver.scrapersFor("https://example.com/").isEmpty())
+    }
+
+    @Test
     fun `a source cannot stand in for a site this module already reads`() {
         // Its hosts say tiktok, and tiktok is read here: the module's own reader answers alone.
         val source = FakeSource(setOf("tiktok.com"))
@@ -84,9 +98,9 @@ class HostSuppliedScraperTest {
 
     @Test
     fun `what the source found is handed on whole`() = runTest {
-        val source = FakeSource(setOf("example.com")) {
+        val source = FakeSource(setOf("example.com"), answer = {
             media(quality("1080p", mapOf("Referer" to "https://example.com/")), quality("720p"))
-        }
+        })
 
         val scraped = HostSuppliedScraper(source).scrape("https://example.com/v/1").getOrThrow()
 
@@ -99,7 +113,7 @@ class HostSuppliedScraperTest {
 
     @Test
     fun `a source that throws is a source that found nothing`() = runTest {
-        val source = FakeSource(setOf("example.com")) { error("its extractor broke") }
+        val source = FakeSource(setOf("example.com"), answer = { error("its extractor broke") })
 
         val result = HostSuppliedScraper(source).scrape("https://example.com/v/1")
 
@@ -108,7 +122,7 @@ class HostSuppliedScraperTest {
 
     @Test
     fun `a link off its hosts is never given to it`() = runTest {
-        val source = FakeSource(setOf("example.com")) { media(quality("1080p")) }
+        val source = FakeSource(setOf("example.com"), answer = { media(quality("1080p")) })
 
         val result = HostSuppliedScraper(source).scrape("https://elsewhere.com/v/1")
 
@@ -130,7 +144,7 @@ class HostSuppliedScraperTest {
 
     @Test
     fun `a source with no hosts reads nothing`() = runTest {
-        val source = FakeSource(emptySet()) { media(quality("1080p")) }
+        val source = FakeSource(emptySet(), answer = { media(quality("1080p")) })
 
         assertNull(HostSuppliedScraper(source).scrape("https://example.com/v/1").getOrNull())
         assertTrue("not even asked", source.asked.isEmpty())

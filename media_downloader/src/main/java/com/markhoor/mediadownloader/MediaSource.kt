@@ -32,6 +32,19 @@ interface MediaSource {
     val hosts: Set<String>
 
     /**
+     * Whether [url] names one piece of media this source can read. Asked only for links on [hosts],
+     * before anything is fetched, and `true` by default.
+     *
+     * Worth writing whenever a site is more than its posts. The module asks this to tell a post's
+     * own page from the rest of the site: a page that names one video is read as that video - its
+     * title and artwork are the media's - while a feed, a channel or a search page is a list of
+     * other pages, where a press means "read the card I pressed". A source that claims every link
+     * on its hosts makes the feed itself look like a video, and one button appears where there
+     * should be one per card.
+     */
+    fun handles(url: String): Boolean = true
+
+    /**
      * The media behind [url], or `null` when this source has none for it - a profile page, a link
      * shape it does not recognise, a post that turned out to hold nothing.
      *

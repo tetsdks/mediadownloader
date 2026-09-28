@@ -75,6 +75,11 @@ internal class MediaDescriber(
         }
     }
 
+    /** The bytes of a quality's sound, when its sound is a file of its own. */
+    private suspend fun soundBytes(quality: MediaQualityModel, permits: Semaphore): Long =
+        quality.audioUrl?.takeIf { !it.isHlsPlaylistUrl() }
+            ?.let { permits.withPermit { sizeProbe.sizeOf(it, quality.headers) } } ?: 0L
+
     /** Every quality with a size where one can be known; a size already known is not asked again. */
     private suspend fun sized(qualities: List<MediaQualityModel>): List<MediaQualityModel> {
         val permits = Semaphore(sizeProbesAtOnce)
@@ -85,6 +90,9 @@ internal class MediaDescriber(
                     val size = quality.sizeBytes
                         ?: if (quality.url.isHlsPlaylistUrl()) null else permits.withPermit {
                             sizeProbe.sizeOf(quality.url, quality.headers, acceptsImage = !isVideo)
+                                // The sound is a second file that is downloaded and joined, so it
+                                // is part of what this costs and of what the progress counts.
+                                ?.plus(soundBytes(quality, permits))
                         }
                     quality.copy(sizeBytes = size.sensibleSize(isVideo))
                 }
