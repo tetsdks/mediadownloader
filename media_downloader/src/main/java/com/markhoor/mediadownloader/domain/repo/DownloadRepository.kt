@@ -24,6 +24,12 @@ internal interface DownloadRepository {
     /** Pauses a queued, running or waiting download. */
     suspend fun pause(id: Long): Result<Unit>
 
+    /** Pauses every download of one collection that can be paused; returns how many were. */
+    suspend fun pauseCollection(title: String): Result<Int>
+
+    /** Carries on every paused or failed download of one collection; returns how many were. */
+    suspend fun resumeCollection(title: String): Result<Int>
+
     /** Carries on a paused download, or tries a failed one again. */
     suspend fun resume(id: Long): Result<Unit>
 

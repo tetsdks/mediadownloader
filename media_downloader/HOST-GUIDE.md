@@ -504,6 +504,9 @@ sites are handled by the browser (§7.3).
 fun downloadCollection(collection: MediaCollectionModel, preferredQuality: String? = null)
 fun stopAddingCollection()
 fun collectionProgress(): StateFlow<CollectionProgress>
+
+suspend fun pauseCollection(title: String): Result<Int>
+suspend fun resumeCollection(title: String): Result<Int>
 ```
 
 `read(text)` answers `ParsedLink.Many` when a link names many pieces of media. What comes back is a
@@ -511,10 +514,14 @@ list of **links and their titles, in the collection's own order** - nothing has 
 the list itself.
 
 `downloadCollection` queues the lot and **returns at once**: the reading and queueing carry on in
-the module's own scope, so leaving the screen does not stop them. One entry at a time, in order,
-each read for its qualities only when its turn comes - a video's urls are minted for whoever asked
-and go stale, so reading fifty up front would leave the back of the list expired before it was
-reached.
+the module's own scope, so leaving the screen does not stop them.
+
+Each entry has to be read for its qualities before it can be queued, which is a second or two of
+network each. **Three are read at a time**, so the downloads start together rather than in single
+file - read one after another, a short video finished before the next was even queued. They are
+still read only when their turn comes rather than all up front: a video's urls are minted for
+whoever asked and go stale within hours, so a long playlist read in one go would have its tail
+expire before it was reached.
 
 What the module does with each entry:
 
@@ -528,6 +535,15 @@ What the module does with each entry:
 The downloads themselves are ordinary downloads: they appear in `observeDownloads()`, pause,
 resume and delete like any other. `collectionProgress()` is only about *adding* them - it is what a
 host says "adding 3 of 50" from.
+
+**A whole collection at once.** `pauseCollection(title)` pauses every download of it that can be
+paused **and** stops adding the entries not queued yet; `resumeCollection(title)` carries on both.
+Both answer with how many downloads moved. The title is the collection's own, which is what its
+downloads carry as `DownloadModel.collectionTitle`.
+
+One thing to know: what is still to be *added* is held in memory, not in the database. A collection
+paused and then killed with the app keeps every download it had queued - those are rows, and rows
+survive - and forgets the entries it had not reached.
 
 ```kotlin
 when (val parsed = MediaDownloader.read(pasted).getOrThrow()) {
@@ -628,6 +644,7 @@ data class CollectionProgress(
     val failed: Int = 0,
     val total: Int = 0,
     val isAdding: Boolean = false,
+    val isPaused: Boolean = false,
 )
 ```
 
@@ -1369,6 +1386,7 @@ Everything a host can reference. Anything not listed here is `internal` to the m
 **`com.markhoor.mediadownloader.domain.models`**
 - `MediaModel`, `MediaQualityModel`, `enum MediaType`
 - `MediaCollectionModel`, `MediaCollectionItem`, `sealed ParsedLink`, `CollectionProgress`
+- `read`, `downloadCollection`, `pauseCollection`, `resumeCollection`, `collectionProgress`
 - `interface MediaCollectionSource` — a supplied reader that also reads playlists
 - `DownloadRequest` (+ `DownloadRequest.of`), `DownloadModel`, `enum DownloadState`
 - `enum SiteAccess`

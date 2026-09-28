@@ -11,6 +11,7 @@ import com.markhoor.mediadownloader.domain.repo.MediaParserRepository
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -136,6 +137,68 @@ class DownloadCollectionUseCaseTest {
         assertTrue("only the second one's entry", requests.map { it.fileName }.contains("01 - later"))
         assertEquals("Road trip songs", subject.progress.value.title)
         assertEquals(1, subject.progress.value.total)
+    }
+
+    @Test
+    fun `entries are read several at a time, not one after another`() = runTest {
+        // Each read waits; with one reader at a time nothing would overlap and the last would
+        // start only after every other had finished. What is pinned here is that they overlap.
+        var inFlight = 0
+        var mostAtOnce = 0
+        val subject = useCase(this) { url ->
+            inFlight++
+            mostAtOnce = maxOf(mostAtOnce, inFlight)
+            kotlinx.coroutines.delay(100)
+            inFlight--
+            Result.success(media(url.substringAfterLast('/'), "720p"))
+        }
+
+        subject.start(collection("one", "two", "three", "four", "five"), preferredQuality = null)
+        advanceUntilIdle()
+
+        assertTrue("read one at a time", mostAtOnce > 1)
+        assertEquals(5, requests.size)
+        assertEquals("still numbered by the collection's order", listOf(
+            "01 - one", "02 - two", "03 - three", "04 - four", "05 - five",
+        ), requests.mapNotNull { it.fileName }.sorted())
+    }
+
+    @Test
+    fun `a paused collection stops adding, and carries on from where it stopped`() = runTest {
+        val subject = useCase(this) { url ->
+            kotlinx.coroutines.delay(100)
+            Result.success(media(url.substringAfterLast('/'), "720p"))
+        }
+
+        subject.start(collection("one", "two", "three", "four", "five", "six"), preferredQuality = null)
+        advanceTimeBy(150)
+        subject.pause("Road trip songs")
+        advanceUntilIdle()
+        val whenPaused = requests.size
+
+        assertTrue("some were queued before the pause", whenPaused in 1..5)
+        assertTrue("and it says so", subject.progress.value.isPaused)
+
+        subject.resume("Road trip songs")
+        advanceUntilIdle()
+
+        assertEquals("the rest followed, each still once", 6, requests.size)
+        assertEquals(6, requests.map { it.fileName }.distinct().size)
+        assertFalse(subject.progress.value.isPaused)
+    }
+
+    @Test
+    fun `pausing some other collection leaves this one alone`() = runTest {
+        val subject = useCase(this) { url ->
+            kotlinx.coroutines.delay(100)
+            Result.success(media(url.substringAfterLast('/'), "720p"))
+        }
+
+        subject.start(collection("one", "two", "three"), preferredQuality = null)
+        subject.pause("Something else")
+        advanceUntilIdle()
+
+        assertEquals(3, requests.size)
     }
 
     @Test

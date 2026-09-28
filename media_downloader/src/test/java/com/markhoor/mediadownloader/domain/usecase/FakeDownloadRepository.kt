@@ -25,6 +25,19 @@ internal class FakeDownloadRepository : DownloadRepository {
     /** What pause, resume and delete answer with. */
     var actionResult: Result<Unit> = Result.success(Unit)
 
+    override suspend fun pauseCollection(title: String): Result<Int> {
+        actions += "pauseCollection $title"
+        return collectionResult
+    }
+
+    override suspend fun resumeCollection(title: String): Result<Int> {
+        actions += "resumeCollection $title"
+        return collectionResult
+    }
+
+    /** What pausing or resuming a whole collection answers with. */
+    var collectionResult: Result<Int> = Result.success(0)
+
     override suspend fun pause(id: Long): Result<Unit> {
         actions += "pause $id"
         return actionResult

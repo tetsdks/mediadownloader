@@ -40,6 +40,25 @@ internal interface DownloadDao {
     @Query("UPDATE downloads SET state = :state WHERE id = :id AND state IN (:from)")
     suspend fun moveState(id: Long, from: List<DownloadState>, state: DownloadState): Int
 
+    /** The ids of one collection's downloads that are in one of [states], oldest first. */
+    @Query("SELECT id FROM downloads WHERE collectionTitle = :title AND state IN (:states) ORDER BY id")
+    suspend fun idsInCollection(title: String, states: List<DownloadState>): List<Long>
+
+    /** Moves a whole collection, the same way [moveState] moves one; returns how many moved. */
+    @Query("UPDATE downloads SET state = :state WHERE collectionTitle = :title AND state IN (:from)")
+    suspend fun moveCollection(title: String, from: List<DownloadState>, state: DownloadState): Int
+
+    /** Puts a whole collection back in line with a clean slate, as [requeue] does for one. */
+    @Query(
+        "UPDATE downloads SET state = :state, failedAttempts = 0, errorMessage = NULL " +
+            "WHERE collectionTitle = :title AND state IN (:from)",
+    )
+    suspend fun requeueCollection(
+        title: String,
+        from: List<DownloadState>,
+        state: DownloadState = DownloadState.Queued,
+    ): Int
+
     @Query("UPDATE downloads SET downloadedBytes = :downloadedBytes, totalBytes = :totalBytes WHERE id = :id")
     suspend fun setProgress(id: Long, downloadedBytes: Long, totalBytes: Long?)
 
