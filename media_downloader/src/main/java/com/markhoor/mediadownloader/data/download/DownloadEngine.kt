@@ -22,18 +22,30 @@ internal class DownloadEngine(
     private val ioDispatcher: CoroutineDispatcher,
 ) {
 
-    suspend fun download(task: DownloadTask, meter: ProgressMeter) = withContext(ioDispatcher) {
+    /**
+     * Runs [task] to its file.
+     *
+     * [onFinishing] is called once there is nothing left to fetch and the file is being written -
+     * a video and its sound being joined, a stream's pieces being stitched. It can be a long
+     * moment on a long video, and progress has nothing left to say in it, so the caller is told
+     * rather than left showing "100%" beside a pause button.
+     */
+    suspend fun download(
+        task: DownloadTask,
+        meter: ProgressMeter,
+        onFinishing: suspend () -> Unit = {},
+    ) = withContext(ioDispatcher) {
         task.workDir.mkdirs()
         task.output.parentFile?.mkdirs()
         when {
-            task.isStream -> hls.download(task, meter)
-            task.audioUrl != null -> downloadWithSound(task, meter)
+            task.isStream -> hls.download(task, meter, onFinishing)
+            task.audioUrl != null -> downloadWithSound(task, meter, onFinishing)
             else -> {
                 direct.download(task, meter)
                 // A stream whose url did not say so: what arrived is its playlist, not the media.
                 if (task.output.isSmallPlaylistFile()) {
                     task.output.delete()
-                    hls.download(task.copy(isStream = true), meter)
+                    hls.download(task.copy(isStream = true), meter, onFinishing)
                 }
             }
         }
@@ -48,7 +60,11 @@ internal class DownloadEngine(
      * The sound is allowed to fail: a silent video is worth more than no video, so anything short of
      * both tracks arriving and joining leaves the picture as the file.
      */
-    private suspend fun downloadWithSound(task: DownloadTask, meter: ProgressMeter) {
+    private suspend fun downloadWithSound(
+        task: DownloadTask,
+        meter: ProgressMeter,
+        onFinishing: suspend () -> Unit = {},
+    ) {
         val sound = task.audioUrl ?: return direct.download(task, meter)
         val videoFile = File(task.workDir, Scratch.VIDEO_TRACK)
         val audioFile = File(task.workDir, Scratch.AUDIO_TRACK)
@@ -61,6 +77,8 @@ internal class DownloadEngine(
             direct.download(task.copy(url = sound, audioUrl = null, output = audioFile), soundMeter)
         }.isSuccess && audioFile.length() > 0
         meter.add(soundMeter.downloadedBytes)
+        // Both tracks are here; the join is what is left, and it counts no bytes.
+        onFinishing()
         val joined = gotSound &&
             runCatching { remuxer.remux(videoFile, audioFile, task.output) }.isSuccess &&
             task.output.length() > 0

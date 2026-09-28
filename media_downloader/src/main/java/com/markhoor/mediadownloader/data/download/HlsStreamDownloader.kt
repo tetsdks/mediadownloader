@@ -47,7 +47,11 @@ internal class HlsStreamDownloader(
     private val maxParallelSegments: Int = Download.MAX_PARALLEL_SEGMENTS,
 ) {
 
-    suspend fun download(task: DownloadTask, meter: ProgressMeter) {
+    suspend fun download(
+        task: DownloadTask,
+        meter: ProgressMeter,
+        onFinishing: suspend () -> Unit = {},
+    ) {
         val (video, audioUrl) = resolveMediaPlaylist(task.url, task.audioUrl, task.headers)
         // Sound that is gone for good - refused by its server, or unusable - leaves the picture a
         // download of its own. Sound that could not be fetched this time, a dropped connection,
@@ -62,6 +66,9 @@ internal class HlsStreamDownloader(
             unlessGone { downloadTrack(it, File(task.workDir, Scratch.AUDIO_DIR), task.headers, progress) }
         }
 
+        // Every piece is here; what is left is writing them into one file, which has nothing left
+        // to count and can take a while on a long video.
+        onFinishing()
         val remuxed = catching { remuxer.remux(videoFile, audioFile, task.output) } != null &&
             task.output.length() > 0
         if (!remuxed) videoFile.moveTo(task.output)

@@ -19,6 +19,7 @@ import com.markhoor.mediadownloader.data.network.isMediaGone
 import com.markhoor.mediadownloader.di.MediaDownloaderComponent
 import com.markhoor.mediadownloader.domain.models.DownloadState
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -50,12 +51,24 @@ internal class DownloadWorker(
         return component.downloadRunLocks.withLock(id) { run(id, component) }
     }
 
+    private companion object {
+        /** A download this worker is carrying: fetching its bytes, or writing them into a file. */
+        private val runningStates = listOf(DownloadState.Downloading, DownloadState.Finishing)
+    }
+
     private suspend fun run(id: Long, component: MediaDownloaderComponent): Result {
         val dao = component.downloadDao
         val notifier = component.downloadNotifier
         val storage = component.downloadStorage
 
-        val runnable = listOf(DownloadState.Queued, DownloadState.WaitingForNetwork, DownloadState.Downloading)
+        // Finishing too: a process death while the file was being written leaves the row there,
+        // and the work has to be able to pick it up again.
+        val runnable = listOf(
+            DownloadState.Queued,
+            DownloadState.WaitingForNetwork,
+            DownloadState.Downloading,
+            DownloadState.Finishing,
+        )
         // Paused or deleted before it got here: nothing to do, and nothing wrong.
         if (dao.moveState(id, from = runnable, state = DownloadState.Downloading) == 0) return Result.success()
         val entity = dao.get(id) ?: return Result.success()
@@ -87,11 +100,18 @@ internal class DownloadWorker(
                     }
                 }
                 try {
-                    component.downloadEngine.download(task, meter)
+                    component.downloadEngine.download(task, meter) {
+                        // The bytes are in and a join has begun, which can be the longer half of
+                        // the wait on a long video.
+                        markFinishing(id, reporter, component, meter)
+                    }
                 } finally {
                     reporter.cancel()
                 }
             }
+            // Publishing is a copy into the public folder, which on a big file is a wait of its
+            // own - and the download that has nothing left to fetch is not downloading any more.
+            markFinishing(id, reporter = null, component = component, meter = meter)
             // Publishing and recording it are one step: stopped between them, the file would be
             // published and the row sent to download it again, into a second copy.
             withContext(NonCancellable) { complete(entity, component) }
@@ -107,6 +127,23 @@ internal class DownloadWorker(
     private fun failWith(message: String): Result {
         Log.e(Download.LOG_TAG, message)
         return Result.failure(workDataOf(Download.KEY_ERROR to message))
+    }
+
+    /**
+     * Says the download has everything it is going to fetch and is now being written: joined,
+     * stitched, moved into the public folder. There is nothing left to count in that, so the
+     * progress reporter stops and what it wrote last stands.
+     */
+    private suspend fun markFinishing(
+        id: Long,
+        reporter: Job?,
+        component: MediaDownloaderComponent,
+        meter: ProgressMeter,
+    ) {
+        reporter?.cancel()
+        val dao = component.downloadDao
+        if (dao.moveState(id, from = listOf(DownloadState.Downloading), state = DownloadState.Finishing) == 0) return
+        dao.get(id)?.let { component.downloadNotifier.showProgress(it, meter.downloadedBytes, meter.totalBytes) }
     }
 
     private suspend fun complete(entity: DownloadEntity, component: MediaDownloaderComponent): Result {
@@ -138,7 +175,7 @@ internal class DownloadWorker(
         component.downloadNotifier.cancelProgress(entity.id)
         val waiting =
             if (component.networkStatus.hasConnection()) DownloadState.Queued else DownloadState.WaitingForNetwork
-        val moved = component.downloadDao.moveState(entity.id, from = listOf(DownloadState.Downloading), state = waiting)
+        val moved = component.downloadDao.moveState(entity.id, from = runningStates, state = waiting)
         // Zero rows means the user paused or deleted it meanwhile, and that is not news to report.
         if (moved > 0 && waiting == DownloadState.WaitingForNetwork) {
             component.downloadNotifier.showWaitingForNetwork(entity)
@@ -157,13 +194,13 @@ internal class DownloadWorker(
         if (error is UnusableMediaException || (error is HttpStatusException && error.isMediaGone())) {
             // Marked, so the row can say this too rather than reading as an ordinary failure.
             dao.countFailure(entity.id, Download.MEDIA_GONE_MARKER + message)
-            if (dao.moveState(entity.id, from = listOf(DownloadState.Downloading), state = DownloadState.Failed) > 0) {
+            if (dao.moveState(entity.id, from = runningStates, state = DownloadState.Failed) > 0) {
                 component.downloadNotifier.showUnavailable(entity)
             }
             return Result.failure()
         }
         if (!component.networkStatus.hasConnection()) {
-            dao.moveState(entity.id, from = listOf(DownloadState.Downloading), state = DownloadState.WaitingForNetwork)
+            dao.moveState(entity.id, from = runningStates, state = DownloadState.WaitingForNetwork)
             component.downloadNotifier.showWaitingForNetwork(entity)
             // A fresh job once the connection is back, not a retry that waits out a growing backoff.
             component.downloadScheduler.continueWhenOnline(entity.id)
@@ -171,11 +208,11 @@ internal class DownloadWorker(
         }
         dao.countFailure(entity.id, message)
         if (entity.failedAttempts + 1 < Download.MAX_ATTEMPTS) {
-            dao.moveState(entity.id, from = listOf(DownloadState.Downloading), state = DownloadState.Queued)
+            dao.moveState(entity.id, from = runningStates, state = DownloadState.Queued)
             return Result.retry()
         }
         // Parts already fetched stay, so trying again later resumes rather than starts over.
-        if (dao.moveState(entity.id, from = listOf(DownloadState.Downloading), state = DownloadState.Failed) > 0) {
+        if (dao.moveState(entity.id, from = runningStates, state = DownloadState.Failed) > 0) {
             component.downloadNotifier.showFailed(entity)
         }
         return Result.failure()

@@ -95,6 +95,7 @@ internal class DownloadCollectionUseCase(
             quality = quality,
             fileName = numberedName(index, collection.items.size, title),
             siteFolder = collection.title,
+            collectionTitle = collection.title,
         )
         return enqueue(request).isSuccess
     }
