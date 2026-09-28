@@ -199,7 +199,7 @@ internal class MediaDownloaderComponent(
 
     /** Adding a collection outlives the screen that asked for it, so it runs in the module's scope. */
     val downloadCollection: DownloadCollectionUseCase by lazy {
-        DownloadCollectionUseCase(parseLink = parseLink, enqueue = enqueueDownload, scope = scope)
+        DownloadCollectionUseCase(enqueue = enqueueDownload, scope = scope)
     }
 
     // endregion

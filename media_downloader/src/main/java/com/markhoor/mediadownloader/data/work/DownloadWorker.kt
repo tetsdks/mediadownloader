@@ -13,6 +13,8 @@ import com.markhoor.mediadownloader.core.Constants.Download
 import com.markhoor.mediadownloader.data.download.DownloadTask
 import com.markhoor.mediadownloader.data.download.ProgressMeter
 import com.markhoor.mediadownloader.data.download.UnusableMediaException
+import com.markhoor.mediadownloader.core.isHlsPlaylistUrl
+import com.markhoor.mediadownloader.domain.usecase.closestTo
 import com.markhoor.mediadownloader.data.local.DownloadEntity
 import com.markhoor.mediadownloader.data.network.HttpStatusException
 import com.markhoor.mediadownloader.data.network.isMediaGone
@@ -71,9 +73,18 @@ internal class DownloadWorker(
         )
         // Paused or deleted before it got here: nothing to do, and nothing wrong.
         if (dao.moveState(id, from = runnable, state = DownloadState.Downloading) == 0) return Result.success()
-        val entity = dao.get(id) ?: return Result.success()
+        val queued = dao.get(id) ?: return Result.success()
         notifier.clearResult(id)
-        runInForeground(entity, component.downloadNotifier)
+        runInForeground(queued, component.downloadNotifier)
+
+        // A download queued with only a page to read - every entry of a playlist is - reads it now,
+        // in its own turn. Now rather than when it was queued, because a site mints a video's urls
+        // for whoever asked and they go stale within hours.
+        val entity = if (queued.mediaUrl.isBlank()) {
+            readItsPage(queued, component) ?: return Result.success()
+        } else {
+            queued
+        }
 
         val meter = ProgressMeter(startBytes = entity.downloadedBytes, startTotal = entity.totalBytes)
         val task = DownloadTask(
@@ -144,6 +155,41 @@ internal class DownloadWorker(
         val dao = component.downloadDao
         if (dao.moveState(id, from = listOf(DownloadState.Downloading), state = DownloadState.Finishing) == 0) return
         dao.get(id)?.let { component.downloadNotifier.showProgress(it, meter.downloadedBytes, meter.totalBytes) }
+    }
+
+    /**
+     * Reads the page a download was queued with and fills the row in, or fails the download when
+     * the page has nothing to give. [DownloadEntity.qualityLabel] is the quality to aim for until
+     * this runs; afterwards it is the one that was actually found.
+     */
+    private suspend fun readItsPage(
+        entity: DownloadEntity,
+        component: MediaDownloaderComponent,
+    ): DownloadEntity? {
+        val media = component.parseLink(entity.sourceUrl).getOrElse { error ->
+            // A parse failure is an Exception in every path that can reach here; anything else is
+            // the page being impossible rather than the read going wrong.
+            onFailed(entity, error as? Exception ?: UnusableMediaException(error.message.orEmpty()), component)
+            return null
+        }
+        val quality = media.qualities.filter { it.url.isNotBlank() }.closestTo(entity.qualityLabel)
+        if (quality == null) {
+            onFailed(entity, UnusableMediaException("Nothing to download at ${entity.sourceUrl}"), component)
+            return null
+        }
+        component.downloadDao.setResolved(
+            id = entity.id,
+            mediaUrl = quality.url,
+            audioUrl = quality.audioUrl,
+            headers = quality.headers,
+            qualityLabel = quality.label,
+            isStream = quality.url.isHlsPlaylistUrl(),
+            totalBytes = quality.sizeBytes,
+            // The page's own name beats the one the list gave, which is often shortened.
+            title = media.title.ifBlank { entity.title }.take(Download.MAX_STORED_TITLE_LENGTH),
+            thumbnailUrl = media.thumbnailUrl ?: entity.thumbnailUrl,
+        )
+        return component.downloadDao.get(entity.id)
     }
 
     private suspend fun complete(entity: DownloadEntity, component: MediaDownloaderComponent): Result {

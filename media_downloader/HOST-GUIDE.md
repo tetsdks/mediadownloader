@@ -502,7 +502,6 @@ sites are handled by the browser (§7.3).
 
 ```kotlin
 fun downloadCollection(collection: MediaCollectionModel, preferredQuality: String? = null)
-fun stopAddingCollection()
 fun collectionProgress(): StateFlow<CollectionProgress>
 
 suspend fun pauseCollection(title: String): Result<Int>
@@ -513,15 +512,16 @@ suspend fun resumeCollection(title: String): Result<Int>
 list of **links and their titles, in the collection's own order** - nothing has been fetched beyond
 the list itself.
 
-`downloadCollection` queues the lot and **returns at once**: the reading and queueing carry on in
-the module's own scope, so leaving the screen does not stop them.
+`downloadCollection` **queues every entry at once** - a row per video from the first moment, before
+anything has been read. A reader who asks for a fifty-video playlist sees fifty downloads waiting
+their turn rather than a handful that trickle into being, and the rest survive the app being killed
+like any other download, because they are rows.
 
-Each entry has to be read for its qualities before it can be queued, which is a second or two of
-network each. **Three are read at a time**, so the downloads start together rather than in single
-file - read one after another, a short video finished before the next was even queued. They are
-still read only when their turn comes rather than all up front: a video's urls are minted for
-whoever asked and go stale within hours, so a long playlist read in one go would have its tail
-expire before it was reached.
+What an entry *is* - its qualities, its file, its real name and size - is read **by the download
+itself, when its turn comes**. Until then the row carries only the video's page, and its quality
+label is the one being aimed for. That is also what keeps the urls usable: a site mints a video's
+urls for whoever asked and they go stale within hours, so a playlist read up front would have its
+tail expired before it was reached.
 
 What the module does with each entry:
 
@@ -530,20 +530,17 @@ What the module does with each entry:
 | **Folder** | `Download/<root>/Websites/<collection title>/` - its own folder, named after it |
 | **Name** | `01 - <video title>`, `02 - …`, as wide as the collection is long, **in the collection's order** - which is what keeps the order visible, since the downloads will not finish in it |
 | **Quality** | `preferredQuality` is a label to aim for (`"720p"`); an entry that does not offer it gets the closest it does - the tallest that is no taller, else the smallest above |
-| **Failures** | an entry that cannot be read is counted in `collectionProgress()` and skipped; the rest carry on |
+| **Failures** | an entry whose page turns out to hold nothing fails like any other download - with its own row, its own reason, and the rest carrying on |
 
 The downloads themselves are ordinary downloads: they appear in `observeDownloads()`, pause,
-resume and delete like any other. `collectionProgress()` is only about *adding* them - it is what a
-host says "adding 3 of 50" from.
+resume and delete like any other. `collectionProgress()` is only about *queueing* them, which takes no
+network and is over in a moment; what to show while they run is the downloads themselves.
 
 **A whole collection at once.** `pauseCollection(title)` pauses every download of it that can be
-paused **and** stops adding the entries not queued yet; `resumeCollection(title)` carries on both.
-Both answer with how many downloads moved. The title is the collection's own, which is what its
-downloads carry as `DownloadModel.collectionTitle`.
-
-One thing to know: what is still to be *added* is held in memory, not in the database. A collection
-paused and then killed with the app keeps every download it had queued - those are rows, and rows
-survive - and forgets the entries it had not reached.
+paused, `resumeCollection(title)` carries them all on, and both answer with how many moved. The
+title is the collection's own, which is what its downloads carry as `DownloadModel.collectionTitle`.
+Nothing of the collection lives outside the database, so a paused playlist is still a paused
+playlist after the app has been killed and started again.
 
 ```kotlin
 when (val parsed = MediaDownloader.read(pasted).getOrThrow()) {
@@ -708,7 +705,7 @@ data class DownloadRequest(
 
 | Field | Meaning |
 |---|---|
-| `mediaUrl` | The file or HLS playlist (`http`/`https`). Whether it is a stream is detected; a "file" that turns out to be a playlist is downloaded as a stream. |
+| `mediaUrl` | The file or HLS playlist (`http`/`https`). Whether it is a stream is detected; a "file" that turns out to be a playlist is downloaded as a stream. **May be blank**, and then `sourceUrl` is read for the file when the download's turn comes - which is how a playlist is queued whole (§4.3). `qualityLabel` is then the quality to aim for rather than the one it turned out to be. |
 | `type` | Picks the extension when the url has none; the final extension is corrected from the file's first bytes. |
 | `title` | Shown in the notification and the model; stored up to 1,000 characters. |
 | `sourceUrl` | The page; it picks the site folder and is checked against the block list. |

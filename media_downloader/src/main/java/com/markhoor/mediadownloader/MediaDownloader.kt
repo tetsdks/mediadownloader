@@ -139,33 +139,22 @@ object MediaDownloader {
         requireComponent().downloadCollection.start(collection, preferredQuality)
     }
 
-    /** Stops adding the collection being added; its queued downloads carry on. */
-    fun stopAddingCollection() {
-        componentOrNull()?.downloadCollection?.stop()
-    }
-
     /**
-     * Pauses a whole collection: the downloads of it that are running or waiting, and the adding of
-     * the entries not queued yet. Answers with how many downloads were paused.
+     * Pauses a whole collection: every download of it that can be paused - which is all of them,
+     * since a collection is queued whole. Answers with how many were paused.
      *
      * [title] is the collection's own title, which is what its downloads carry as
      * [DownloadModel.collectionTitle].
      */
     suspend fun pauseCollection(title: String): Result<Int> = componentResult { component ->
-        component.downloadCollection.pause(title)
         component.downloadRepository.pauseCollection(title)
     }
 
     /**
-     * Carries on a paused collection: its paused downloads, its failed ones, and the adding of
-     * whatever had not been queued when it was paused. Answers with how many downloads restarted.
-     *
-     * Adding carries on only while the app has lived since: what was still to be read is held in
-     * memory, not in the database, so a collection paused and then killed keeps the downloads it
-     * had queued and forgets the rest.
+     * Carries on a paused collection: every paused or failed download of it. Answers with how many
+     * restarted.
      */
     suspend fun resumeCollection(title: String): Result<Int> = componentResult { component ->
-        component.downloadCollection.resume(title)
         component.downloadRepository.resumeCollection(title)
     }
 
