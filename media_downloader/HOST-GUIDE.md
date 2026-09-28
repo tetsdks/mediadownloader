@@ -710,6 +710,7 @@ data class DownloadModel(
     val errorMessage: String?,
     val createdAtMillis: Long,
     val isMediaGone: Boolean,
+    val collectionTitle: String?,
 ) {
     val progressPercent: Int?   // 0–100, or null while the size is unknown
 }
@@ -722,25 +723,35 @@ data class DownloadModel(
 | `downloadedBytes`, `totalBytes` | Progress. `totalBytes` is `null` when unknown; for a stream it is an estimate that firms up. |
 | `errorMessage` | Why the last attempt failed, while `Failed` or retrying. Technical text; show your own message. |
 | `isMediaGone` | The download failed because the media was never there to take - a private or deleted post, a link already spent - rather than because something went wrong on the way. Say so instead of offering a retry: trying again is told the same thing. |
+| `collectionTitle` | The playlist or album this was queued as part of (§4.3), or `null` for a download asked for on its own. Downloads sharing one belong together on screen: one press queued them, one folder holds them. Group them into a single row - how many are saved, what they add up to - that opens to show the videos, rather than fifty rows the reader did not ask for one at a time. |
 | `progressPercent` | Convenience: 0–100 or `null`. |
 
 ### 5.7 `DownloadState`
 
 ```kotlin
-enum class DownloadState { Queued, Downloading, Paused, WaitingForNetwork, Completed, Failed;
-    val isActive: Boolean }
+enum class DownloadState { Queued, Downloading, Finishing, Paused, WaitingForNetwork, Completed, Failed;
+    val isActive: Boolean
+    val canPause: Boolean }
 ```
 
 | State | Meaning | Allowed actions |
 |---|---|---|
 | `Queued` | Waiting for its turn or for the system to run it | pause, delete |
 | `Downloading` | Running | pause, delete |
+| `Finishing` | Every byte is here and the file is being written: a video and its sound joined, a stream's pieces stitched, the result moved into the public folder | delete |
 | `WaitingForNetwork` | Lost its connection; continues by itself when one is back | pause, resume (retry now), delete |
 | `Paused` | Paused by the user (or imported paused) | resume, delete |
 | `Completed` | File published | delete (optionally with the file) |
 | `Failed` | Gave up after 5 failures, or the media can never be saved (protected stream) | resume (retry), delete |
 
-`isActive` is `true` for `Queued`, `Downloading` and `WaitingForNetwork`.
+`isActive` is `true` for `Queued`, `Downloading`, `Finishing` and `WaitingForNetwork`. **`canPause`
+is the one to drive a pause button from** - it is `isActive` without `Finishing`, because a file
+being written cannot be interrupted safely.
+
+**Show `Finishing` as its own thing, not as progress.** There are no bytes left to count in it, so a
+screen that keeps showing the last percentage says "100%" beside a pause button, which reads as a
+download that has stalled. It is a moment on a short video and minutes on a long one: joining a
+two-hour video's picture and sound, and copying the result into the public folder, is real work.
 
 ### 5.8 `SiteAccess`
 

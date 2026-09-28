@@ -71,6 +71,11 @@ class DownloadCollectionUseCaseTest {
 
         assertEquals(listOf("01 - one", "02 - two", "03 - three"), requests.map { it.fileName })
         assertEquals("all of them in one folder", listOf("Road trip songs"), requests.map { it.siteFolder }.distinct())
+        assertEquals(
+            "and all marked as its own, so a screen can show them as one",
+            listOf("Road trip songs"),
+            requests.map { it.collectionTitle }.distinct(),
+        )
         assertEquals("the quality that was asked for", listOf("720p", "720p", "720p"), requests.map { it.qualityLabel })
     }
 

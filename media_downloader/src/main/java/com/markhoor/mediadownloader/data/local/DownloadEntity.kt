@@ -13,6 +13,7 @@ import java.io.File
  * here - the media url, its sound, its headers - so a resumed download is the same download.
  *
  * @param directoryPath the folder the file is saved into; [fileName] is its name there.
+ * @param collectionTitle the playlist or album this was queued as part of, when it was.
  * @param isStream an HLS playlist rather than a file.
  * @param failedAttempts failures other than a lost connection, counted towards giving up.
  */
@@ -29,6 +30,7 @@ internal data class DownloadEntity(
     val thumbnailUrl: String?,
     val type: MediaType,
     val qualityLabel: String,
+    val collectionTitle: String? = null,
     val isStream: Boolean,
     val singleConnection: Boolean,
     val state: DownloadState,
@@ -56,5 +58,6 @@ internal data class DownloadEntity(
         errorMessage = errorMessage?.removePrefix(Download.MEDIA_GONE_MARKER),
         createdAtMillis = createdAtMillis,
         isMediaGone = errorMessage?.startsWith(Download.MEDIA_GONE_MARKER) == true,
+        collectionTitle = collectionTitle,
     )
 }

@@ -5,6 +5,14 @@ enum class DownloadState {
     /** Waiting for its turn, or for the system to run it. */
     Queued,
     Downloading,
+
+    /**
+     * Every byte is here and the file is being finished: a video and its sound joined, a stream's
+     * pieces stitched, the result moved into the public folder. There is nothing left to count, so
+     * a screen showing "100%" and a pause button here reads as a download that has stalled - say
+     * "finishing" instead, and offer nothing to press.
+     */
+    Finishing,
     Paused,
 
     /** Lost its connection; carries on by itself once one is back. */
@@ -13,7 +21,11 @@ enum class DownloadState {
     Failed;
 
     /** Still on its way to a file: not paused, finished or given up. */
-    val isActive: Boolean get() = this == Queued || this == Downloading || this == WaitingForNetwork
+    val isActive: Boolean
+        get() = this == Queued || this == Downloading || this == WaitingForNetwork || this == Finishing
+
+    /** Whether the reader can stop it. What is being written cannot be interrupted safely. */
+    val canPause: Boolean get() = this == Queued || this == Downloading || this == WaitingForNetwork
 }
 
 /**
@@ -25,6 +37,10 @@ enum class DownloadState {
  * @param isMediaGone the download failed because the media was not there to take - a private or
  *   deleted post, a link already spent - rather than because something went wrong on the way.
  *   Trying again gets the same answer, so a screen should say so instead of offering a retry.
+ * @param collectionTitle the playlist or album this was queued as part of, or `null` for a download
+ *   asked for on its own. Downloads sharing one belong together on screen: they were queued in one
+ *   press, they are saved in one folder, and a host showing them as one row with one progress is
+ *   showing what the reader asked for.
  */
 data class DownloadModel(
     val id: Long,
@@ -41,6 +57,7 @@ data class DownloadModel(
     val errorMessage: String?,
     val createdAtMillis: Long,
     val isMediaGone: Boolean = false,
+    val collectionTitle: String? = null,
 ) {
     /** 0-100, or `null` while the size is unknown. */
     val progressPercent: Int?
@@ -74,6 +91,7 @@ data class DownloadRequest(
     val startPaused: Boolean = false,
     val siteFolder: String? = null,
     val expectedSizeBytes: Long? = null,
+    val collectionTitle: String? = null,
 ) {
     companion object {
         /** The request for one of [media]'s qualities. */
@@ -82,6 +100,7 @@ data class DownloadRequest(
             quality: MediaQualityModel,
             fileName: String? = null,
             siteFolder: String? = null,
+            collectionTitle: String? = null,
         ) = DownloadRequest(
             mediaUrl = quality.url,
             type = quality.type,
@@ -94,6 +113,7 @@ data class DownloadRequest(
             fileName = fileName,
             siteFolder = siteFolder,
             expectedSizeBytes = quality.sizeBytes,
+            collectionTitle = collectionTitle,
         )
     }
 }

@@ -41,6 +41,9 @@ internal class DownloadRepositoryImpl(
 ) : DownloadRepository {
 
     private val activeStates = DownloadState.entries.filter { it.isActive }
+
+    /** What a reader may stop: a file part-written is not one of them - see [DownloadState.canPause]. */
+    private val pausableStates = DownloadState.entries.filter { it.canPause }
     /** Waiting for a connection counts: resuming it tries again now, as the old app did. */
     private val resumableStates = listOf(DownloadState.Paused, DownloadState.Failed, DownloadState.WaitingForNetwork)
 
@@ -75,6 +78,7 @@ internal class DownloadRepositoryImpl(
                 isStream = request.mediaUrl.isHlsPlaylistUrl(),
                 singleConnection = listOf(request.sourceUrl, request.mediaUrl)
                     .any { it.normalizedHost()?.isUnderAnyOf(Download.SINGLE_CONNECTION_HOSTS) == true },
+                collectionTitle = request.collectionTitle?.takeIf { it.isNotBlank() },
                 state = if (request.startPaused) DownloadState.Paused else DownloadState.Queued,
                 totalBytes = request.expectedSizeBytes?.takeIf { it > 0 },
                 createdAtMillis = System.currentTimeMillis(),
@@ -98,7 +102,7 @@ internal class DownloadRepositoryImpl(
     }
 
     override suspend fun pause(id: Long): Result<Unit> = attempt {
-        if (dao.moveState(id, from = activeStates, state = DownloadState.Paused) > 0) {
+        if (dao.moveState(id, from = pausableStates, state = DownloadState.Paused) > 0) {
             scheduler.stop(id)
             notifier.cancel(id)
             Result.success(Unit)
