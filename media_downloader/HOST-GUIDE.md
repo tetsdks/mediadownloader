@@ -964,6 +964,15 @@ viewport. Detection has nothing to find until a player asks for its file, and ma
 play: with the WebView's defaults a video page sits on its poster and looks unsupported. A WebView
 you pass to `attach` is left exactly as you configured it - set
 `settings.mediaPlaybackRequiresUserGesture = false` yourself if you want the same behaviour.
+
+> **Give the WebView a height that does not come from its content.** A WebView created by the
+> module is set to `MATCH_PARENT`; one you create and `attach` is your own, so this is on you. A
+> WebView measured as wrap content - including a view added to a Compose `AndroidView` with no
+> layout parameters of its own - makes Chromium resolve `vh`, `dvh` and `svh` to **zero**, because
+> a page may not size the view that is sizing it. Any site that lays its player out in `vh` then
+> collapses: the video is fetched, decoded and playing in a box zero pixels high, so the page looks
+> blank while the download button it produced works. If a page in your WebView renders empty,
+> measure a `100vh` element before suspecting detection.
 | `onDownloadButtonClick()` | Your floating download button was pressed; the page's media is shown when there is any. Same as `MediaBrowser.onDownloadButtonClick()`. |
 | `uiState` | Page and media state, below. |
 | `events` | One-shot moments, below. **Collect once**, from the screen. |

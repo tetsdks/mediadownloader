@@ -2,6 +2,7 @@ package com.markhoor.mediadownloader.presentation.browser
 
 import android.annotation.SuppressLint
 import android.os.Build
+import android.view.ViewGroup
 import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -112,6 +113,13 @@ class MediaBrowser internal constructor(
      * to find until a player asks for its file, and many only do that on play: with the WebView's
      * default a video page sits on its poster, so no button appears and the page looks unsupported.
      * A host that brings its own WebView keeps whatever it set - this is not changed underneath it.
+     *
+     * It is also given a size that does not depend on its content. A WebView left at wrap content -
+     * which is what a view with no layout parameters becomes when a Compose `AndroidView` adds it -
+     * is measured "at most this tall", and Chromium then resolves `vh` units to **zero** so that a
+     * page cannot size the view that is sizing it. Sites that lay their player out in `vh` (tiktok
+     * is one) collapse to nothing: the video plays, correctly, in a box zero pixels high, so the
+     * page looks broken while the download button it produced works perfectly.
      */
     @SuppressLint("SetJavaScriptEnabled", "JavascriptInterface")
     private fun configure() {
@@ -121,6 +129,10 @@ class MediaBrowser internal constructor(
             webView.settings.mediaPlaybackRequiresUserGesture = false
             webView.settings.useWideViewPort = true
             webView.settings.loadWithOverviewMode = true
+            webView.layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT,
+            )
         }
         if (ownsWebView && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             webView.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_BOUND, true)
