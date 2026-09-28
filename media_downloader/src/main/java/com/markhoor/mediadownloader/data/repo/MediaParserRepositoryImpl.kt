@@ -80,6 +80,18 @@ internal class MediaParserRepositoryImpl(
     /** A file is asked its size; a stream's size was already worked out from its playlist. */
     private suspend fun withSensibleSize(quality: MediaQualityModel): MediaQualityModel {
         val measured = if (quality.url.isHlsPlaylistUrl()) null else sizeProbe.sizeOf(quality.url, quality.headers)
-        return quality.copy(sizeBytes = (measured ?: quality.sizeBytes).sensibleSize(isVideo = quality.type == MediaType.Video))
+        val whole = measured?.let { it + soundBytes(quality) }
+        return quality.copy(sizeBytes = (whole ?: quality.sizeBytes).sensibleSize(isVideo = quality.type == MediaType.Video))
     }
+
+    /**
+     * The sound's own bytes, for a quality whose sound is a second file.
+     *
+     * Both files are downloaded and joined, so the picture alone is not what this costs - and the
+     * progress is measured against this number: a 71 MB picture with 100 MB of sound behind it sat
+     * at "100%, 71.4 MB / 71.4 MB" for as long again while the sound came down.
+     */
+    private suspend fun soundBytes(quality: MediaQualityModel): Long =
+        quality.audioUrl?.takeIf { !it.isHlsPlaylistUrl() }
+            ?.let { sizeProbe.sizeOf(it, quality.headers) } ?: 0L
 }
