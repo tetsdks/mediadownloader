@@ -102,9 +102,12 @@ internal class SniffPolicy(
         !pageUrl.isTikTokGridPage() &&
             (isParserLink(pageUrl) || pageUrl.isImdbVideoPage() || isSniffedSite(pageUrl) && pageUrl.isSniffedSingleMediaPage())
 
+    /** Sites the parser reads, by host - the module's own and whatever the app brought readers for. */
+    private val parserSiteHosts: Set<String> = Browser.PARSER_SITE_HOSTS + resolver.hostSuppliedHosts
+
     /** A site the parser reads, by host: on its feeds a card's own page is what to hand over. */
     fun isParserSite(pageUrl: String): Boolean =
-        pageUrl.normalizedHost()?.isUnderAnyOf(Browser.PARSER_SITE_HOSTS) == true
+        pageUrl.normalizedHost()?.isUnderAnyOf(parserSiteHosts) == true
 
     /** Whether requests on [pageUrl] are listened to at all; the script sites report for themselves. */
     fun sniffsRequestsOn(pageUrl: String): Boolean = !hasOwnScript(pageUrl)

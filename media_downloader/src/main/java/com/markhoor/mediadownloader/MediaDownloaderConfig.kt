@@ -23,6 +23,8 @@ import com.markhoor.mediadownloader.domain.policy.RestrictedCategory
  * @param allowAdultSites offer downloads from adult sites (the built-in list, their mirrors, and hosts
  *   named after them), which are refused by default. Google Play's sexual-content policy does not
  *   allow apps that do this: keep this `false` in any build published there.
+ * @param extraSources readers the host app supplies for links this module does not read itself;
+ *   see [MediaSource]. The module's own readers always win, and a blocked site stays blocked.
  * @param notificationActivity the screen a download notification opens, with
  *   [MediaDownloader.EXTRA_DOWNLOAD_ID]; the app's launcher activity when `null`. Set it when the
  *   launcher is a splash screen that would not pass the extra on.
@@ -37,6 +39,7 @@ data class MediaDownloaderConfig(
     val notificationActivity: Class<out Activity>? = null,
     val allowYouTube: Boolean = false,
     val allowAdultSites: Boolean = false,
+    val extraSources: List<MediaSource> = emptyList(),
 ) {
     /** The restricted categories this configuration lifts. */
     internal val allowedRestrictions: Set<RestrictedCategory>
@@ -50,5 +53,5 @@ data class MediaDownloaderConfig(
             "extraBlockedHosts=$extraBlockedHosts, twitterApiKey=${if (twitterApiKey == null) "none" else "set"}, " +
             "downloadFolderName=$downloadFolderName, notificationIcon=$notificationIcon, performanceMode=$performanceMode, " +
             "notificationActivity=${notificationActivity?.simpleName}, allowYouTube=$allowYouTube, " +
-            "allowAdultSites=$allowAdultSites)"
+            "allowAdultSites=$allowAdultSites, extraSources=${extraSources.size})"
 }

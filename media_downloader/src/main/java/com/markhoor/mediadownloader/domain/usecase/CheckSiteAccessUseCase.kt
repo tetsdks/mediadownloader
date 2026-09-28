@@ -24,20 +24,28 @@ import com.markhoor.mediadownloader.domain.policy.RestrictedSites
  * @param strictSupportedSitesOnly when on, only the supported sites are allowed.
  * @param extraBlockedHosts hosts the app blocks on top of the built-in list, in every configuration.
  * @param allowedRestrictions restricted categories the app has chosen to allow; none by default.
+ * @param extraSupportedHosts hosts the host app brought a reader for. They count as supported, so
+ *   strict mode does not refuse them - blocking still does, which is what keeps YouTube behind its
+ *   own switch however it is read.
  */
 internal class CheckSiteAccessUseCase(
     private val strictSupportedSitesOnly: Boolean,
     extraBlockedHosts: Set<String>,
     private val allowedRestrictions: Set<RestrictedCategory> = emptySet(),
+    extraSupportedHosts: Set<String> = emptySet(),
 ) {
 
     private val extraBlockedHosts: Set<String> =
         extraBlockedHosts.mapNotNull { it.normalizedHost() }.toSet()
 
+    private val extraSupportedHosts: Set<String> =
+        extraSupportedHosts.mapNotNull { it.normalizedHost() }.toSet()
+
     operator fun invoke(url: String): SiteAccess {
         val host = url.normalizedHost() ?: return SiteAccess.Unsupported
         if (isBlockedHost(host) || carriesBlockedUrl(url)) return SiteAccess.Blocked
-        val supported = host.isUnderAnyOf(Hosts.SUPPORTED) || RestrictedSites.categoryOf(host) != null
+        val supported = host.isUnderAnyOf(Hosts.SUPPORTED) || host.isUnderAnyOf(extraSupportedHosts) ||
+            RestrictedSites.categoryOf(host) != null
         if (strictSupportedSitesOnly && !supported) return SiteAccess.Unsupported
         return SiteAccess.Allowed
     }
