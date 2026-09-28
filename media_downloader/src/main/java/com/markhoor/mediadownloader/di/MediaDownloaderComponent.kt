@@ -29,6 +29,7 @@ import com.markhoor.mediadownloader.data.network.WebViewCookieSource
 import com.markhoor.mediadownloader.data.repo.DownloadRepositoryImpl
 import com.markhoor.mediadownloader.data.repo.MediaParserRepositoryImpl
 import com.markhoor.mediadownloader.data.scraper.ScraperRacer
+import com.markhoor.mediadownloader.data.scraper.HostSuppliedScraper
 import com.markhoor.mediadownloader.data.scraper.ScraperResolver
 import com.markhoor.mediadownloader.data.scraper.dailymotion.DailymotionScraper
 import com.markhoor.mediadownloader.data.scraper.facebook.FacebookShareScraper
@@ -79,11 +80,17 @@ internal class MediaDownloaderComponent(
         )
     }
 
+    /** The readers the host app brought, in the shape everything here expects. */
+    private val hostSuppliedScrapers: List<HostSuppliedScraper> by lazy {
+        config.extraSources.map(::HostSuppliedScraper).filter { it.hosts.isNotEmpty() }
+    }
+
     val checkSiteAccess: CheckSiteAccessUseCase by lazy {
         CheckSiteAccessUseCase(
             strictSupportedSitesOnly = config.strictSupportedSitesOnly,
             extraBlockedHosts = config.extraBlockedHosts,
             allowedRestrictions = config.allowedRestrictions,
+            extraSupportedHosts = hostSuppliedScrapers.flatMapTo(mutableSetOf()) { it.hosts },
         )
     }
 
@@ -288,6 +295,7 @@ internal class MediaDownloaderComponent(
             dailymotion = DailymotionScraper(httpFetcher, appPackage = appContext.packageName),
             pinterest = PinterestScraper(httpFetcher),
             getInDevice = getInDevice,
+            hostSupplied = hostSuppliedScrapers,
         )
     }
 

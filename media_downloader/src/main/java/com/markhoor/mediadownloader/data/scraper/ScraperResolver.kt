@@ -16,6 +16,8 @@ import com.markhoor.mediadownloader.core.isTwitterStatusLink
  * they never get this far, because site access refuses them before any link is read.
  *
  * @param twitter `null` when the host app supplied no tweeload key; X links then have no parser.
+ * @param hostSupplied readers the host app brought, asked only for links none of the above claims -
+ *   nothing an app supplies can quietly stand in for Instagram or TikTok.
  */
 internal class ScraperResolver(
     private val facebookVideo: SiteScraper,
@@ -27,10 +29,18 @@ internal class ScraperResolver(
     private val dailymotion: SiteScraper,
     private val pinterest: SiteScraper,
     private val getInDevice: SiteScraper,
+    private val hostSupplied: List<HostSuppliedScraper> = emptyList(),
 ) {
 
+    /** The hosts the app's own readers cover; the browser treats them as sites the parser reads. */
+    val hostSuppliedHosts: Set<String> = hostSupplied.flatMapTo(mutableSetOf()) { it.hosts }
+
     /** The scrapers to race for [url]; empty when no parser understands it. */
-    fun scrapersFor(url: String): List<SiteScraper> = when {
+    fun scrapersFor(url: String): List<SiteScraper> = ours(url).ifEmpty { theirs(url) }
+
+    private fun theirs(url: String): List<SiteScraper> = hostSupplied.filter { it.reads(url) }
+
+    private fun ours(url: String): List<SiteScraper> = when {
         url.isFacebookVideoLink() -> listOf(facebookVideo, getInDevice)
         url.isFacebookShareLink() -> listOf(facebookShare, getInDevice)
         url.isInstagramPostLink() || url.isThreadsPostLink() -> listOf(instagram)

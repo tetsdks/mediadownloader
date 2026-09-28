@@ -303,6 +303,7 @@ data class MediaDownloaderConfig(
     val notificationActivity: Class<out Activity>? = null,
     val allowYouTube: Boolean = false,
     val allowAdultSites: Boolean = false,
+    val extraSources: List<MediaSource> = emptyList(),
 )
 ```
 
@@ -317,6 +318,7 @@ data class MediaDownloaderConfig(
 | `notificationActivity` | `null` | The screen a notification tap opens, with `MediaDownloader.EXTRA_DOWNLOAD_ID`. When `null`, the launcher activity is used. Set it when your launcher is a splash screen that would not pass the extra on. |
 | `allowYouTube` | `false` | Offer downloads from YouTube (its pages and player hosts). **Google Play removes apps that download from YouTube: keep `false` in any build published there.** See §9.3. |
 | `allowAdultSites` | `false` | Offer downloads from adult sites (the built-in list, their mirrors, hosts named after them). **Play's sexual-content policy doesn't allow this: keep `false` in any build published there.** See §9.3. |
+| `extraSources` | empty | Readers your app brings for links this module does not read itself (§3.3). |
 
 `toString()` never prints the api key; it shows `twitterApiKey=set` or `none`.
 
@@ -349,7 +351,60 @@ MediaDownloaderConfig(
 )
 ```
 
-### 3.2 `PerformanceMode`
+### 3.2 `MediaSource` — bringing your own reader
+
+Some links cannot be read by this library: the code would need a licence the library must not take
+on, or a key it must not hold, or the site matters to one app and nobody else. `extraSources` is the
+seam for those. A source says which hosts it reads and hands back a `MediaModel`; everything after
+that is the module's own work - the answer is sized, a playlist is expanded into its encodes, the
+download engine fetches and merges it, and on that site's feeds a card hands over the post's own
+page instead of the feed's.
+
+```kotlin
+interface MediaSource {
+    /** Registrable domains: "example.com" covers "m.example.com" too. */
+    val hosts: Set<String>
+
+    /** The media behind [url], or null when there is none. Called off the main thread; may throw. */
+    suspend fun read(url: String): MediaModel?
+}
+```
+
+```kotlin
+class ExampleSource : MediaSource {
+    override val hosts = setOf("example.com")
+
+    override suspend fun read(url: String): MediaModel? {
+        val video = myApi.lookUp(url) ?: return null
+        return MediaModel(
+            title = video.name,
+            thumbnailUrl = video.cover,
+            qualities = video.files.map {
+                MediaQualityModel(url = it.url, label = it.label, type = MediaType.Video)
+            },
+            sourceUrl = url,
+            durationMillis = video.seconds * 1_000,
+        )
+    }
+}
+
+MediaDownloader.initialize(this, MediaDownloaderConfig(extraSources = listOf(ExampleSource())))
+```
+
+Four rules to know:
+
+- **The module's own readers win.** A source whose hosts name a site this library already reads is
+  never asked for it; nothing a host app supplies can quietly stand in for Instagram or TikTok.
+- **Site access still decides.** A source's hosts count as supported, so `strictSupportedSitesOnly`
+  does not refuse them - but a blocked site stays blocked. YouTube is blocked unless `allowYouTube`
+  is on, whatever source is supplied for it.
+- **Throwing is finding nothing.** A failure is caught and the link is answered as unparseable, the
+  same as for the module's own readers. Cancellation is honoured.
+- **Headers travel on the qualities**, and the first quality's are used for the download, which is
+  how the module's own readers work too. `MediaModel.sourceUrl` is ignored - the link that was asked
+  for is what the download records.
+
+### 3.3 `PerformanceMode`
 
 ```kotlin
 enum class PerformanceMode { Auto, Standard, LowEnd }
@@ -1180,6 +1235,7 @@ Everything a host can reference. Anything not listed here is `internal` to the m
   - Downloads: `download(request)`, `download(media, quality, fileName?, siteFolder?)`,
     `observeDownloads()`, `observeDownload(id)`, `pause(id)`, `resume(id)`, `delete(id, deleteFile)`
 - `data class MediaDownloaderConfig`
+- `interface MediaSource` — a reader the host app brings for links this module does not read
 - `enum class PerformanceMode { Auto, Standard, LowEnd }`
 
 **`com.markhoor.mediadownloader.domain.models`**
