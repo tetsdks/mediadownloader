@@ -120,6 +120,28 @@ internal class DownloadRepositoryImpl(
         }
     }
 
+    /**
+     * A whole collection at once. The ids are read first, then moved in one statement, so a
+     * download that finishes or is deleted in between is simply not among them - and the scheduler
+     * is told about each one, which is what actually stops the work.
+     */
+    override suspend fun pauseCollection(title: String): Result<Int> = attemptCounting {
+        val ids = dao.idsInCollection(title, pausableStates)
+        val moved = dao.moveCollection(title, from = pausableStates, state = DownloadState.Paused)
+        ids.forEach { id ->
+            scheduler.stop(id)
+            notifier.cancel(id)
+        }
+        Result.success(moved)
+    }
+
+    override suspend fun resumeCollection(title: String): Result<Int> = attemptCounting {
+        val ids = dao.idsInCollection(title, resumableStates)
+        val moved = dao.requeueCollection(title, from = resumableStates)
+        ids.forEach { id -> startAndSayIfItMustWait(id, replace = true) }
+        Result.success(moved)
+    }
+
     override suspend fun delete(id: Long, deleteFile: Boolean): Result<Unit> = attempt {
         val entity = dao.get(id) ?: return@attempt Result.failure(DownloadException.NotFound(id))
         // Two deletes at once: only the one that removed the row cleans up after it.
@@ -130,6 +152,18 @@ internal class DownloadRepositoryImpl(
         if (deleteFile && entity.state == DownloadState.Completed) entity.file.delete()
         Result.success(Unit)
     }
+
+    /** [attempt] for an action that answers with a count rather than nothing. */
+    private suspend fun attemptCounting(action: suspend () -> Result<Int>): Result<Int> =
+        withContext(ioDispatcher) {
+            try {
+                action()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
 
     /** Runs an action off the main thread; a database or scheduler error becomes its failure. */
     private suspend fun attempt(action: suspend () -> Result<Unit>): Result<Unit> = withContext(ioDispatcher) {

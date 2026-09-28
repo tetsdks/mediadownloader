@@ -47,6 +47,8 @@ sealed interface ParsedLink {
  * qualities first. A host that wants to say "adding 3 of 50" says it from here.
  *
  * @param failed entries that could not be read - a video taken down, or one nothing can download.
+ * @param isPaused the collection was paused; [isAdding] is then `false` because nothing is being
+ *   added, and resuming carries on from where it stopped.
  */
 data class CollectionProgress(
     val title: String = "",
@@ -54,4 +56,5 @@ data class CollectionProgress(
     val failed: Int = 0,
     val total: Int = 0,
     val isAdding: Boolean = false,
+    val isPaused: Boolean = false,
 )

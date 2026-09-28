@@ -20,18 +20,21 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.markhoor.mediadownloader.MediaDownloader
 import com.markhoor.mediadownloader.domain.models.DownloadModel
 import com.markhoor.mediadownloader.domain.models.DownloadState
 import com.markhoor.mediadownloader.presentation.downloads.DownloadsUiState
 import com.markhoor.mediadownloader.presentation.downloads.DownloadsViewModel
 import com.media.downloader.ui.common.MediaThumbnail
 import com.media.downloader.ui.common.formatBytes
+import kotlinx.coroutines.launch
 
 /** Every download, live, with the actions its current state allows. */
 @Composable
@@ -55,17 +58,36 @@ fun DownloadsScreen(vm: DownloadsViewModel) {
                 modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                if (current.inProgress.isNotEmpty()) {
-                    item { SectionTitle("In progress") }
-                    grouped("progress", current.inProgress, vm, expanded) { title ->
-                        expanded = if (title in expanded) expanded - title else expanded + title
-                    }
+                // A playlist is one row wherever its videos are: split across the two sections
+                // it said "0 of 6 saved" while its videos were being saved, because each one left
+                // the section as it finished.
+                val all = current.inProgress + current.completed
+                val collections = all.mapNotNull { it.collectionTitle }.distinct()
+                    .map { title -> title to all.filter { it.collectionTitle == title } }
+                // Not finished until every video is: a paused or failed one still belongs with the
+                // downloads, not under "Completed".
+                val stillGoing = collections.filter { (_, members) ->
+                    members.any { it.state != DownloadState.Completed }
                 }
-                if (current.completed.isNotEmpty()) {
+                val allDone = collections.filterNot { it in stillGoing }
+                val onToggle: (String) -> Unit = { title ->
+                    expanded = if (title in expanded) expanded - title else expanded + title
+                }
+
+                // A heading only where something sits under it: a playlist keeps its finished
+                // videos, so "Completed" can otherwise stand over nothing.
+                val goingAlone = current.inProgress.filter { it.collectionTitle == null }
+                val doneAlone = current.completed.filter { it.collectionTitle == null }
+
+                if (stillGoing.isNotEmpty() || goingAlone.isNotEmpty()) {
+                    item { SectionTitle("In progress") }
+                    collectionRows(stillGoing, vm, expanded, onToggle)
+                    items(goingAlone, key = { it.id }) { DownloadRow(it, vm) }
+                }
+                if (allDone.isNotEmpty() || doneAlone.isNotEmpty()) {
                     item { SectionTitle("Completed") }
-                    grouped("completed", current.completed, vm, expanded) { title ->
-                        expanded = if (title in expanded) expanded - title else expanded + title
-                    }
+                    collectionRows(allDone, vm, expanded, onToggle)
+                    items(doneAlone, key = { it.id }) { DownloadRow(it, vm) }
                 }
             }
         }
@@ -140,38 +162,26 @@ private fun statusLine(download: DownloadModel): String = when (download.state) 
 }
 
 /**
- * A section's downloads: the ones queued on their own as themselves, and each playlist as one row
- * that opens.
+ * Each playlist as one row that opens.
  *
  * Downloads carry the collection they were queued with, so grouping them is the module's answer
  * rather than a guess from names or folders.
  */
-private fun LazyListScope.grouped(
-    section: String,
-    downloads: List<DownloadModel>,
+private fun LazyListScope.collectionRows(
+    collections: List<Pair<String, List<DownloadModel>>>,
     vm: DownloadsViewModel,
     expanded: Set<String>,
     onToggle: (String) -> Unit,
 ) {
-    // Kept in the order the module gave them, so a playlist sits where its first video does.
-    val seen = mutableSetOf<String>()
-    downloads.forEach { download ->
-        val title = download.collectionTitle
-        if (title == null) {
-            item(key = download.id) { DownloadRow(download, vm) }
-        } else if (seen.add(title)) {
-            val members = downloads.filter { it.collectionTitle == title }
-            // The section is part of the key: a playlist with some videos saved and some still
-            // going appears in both, and two items of one list may not share a key.
-            item(key = "$section:collection:$title") {
-                CollectionRow(
-                    title = title,
-                    members = members,
-                    isOpen = title in expanded,
-                    onToggle = { onToggle(title) },
-                    vm = vm,
-                )
-            }
+    collections.forEach { (title, members) ->
+        item(key = "collection:$title") {
+            CollectionRow(
+                title = title,
+                members = members,
+                isOpen = title in expanded,
+                onToggle = { onToggle(title) },
+                vm = vm,
+            )
         }
     }
 }
@@ -187,6 +197,7 @@ private fun CollectionRow(
 ) {
     val done = members.count { it.state == DownloadState.Completed }
     val failed = members.count { it.state == DownloadState.Failed }
+    val paused = members.count { it.state == DownloadState.Paused }
     val downloaded = members.sumOf { it.downloadedBytes }
     // Only what is known: one video with no size yet must not make the whole playlist's unknown.
     val total = members.mapNotNull { it.totalBytes }.takeIf { it.size == members.size }?.sum()
@@ -200,7 +211,9 @@ private fun CollectionRow(
             Column(Modifier.padding(start = 12.dp).weight(1f)) {
                 Text(title, style = MaterialTheme.typography.titleSmall, maxLines = 1)
                 Text(
-                    "$done of ${members.size} saved" + if (failed > 0) " - $failed failed" else "",
+                    "$done of ${members.size} saved" +
+                        (if (paused > 0) " - $paused paused" else "") +
+                        (if (failed > 0) " - $failed failed" else ""),
                     style = MaterialTheme.typography.bodySmall,
                 )
                 if (total != null && total > 0) {
@@ -217,6 +230,21 @@ private fun CollectionRow(
                 }
             }
             Text(if (isOpen) "▾" else "▸", Modifier.padding(horizontal = 8.dp))
+        }
+
+        // One press for the lot: the reader queued them in one press too.
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            val scope = rememberCoroutineScope()
+            if (members.any { it.state.canPause }) {
+                TextButton(onClick = {
+                    scope.launch { MediaDownloader.pauseCollection(title) }
+                }) { Text("Pause all") }
+            }
+            if (members.any { it.state == DownloadState.Paused || it.state == DownloadState.Failed }) {
+                TextButton(onClick = {
+                    scope.launch { MediaDownloader.resumeCollection(title) }
+                }) { Text("Resume all") }
+            }
         }
 
         if (isOpen) {
