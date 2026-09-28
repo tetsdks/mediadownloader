@@ -84,9 +84,10 @@ fun BrowserScreen(
                     modifier = Modifier.weight(1f),
                 )
                 TextButton(onClick = {
-                    // load() refuses anything that isn't a url (a typed search has spaces).
+                    // load() refuses anything that isn't a url (a typed search has spaces), so
+                    // whatever was typed is searched for instead.
                     if (!browser.load(address)) {
-                        browser.load("https://duckduckgo.com/?q=" + URLEncoder.encode(address, "UTF-8"))
+                        browser.load("https://www.google.com/search?q=" + URLEncoder.encode(address, "UTF-8"))
                     }
                 }) { Text("Go") }
                 TextButton(onClick = { browser.reload() }) { Text("Reload") }
