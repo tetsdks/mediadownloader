@@ -5,9 +5,6 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
-// The X/Twitter api key belongs to whoever runs the demo, so it is read from local.properties -
-// which is git-ignored - and never from a committed file. Without it, X links simply fail with
-// LinkNotRecognised and everything else still works.
 val localProperties = Properties().apply {
     rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use(::load)
 }
@@ -42,8 +39,6 @@ android {
         }
     }
     compileOptions {
-        // Matches the library module. Under AGP 9's built-in Kotlin, targetCompatibility *is* the
-        // Kotlin jvmTarget, and bytecode built at 21 cannot be inlined into a module built at 11.
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21
     }
