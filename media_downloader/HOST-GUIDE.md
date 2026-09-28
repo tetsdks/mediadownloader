@@ -365,6 +365,9 @@ interface MediaSource {
     /** Registrable domains: "example.com" covers "m.example.com" too. */
     val hosts: Set<String>
 
+    /** Whether this link names one piece of media you can read. Asked before anything is fetched. */
+    fun handles(url: String): Boolean = true
+
     /** The media behind [url], or null when there is none. Called off the main thread; may throw. */
     suspend fun read(url: String): MediaModel?
 }
@@ -373,6 +376,9 @@ interface MediaSource {
 ```kotlin
 class ExampleSource : MediaSource {
     override val hosts = setOf("example.com")
+
+    // Only its posts. Without this the site's feed reads as a page holding one video.
+    override fun handles(url: String) = url.contains("/watch/")
 
     override suspend fun read(url: String): MediaModel? {
         val video = myApi.lookUp(url) ?: return null
@@ -391,8 +397,13 @@ class ExampleSource : MediaSource {
 MediaDownloader.initialize(this, MediaDownloaderConfig(extraSources = listOf(ExampleSource())))
 ```
 
-Four rules to know:
+Five rules to know:
 
+- **Write `handles` whenever the site is more than its posts.** The module asks it to tell a post's
+  own page from the rest of the site: a page that names one video is read as that video, while a
+  feed, a channel or a search page is a list of *other* pages, where a press means "read the card I
+  pressed". A source that claims every link on its hosts makes the feed itself look like a video -
+  one button appears on the feed where there should be one per card.
 - **The module's own readers win.** A source whose hosts name a site this library already reads is
   never asked for it; nothing a host app supplies can quietly stand in for Instagram or TikTok.
 - **Site access still decides.** A source's hosts count as supported, so `strictSupportedSitesOnly`
