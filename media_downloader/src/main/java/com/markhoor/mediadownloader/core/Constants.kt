@@ -389,6 +389,9 @@ internal object Constants {
         /** Sites the parser reads, as hosts: on their feeds a card's own page is worth handing over. */
         val PARSER_SITE_HOSTS: Set<String> = setOf(
             "linkedin.com", "dailymotion.com", "pinterest.com", "pin.it", "imdb.com", "tiktok.com",
+            // Read by its parser rather than sniffed, so the pre-roll a watch page plays can never
+            // be offered as the video. Still refused outright unless adult sites are allowed.
+            "pornhub.com", "pornhub.org", "pornhubpremium.com",
         )
     }
 
@@ -493,6 +496,32 @@ internal object Constants {
                 "&client_type=webapp&dmViewId=1ij0vegql8241eb7a77&parallelCalls=1&app="
         const val REFERER = "https://www.dailymotion.com/"
         const val ORIGIN = "https://www.dailymotion.com"
+    }
+
+    object Pornhub {
+        /** The network's watch hosts, judged as hosts - never as text found inside a url. */
+        val HOSTS: Set<String> = setOf("pornhub.com", "pornhub.org", "pornhubpremium.com")
+
+        /**
+         * How many times the watch page is asked for before giving up. Networks that filter this
+         * site reset the connection instead of answering, and a reset lands on some attempts and
+         * not others; four tries cost nothing when the first one works.
+         */
+        const val PAGE_ATTEMPTS = 4
+
+        /** What the player object calls a plain file and a master playlist. */
+        const val FORMAT_FILE = "mp4"
+        const val FORMAT_STREAM = "hls"
+
+        /**
+         * The page answers a plain request, but a bare client user agent gets a thinner page on
+         * some edges, and the signed file urls are served to the site's own pages.
+         */
+        val HEADERS: Map<String, String> = mapOf(
+            Network.HEADER_USER_AGENT to "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 " +
+                "(KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36",
+            "Referer" to "https://www.pornhub.com/",
+        )
     }
 
     object LinkedIn {

@@ -18,6 +18,7 @@ import com.markhoor.mediadownloader.data.scraper.instagram.InstagramScraper
 import com.markhoor.mediadownloader.data.scraper.instagram.InstagramSignedInScraper
 import com.markhoor.mediadownloader.data.scraper.linkedin.LinkedInScraper
 import com.markhoor.mediadownloader.data.scraper.pinterest.PinterestScraper
+import com.markhoor.mediadownloader.data.scraper.pornhub.PornhubScraper
 import com.markhoor.mediadownloader.data.scraper.tiktok.TikTokScraper
 import com.markhoor.mediadownloader.data.scraper.twitter.TwitterScraper
 import com.markhoor.mediadownloader.domain.usecase.CheckSiteAccessUseCase
@@ -86,6 +87,7 @@ class LiveParseCheck {
             instagram = instagram,
             linkedIn = LinkedInScraper(fetcher),
             tikTok = TikTokScraper(fetcher),
+            pornhub = PornhubScraper(fetcher),
             twitter = twitterApiKey?.let { TwitterScraper(fetcher, it) },
             dailymotion = DailymotionScraper(fetcher, appPackage = "com.markhoor.mediadownloader.livecheck"),
             pinterest = PinterestScraper(fetcher),

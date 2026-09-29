@@ -17,6 +17,7 @@ internal fun testResolver() = ScraperResolver(
     instagram = SilentScraper(),
     linkedIn = SilentScraper(),
     tikTok = SilentScraper(),
+    pornhub = SilentScraper(),
     twitter = SilentScraper(),
     dailymotion = SilentScraper(),
     pinterest = SilentScraper(),

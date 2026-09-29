@@ -300,8 +300,18 @@ its wiring in `MediaDownloaderComponent`.
   lays its player out in `vh`: the video played, at the right resolution, inside a box zero pixels
   high, and the page read as broken while the button detection produced worked. Anything that
   renders blank in the browser is worth measuring a `100vh` element in before blaming detection.
-- **No adult-site scrapers.** The old url-parser carried six, unreachable behind the block
-  list; they were not brought over.
+- **One adult-site scraper, reachable only by consent.** The old url-parser carried six,
+  unreachable behind the block list, and they were not brought over. The PornHub network has one
+  now (`data/scraper/pornhub/`) because an app that turns `allowAdultSites` on had no parser at
+  all there and fell through to the browser, which offered it the pre-roll. Nothing changes for an
+  app that leaves the switch off: `CheckSiteAccessUseCase` refuses the link before any scraper is
+  asked. The page's own player object is read rather than its markup or its media requests, which
+  is also what keeps the advert out - the advert is not in that object. Its hosts are in
+  `PARSER_SITE_HOSTS`, so the browser reads the page instead of sniffing it.
+- **The page is asked for more than once.** Networks that filter that site reset the connection
+  instead of answering, and the reset lands on roughly half the attempts: measured on a filtered
+  network, one try parsed 2 times in 5 and four tries 5 times in 5. Retrying a reset is not
+  retrying an error the server gave - a server that answers is never asked twice.
 - **The tweeload key is configuration**, not source (`MediaDownloaderConfig.twitterApiKey`).
   Without it X links are `LinkNotRecognised`. The app reads it from `local.properties`
   (`tweeload.apiKey`, gitignored) into `BuildConfig.TWEELOAD_API_KEY`; the value is the one the
