@@ -7,6 +7,7 @@ import com.markhoor.mediadownloader.core.isHlsPlaylistUrl
 import com.markhoor.mediadownloader.core.isVideoFileUrl
 import com.markhoor.mediadownloader.core.normalizedHost
 import com.markhoor.mediadownloader.core.qualityNameFromResolution
+import com.markhoor.mediadownloader.core.resolveAgainst
 import com.markhoor.mediadownloader.core.titleFromHtml
 import com.markhoor.mediadownloader.core.urlPath
 import com.markhoor.mediadownloader.data.network.CookieSource
@@ -59,18 +60,19 @@ internal class TubeScraper(
         return namesOneThing(path)
     }
 
-    /** A last segment that names one piece of media: `128032-a_title.html`, `a-title-12345`. */
+    /**
+     * A last segment that names one piece of media: `128032-a_title.html`, `a-title-12345`, or an
+     * id on its own, which is all redtube puts in an address.
+     */
     private fun namesOneThing(path: String): Boolean {
-        val segments = path.split('/').filter { it.isNotBlank() }
-        if (segments.size < 2) return false
-        val last = segments.last()
+        val last = path.split('/').filterNot { it.isBlank() }.lastOrNull() ?: return false
         return last.endsWith(Tube.PAGE_SUFFIX, ignoreCase = true) || ID_IN_NAME.containsMatchIn(last)
     }
 
     override suspend fun scrapeOrNull(url: String): ScrapedMediaDto? {
         val page = pageOf(url)
         val headers = headersFor(url)
-        val media = aylo(page, headers)
+        val media = aylo(page, url, headers)
             ?: TubePlayerParser.fromPlayerCalls(page)
             ?: TubePlayerParser.fromLinkedData(page)
             ?: TubePlayerParser.fromKvsPlayer(page, url)
@@ -93,13 +95,17 @@ internal class TubeScraper(
      * can be measured before it starts, and no remux afterwards. Those urls are signed for the
      * address that asked for them, so they are read now rather than kept for later.
      */
-    private suspend fun aylo(page: String, headers: Map<String, String>): ScrapedMediaDto? {
+    private suspend fun aylo(
+        page: String,
+        pageUrl: String,
+        headers: Map<String, String>,
+    ): ScrapedMediaDto? {
         // A mirror's object is the page's whole player configuration, which is not always valid
         // JSON; when it cannot be read the page is left to the shapes that come after it.
         val player = TubePlayerParser.playerObjectOf(page)
             ?.let { runCatching { fetcher.json.decodeFromString<AyloPlayerDto>(it) }.getOrNull() }
             ?: return null
-        val definitions = withEndpointsFollowed(player.definitions, headers)
+        val definitions = withEndpointsFollowed(player.definitions, pageUrl, headers)
         val qualities = qualitiesOf(definitions, Tube.FORMAT_FILE)
             .ifEmpty { bestStreamOf(definitions) }
             .ifEmpty { return null }
@@ -123,14 +129,19 @@ internal class TubeScraper(
      */
     private suspend fun withEndpointsFollowed(
         definitions: List<AyloDefinitionDto>,
+        pageUrl: String,
         headers: Map<String, String>,
     ): List<AyloDefinitionDto> {
+        // Redtube writes its endpoints as a path alone (`/media/mp4?s=…`), so each one is read
+        // against the page it came from before anything is asked of it.
         val (named, endpoints) = definitions
             .filter { !it.videoUrl.isNullOrBlank() }
+            .map { it.copy(videoUrl = it.videoUrl.orEmpty().resolveAgainst(pageUrl)) }
             .partition { it.videoUrl.orEmpty().let { url -> url.isHlsPlaylistUrl() || url.isVideoFileUrl() } }
         val answered = endpoints.flatMap { endpoint ->
             fetcher.getJson<List<AyloDefinitionDto>>(endpoint.videoUrl.orEmpty(), headers)
                 .getOrNull().orEmpty()
+                .map { it.copy(videoUrl = it.videoUrl.orEmpty().resolveAgainst(pageUrl)) }
         }
         return answered + named
     }
