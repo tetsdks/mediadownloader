@@ -676,6 +676,17 @@ its wiring in `MediaDownloaderComponent`.
   playlist shell from that region) and motherless (unreachable) were not tested. A tap during a
   pre-roll that streams from the player's own element waits for the video; one whose advert is
   served from a host not yet listed is now caught by its length instead.
+- **Downloads, September 2026 on the Vivo with the VPN on.** Taken to a file on disk and then
+  deleted: xhamster 144p (18.8 MB, HLS remuxed), xnxx 240p (8.4 MB), youporn (88.1 MB), tube8
+  (193.4 MB), txxx (165.8 MB) and porntrex (85.3 MB); pornhub's 240p was taken on the SM-A26
+  earlier. Only eporner failed, and not in the module: the `contentUrl` its linked data gives
+  (`gvideo.eporner.com/<id>/<id>.mp4`) answers with something a browser cannot decode either, so
+  there is nothing there to fetch.
+  Two things to know when reading a failure here. A big file over a filtered network is reset
+  repeatedly - the worker resumes from what is on disk and the row can still end as failed after
+  its attempts run out, having downloaded 98% of the file; the log says
+  `SocketException: Connection reset`, not a refusal. And a download started twice fails the second
+  time, because the first spent the link.
 - **September 2026, a third pass on the Vivo, with the phone's VPN on.** Read from a pasted link:
   pornhub (4 qualities, 1080p 130.7 MB), youporn through its `you-porn.com` mirror (4, 629.0 MB),
   tube8 through `tube8.es` (3, 720p 760.5 MB) and porntrex (3, 1080p 262.0 MB). Answered by the

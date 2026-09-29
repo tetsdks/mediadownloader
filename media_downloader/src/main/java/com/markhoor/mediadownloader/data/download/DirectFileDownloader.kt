@@ -4,6 +4,7 @@ import com.markhoor.mediadownloader.core.Constants.Download
 import com.markhoor.mediadownloader.core.Constants.Scratch
 import com.markhoor.mediadownloader.core.joinInto
 import com.markhoor.mediadownloader.data.network.HttpStatusException
+import com.markhoor.mediadownloader.data.network.isMediaGone
 import io.ktor.http.HttpStatusCode
 import java.io.File
 import java.io.IOException
@@ -34,6 +35,13 @@ internal class DirectFileDownloader(
                 // The probe was answered with 206 and a part with the whole file: a CDN can answer
                 // differently from one edge to the next. Parts are dropped and the file fetched whole.
                 partFiles(task.workDir).forEach { it.delete() }
+            } catch (refused: HttpStatusException) {
+                // The probe was answered and the parts were not. Some sites sign a link for one
+                // connection and turn the rest away, which reads exactly like a file that is gone -
+                // so the file is asked for once, whole, before anyone is told it has gone.
+                if (!refused.isMediaGone()) throw refused
+                partFiles(task.workDir).forEach { it.delete() }
+                meter.reset()
             }
         }
         downloadWhole(task, remote, meter)
