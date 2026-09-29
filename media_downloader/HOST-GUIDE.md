@@ -495,8 +495,25 @@ suspend fun read(text: String): Result<ParsedLink>
 | `read(text)` | `Result<ParsedLink>` | The same, for a host that does not know what it was handed: `ParsedLink.One` is a piece of media, `ParsedLink.Many` a collection - a playlist, an album - listing links to read later (§4.4). Use this rather than `parse` when a link may be either; `LinkParseViewModel` already does. |
 
 Sites the parser reads directly (paste or share a link): **Facebook, Instagram, Threads, TikTok,
-X/Twitter (needs the key), Pinterest (incl. `pin.it`), Dailymotion, LinkedIn**. Other supported
-sites are handled by the browser (§7.3).
+X/Twitter (needs the key), Pinterest (incl. `pin.it`), Dailymotion, LinkedIn**, and - only while
+`allowAdultSites` is on, and refused as `SiteBlocked` otherwise, which is the default - **the tube
+sites**, through one generic reader rather than a scraper each.
+
+That reader recognises the few players those thousands of sites are built on, in the order they
+know the most: the `flashvars` object (Aylo's network - PornHub, RedTube, YouPorn, Tube8), the
+`html5player.setX(…)` calls (xVideos, XNXX), the schema.org `VideoObject` most tube pages carry for
+search engines (eporner and many more), and Open Graph last. Whatever it finds, it drops advert
+urls: a watch page plays a pre-roll, and that file is often the only one on the page until the
+video is asked for.
+
+A site that hands its player **encrypted** urls (xHamster) is read by none of these. The link then
+fails as `MediaNotFound` and the page is left to the browser, which can watch what the player
+actually fetches - so offer "open in browser" on a failure rather than treating it as unsupported.
+
+> Networks that filter these sites mostly reset the connection rather than answer, which looks like
+> "no media behind that link". The module asks again a few times before giving up, and an app that
+> loads thumbnails itself may want to do the same - covers come from the same filtered hosts, and
+> some sites serve them as AVIF.
 
 ### 4.3 Collections - playlists and the like
 

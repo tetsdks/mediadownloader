@@ -19,14 +19,13 @@ class DemoApp : Application() {
             MediaDownloaderConfig(
                 // Downloads are offered only on the built-in supported sites. The browser screen's
                 // chip shows this changing as you navigate.
-                strictSupportedSitesOnly = true,
+                strictSupportedSitesOnly = false,
                 twitterApiKey = BuildConfig.TWEELOAD_API_KEY.ifBlank { null },
                 downloadFolderName = "Media Downloader Demo",
                 notificationActivity = MainActivity::class.java,
                 performanceMode = PerformanceMode.Auto,
-                // Google Play removes apps that download from either. They stay off here.
-                allowYouTube = false,
-                allowAdultSites = false,
+                allowYouTube = false,                // Google Play removes apps that download from either. They stay off here.
+                allowAdultSites = true,
             ),
         )
     }

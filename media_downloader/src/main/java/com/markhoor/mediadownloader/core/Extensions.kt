@@ -703,7 +703,10 @@ internal fun String.isBrightcovePlaybackApi(): Boolean =
  */
 internal fun String.isIgnoredStream(): Boolean {
     val url = sniffable()
-    val restricted = (url.contains(".xhcdn.com") && !url.contains("_TPL_.av1.mp4.m3u")) ||
+    // xHamster serves a playlist per height and one master that names them all; only the master
+    // is worth taking. It has moved its video CDN before (xhcdn -> xhpingcdn), so both are named.
+    val restricted = ((url.contains(".xhcdn.com") || url.contains(".xhpingcdn.com")) &&
+            !url.contains("_TPL_.av1.mp4.m3u")) ||
             url.contains("media-hls.doppiocdn.net") || url.contains("gcore-vid.xnxx-cdn.com") ||
             (url.contains("-vid.xnxx-") && !url.contains("hls.m3u8"))
     // Imdb autoplays a few seconds of a film on its page as `hls-preview-<id>.m3u8`; the trailer

@@ -35,6 +35,7 @@ internal object Constants {
 
         const val HEADER_COOKIE = "Cookie"
         const val HEADER_REFERER = "Referer"
+
         const val HEADER_USER_AGENT = "User-Agent"
         const val ACCEPT_LANGUAGE = "en-US,en;q=0.9"
     }
@@ -335,6 +336,25 @@ internal object Constants {
         const val BITCHUTE_ORIGIN = "https://www.bitchute.com"
 
         /** The names a CDN gives the playlist beside its segments, nearest-first. */
+        /**
+         * The longest a find may run and still be taken for the advert before the video, and how
+         * many times shorter than the video it has to be. A pre-roll is fifteen to thirty seconds
+         * on a video that runs for minutes; a short video on its own page is still offered, since
+         * nothing longer ever arrives to displace it.
+         */
+        const val PREROLL_MAX_MS = 120_000L
+
+        /**
+         * What a stream's address calls its codec, where a site serves both. The mp4 the module
+         * writes holds H.264, so the AV1 one is swapped for its twin before it is offered.
+         */
+        const val AV1_IN_URL = ".av1."
+        const val H264_IN_URL = ".h264."
+
+        /** How many of a page's streams are kept as candidates for a press. */
+        const val MAX_PAGE_STREAMS = 6
+        const val PREROLL_SHARE_OF_VIDEO = 2
+
         val PLAYLIST_NAMES: List<String> = listOf(
             "rendition.m3u8", "index.m3u8", "playlist.m3u8", "chunklist.m3u8",
             "prog_index.m3u8", "media.m3u8", "master.m3u8",
@@ -493,6 +513,44 @@ internal object Constants {
                 "&client_type=webapp&dmViewId=1ij0vegql8241eb7a77&parallelCalls=1&app="
         const val REFERER = "https://www.dailymotion.com/"
         const val ORIGIN = "https://www.dailymotion.com"
+    }
+
+    object Tube {
+        /**
+         * How many times a tube page is asked for before giving up. Networks that filter these
+         * sites reset the connection instead of answering, and a reset lands on some attempts and
+         * not others; four tries cost nothing when the first one works.
+         */
+        const val PAGE_ATTEMPTS = 4
+
+        /** What Aylo's player object calls a plain file and a master playlist. */
+        const val FORMAT_FILE = "mp4"
+        const val FORMAT_STREAM = "hls"
+
+        /** Paths a video's own page is filed under, across sites that agree on little else. */
+        val VIDEO_PATH_MARKERS: Set<String> = setOf(
+            "/video", "/watch", "/view_video", "/embed/", "/movies/", "/clip", "/v/",
+        )
+
+        /** Aylo names the video in the query instead: `view_video.php?viewkey=…`. */
+        const val VIDEO_QUERY_MARKER = "viewkey="
+
+        /** What a page that names one piece of media often ends with. */
+        const val PAGE_SUFFIX = ".html"
+
+        const val HEADER_REFERER = "Referer"
+
+        /**
+         * KVS - the script a great many of these sites run - hands its files only to a visitor
+         * whose player has loaded, and this cookie is how it knows. Without it the file is refused
+         * and its size cannot even be measured.
+         */
+        const val PLAYER_COOKIE = "kt_tcookie=1"
+
+        /** A browser's, because a bare client user agent gets a thinner page on some of these. */
+        const val USER_AGENT =
+            "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 " +
+                "(KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
     }
 
     object LinkedIn {
