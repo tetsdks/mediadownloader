@@ -4,6 +4,8 @@ import com.markhoor.mediadownloader.core.Constants.QualityLabels
 import com.markhoor.mediadownloader.core.decodeHtmlEntities
 import com.markhoor.mediadownloader.core.decodeJsonEscapes
 import com.markhoor.mediadownloader.core.isAdvertMediaUrl
+import com.markhoor.mediadownloader.core.isHlsPlaylistUrl
+import com.markhoor.mediadownloader.core.isVideoFileUrl
 import com.markhoor.mediadownloader.core.looksLikeImageUrl
 import com.markhoor.mediadownloader.core.metaProperty
 import com.markhoor.mediadownloader.core.normalizedHost
@@ -45,6 +47,8 @@ internal object TubePlayerParser {
     private val LD_FIELD = { name: String -> Regex(""""$name"\s*:\s*\[?\s*"([^"]+)"""") }
     private val ISO_DURATION = Regex("""P(?:T)?(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?""")
     private val HEIGHT_IN_URL = Regex("""(\d{3,4})p""")
+    private val PRELOAD_LINK = Regex("""<link[^>]+preload[^>]*>""", RegexOption.IGNORE_CASE)
+    private val HREF = Regex("""href=["']([^"']+)["']""", RegexOption.IGNORE_CASE)
     private val FILE_IN_PAGE = Regex("""https?:(?:\\?/){2}[^"'\s]{10,200}?\.mp4(?:\?[^"'\s]{0,80})?""")
 
     /** A hovered thumbnail's clip, which these sites file under a name of its own. */
@@ -126,6 +130,25 @@ internal object TubePlayerParser {
             .ifEmpty { return null }
         return ScrapedMediaDto(
             qualities = files,
+            title = html.titleFromHtml().ifBlank { null },
+            thumbnailUrl = html.metaProperty("og:image")?.ifBlank { null },
+        )
+    }
+
+    /**
+     * The stream a page asks the browser to start fetching before its player is even built:
+     * `<link rel="preload" as="fetch" href="…master.m3u8">`. xHamster writes it, and it is the
+     * video itself - the advert before it belongs to another network and is never preloaded - so
+     * a site that encrypts everything its player is handed still says here what it is about to
+     * play.
+     */
+    fun fromPreloadedStream(html: String, pageUrl: String): ScrapedMediaDto? {
+        val stream = PRELOAD_LINK.findAll(html)
+            .mapNotNull { HREF.find(it.value)?.groupValues?.get(1)?.decodeJsonEscapes() }
+            .firstOrNull { usable(it) && (it.isHlsPlaylistUrl() || it.isVideoFileUrl()) }
+            ?: return null
+        return ScrapedMediaDto(
+            qualities = listOf(quality(stream, labelOf(stream, QualityLabels.HD))),
             title = html.titleFromHtml().ifBlank { null },
             thumbnailUrl = html.metaProperty("og:image")?.ifBlank { null },
         )

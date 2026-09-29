@@ -72,6 +72,7 @@ internal class TubeScraper(
             ?: TubePlayerParser.fromPlayerCalls(page)
             ?: TubePlayerParser.fromLinkedData(page)
             ?: TubePlayerParser.fromNamedFile(page, url)
+            ?: TubePlayerParser.fromPreloadedStream(page, url)
             ?: TubePlayerParser.fromOpenGraph(page)
             ?: return null
         // Every shape names the video except Open Graph on a page that left it out; the page's

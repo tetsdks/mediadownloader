@@ -25,7 +25,6 @@ class DemoApp : Application() {
                 notificationActivity = MainActivity::class.java,
                 performanceMode = PerformanceMode.Auto,
                 allowYouTube = false,                // Google Play removes apps that download from either. They stay off here.
-
                 allowAdultSites = true,
             ),
         )
