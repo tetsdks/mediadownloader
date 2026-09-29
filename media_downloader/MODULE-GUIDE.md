@@ -300,6 +300,30 @@ its wiring in `MediaDownloaderComponent`.
   lays its player out in `vh`: the video played, at the right resolution, inside a box zero pixels
   high, and the page read as broken while the button detection produced worked. Anything that
   renders blank in the browser is worth measuring a `100vh` element in before blaming detection.
+- **One generic reader for the tube sites, reachable only by consent.** The old url-parser carried
+  six adult scrapers, unreachable behind the block list, and they were not brought over. There is
+  one now (`data/scraper/tube/`), and one is the point: the sites are too many to write a scraper
+  apiece for and too alike to need it. `TubePlayerParser` recognises the players rather than the
+  hosts - `flashvars` (Aylo), `html5player.setX(…)` (xVideos, XNXX), schema.org `VideoObject`,
+  then Open Graph - and every shape drops advert urls, because the pre-roll is often the only file
+  on the page before the video is asked for. Which links it claims is a category and a path, not a
+  list: `RestrictedSites` says the host is Adult and the path names a video. Nothing changes for an
+  app that leaves `allowAdultSites` off: the link is refused before any scraper is asked.
+- **A parser that may come up empty does not switch the sniffer off.** Sites that encrypt their
+  player data (xHamster hands out hex blobs) cannot be read from the page at all, so
+  `ScraperResolver.readsBestEffort` marks the tube reader's links, and `SniffPolicy.mayTake` keeps
+  watching requests on them. The parser's answer still wins when it has one.
+- **The page is asked for more than once.** Networks that filter these sites reset the connection
+  instead of answering, and the reset lands on roughly half the attempts: measured on a filtered
+  network, one try parsed a watch page 2 times in 5 and four tries 5 times in 5. Retrying a reset
+  is not retrying an error the server gave - a server that answers is never asked twice.
+- **A string with no host is `Unsupported` in both modes.**
+- **A WebView the module makes is sized `MATCH_PARENT`, not left to its content.** Wrap content -
+  which is what a view with no layout parameters becomes inside a Compose `AndroidView` - makes
+  Chromium resolve `vh`/`dvh`/`svh` to zero, so a page cannot size the view that sizes it. Tiktok
+  lays its player out in `vh`: the video played, at the right resolution, inside a box zero pixels
+  high, and the page read as broken while the button detection produced worked. Anything that
+  renders blank in the browser is worth measuring a `100vh` element in before blaming detection.
 - **One adult-site scraper, reachable only by consent.** The old url-parser carried six,
   unreachable behind the block list, and they were not brought over. The PornHub network has one
   now (`data/scraper/pornhub/`) because an app that turns `allowAdultSites` on had no parser at

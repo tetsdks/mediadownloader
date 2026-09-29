@@ -211,13 +211,6 @@ internal fun String.isDailymotionMetadataLink(): Boolean =
 internal fun String.isPinterestPinLink(): Boolean =
     (isSiteOf("pinterest.com") && urlPath()?.startsWith("/pin/") == true) || isSiteOf("pin.it")
 
-/** A watch page on the PornHub network; an embed of one plays the same video. */
-internal fun String.isPornhubVideoLink(): Boolean {
-    if (normalizedHost()?.isUnderAnyOf(Constants.Pornhub.HOSTS) != true) return false
-    val path = urlPath().orEmpty()
-    return (path.startsWith("/view_video.php") && contains("viewkey=")) || path.startsWith("/embed/")
-}
-
 // endregion
 
 // region Text decoding
@@ -710,7 +703,10 @@ internal fun String.isBrightcovePlaybackApi(): Boolean =
  */
 internal fun String.isIgnoredStream(): Boolean {
     val url = sniffable()
-    val restricted = (url.contains(".xhcdn.com") && !url.contains("_TPL_.av1.mp4.m3u")) ||
+    // xHamster serves a playlist per height and one master that names them all; only the master
+    // is worth taking. It has moved its video CDN before (xhcdn -> xhpingcdn), so both are named.
+    val restricted = ((url.contains(".xhcdn.com") || url.contains(".xhpingcdn.com")) &&
+            !url.contains("_TPL_.av1.mp4.m3u")) ||
             url.contains("media-hls.doppiocdn.net") || url.contains("gcore-vid.xnxx-cdn.com") ||
             (url.contains("-vid.xnxx-") && !url.contains("hls.m3u8"))
     // Imdb autoplays a few seconds of a film on its page as `hls-preview-<id>.m3u8`; the trailer
