@@ -131,5 +131,18 @@ internal class StreamLocator(
         return listOf(".vtt", ".srt", ".ttml").any { firstPiece.endsWith(it) }
     }
 
+    /**
+     * The same stream in H.264, when the site keeps both codecs at one address. An mp4 written by
+     * MediaMuxer holds H.264 and AAC and nothing else, so an AV1 stream downloads in full and then
+     * cannot be joined - and a player asks for AV1 wherever the device can decode it, which on a
+     * recent phone is everywhere. Only a twin that answers as a playlist is taken.
+     */
+    suspend fun h264TwinOf(streamUrl: String, headers: Map<String, String>): String? {
+        if (!streamUrl.contains(Browser.AV1_IN_URL)) return null
+        val twin = streamUrl.replace(Browser.AV1_IN_URL, Browser.H264_IN_URL)
+        val answer = fetcher.getText(twin, headers, maxBytes = Browser.PAGE_READ_MAX_BYTES).getOrNull()
+        return twin.takeIf { isPlaylist(answer) }
+    }
+
     private fun isPlaylist(text: String?): Boolean = text?.trimStart()?.startsWith("#EXTM3U") == true
 }
