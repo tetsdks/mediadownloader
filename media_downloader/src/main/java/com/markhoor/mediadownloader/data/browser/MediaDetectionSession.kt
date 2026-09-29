@@ -693,18 +693,27 @@ internal class MediaDetectionSession(
     /**
      * Offers [media] at once and describes it after - its qualities, sizes and name. A subtitle
      * playlist is turned away first, so the video's own playlist can take its place.
+     *
+     * Once something with a known running time is on offer, a later find has to earn its place:
+     * it is described before it is shown, and a stream that turns out to be a fraction as long is
+     * left where it is. That is what a pre-roll looks like from here - a tube page plays a thirty
+     * second advert from a throwaway host before a video that runs for minutes, and both are
+     * streams the page asks for, in that order. The longer one is the video.
      */
     private fun offer(media: MediaModel, postUrl: String? = null, keepFoundUrl: Boolean = false) {
         val generation = ++mediaGeneration
         val first = media.qualities.firstOrNull()
         val offeredOn = page
+        val standing = page.offeredDurationMillis
         workScope.launch(ioDispatcher) {
             if (first != null && first.url.isHlsPlaylistUrl() && locator.isSubtitlePlaylist(first.url, first.headers)) {
                 return@launch
             }
-            withContext(serialDispatcher) {
-                if (generation != mediaGeneration) return@withContext
-                publish { it.copy(media = media, isDescribingMedia = true, isSearching = false) }
+            if (standing == null) {
+                withContext(serialDispatcher) {
+                    if (generation != mediaGeneration) return@withContext
+                    publish { it.copy(media = media, isDescribingMedia = true, isSearching = false) }
+                }
             }
             val described = describer.describe(media, postUrl, keepFoundUrl)
             withContext(serialDispatcher) {
@@ -714,12 +723,14 @@ internal class MediaDetectionSession(
                     page.masters[first.url.streamFolder()] = PageStream(first.url.streamFolder(), first.url, first.headers)
                 }
                 if (generation != mediaGeneration) return@withContext
+                if (isShorterThanWhatIsOffered(described.durationMillis, standing)) return@withContext
                 val shown = _state.value.media ?: media
                 // A card that relabelled the media meanwhile knows better than the first guess did.
                 val relabelled = described.copy(
                     title = if (shown.title != media.title) shown.title else described.title,
                     thumbnailUrl = if (shown.thumbnailUrl != media.thumbnailUrl) shown.thumbnailUrl else described.thumbnailUrl,
                 )
+                if (page === offeredOn) page.offeredDurationMillis = described.durationMillis ?: standing
                 publish { it.copy(media = relabelled, isDescribingMedia = false) }
             }
         }
@@ -727,7 +738,17 @@ internal class MediaDetectionSession(
 
     private fun resetMedia() {
         mediaGeneration++
+        page.offeredDurationMillis = null
         publish { it.copy(media = null, isDescribingMedia = false) }
+    }
+
+    /**
+     * Whether [found] is too short beside what is already offered to be the same video. Only a
+     * plain advert is caught: a short one, and a fraction of the length of what is standing.
+     */
+    private fun isShorterThanWhatIsOffered(found: Long?, standing: Long?): Boolean {
+        if (standing == null || found == null || found <= 0) return false
+        return found <= Browser.PREROLL_MAX_MS && found * Browser.PREROLL_SHARE_OF_VIDEO <= standing
     }
 
     private fun mediaOf(
@@ -831,6 +852,9 @@ internal class MediaDetectionSession(
 
         /** How long the player that was pressed says its media runs; see [mediaOf]. */
         var cardDurationMillis: Long? = null
+
+        /** How long the media now on offer runs, when its own stream said; see [offer]. */
+        var offeredDurationMillis: Long? = null
         var awaitingMedia = false
 
         /** The page's one stream, while it has only one; see [rememberPageStream]. */

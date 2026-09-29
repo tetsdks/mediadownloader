@@ -355,6 +355,53 @@ class MediaDetectionSessionTest {
         assertEquals("both of the master's qualities", 2, offered?.qualities?.size)
     }
 
+    /**
+     * The advert before the video comes from a host no list will ever hold - a throwaway domain
+     * per campaign - so the only thing that tells the two apart is how long each one runs.
+     */
+    private fun clip(seconds: Int, segment: String) =
+        "#EXTM3U\n#EXT-X-TARGETDURATION:10\n" +
+            "#EXTINF:10.0,\n$segment\n".repeat(seconds / 10) + "#EXT-X-ENDLIST\n"
+
+    private val advertStream = "https://svacdn77.throwaway.test/hls/850x480.mp4.m3u8"
+    private val videoStream = "https://video-nss-a.cdn.test/media=hls4/480p.av1.mp4.m3u8"
+
+    private fun streamFiles() = mapOf(
+        advertStream to clip(20, "https://svacdn77.throwaway.test/hls/seg-1.ts").toByteArray(),
+        "https://svacdn77.throwaway.test/hls/seg-1.ts" to sampleBytes(500),
+        videoStream to clip(600, "https://video-nss-a.cdn.test/media=hls4/seg-1.ts").toByteArray(),
+        "https://video-nss-a.cdn.test/media=hls4/seg-1.ts" to sampleBytes(5_000),
+    )
+
+    @Test
+    fun `a stream that runs for minutes replaces the advert heard before it`() = runTest {
+        val (session) = harness(files = streamFiles(), realIo = true)
+        session.commit("https://www.reddit.com/r/videos/comments/abc/a_post/")
+
+        session.onSignal(PageSignal.RequestSeen(advertStream, emptyMap()))
+        session.state.first { it.media?.qualities?.firstOrNull()?.url == advertStream }
+        session.onSignal(PageSignal.RequestSeen(videoStream, emptyMap()))
+
+        val offered = session.state.first {
+            it.media?.qualities?.firstOrNull()?.url == videoStream && !it.isDescribingMedia
+        }.media
+        assertEquals(600_000L, offered?.durationMillis)
+    }
+
+    @Test
+    fun `an advert heard after the video does not take its place`() = runTest {
+        val (session) = harness(files = streamFiles(), realIo = true)
+        session.commit("https://www.reddit.com/r/videos/comments/abc/a_post/")
+
+        session.onSignal(PageSignal.RequestSeen(videoStream, emptyMap()))
+        session.state.first { it.media?.durationMillis == 600_000L && !it.isDescribingMedia }
+        session.onSignal(PageSignal.RequestSeen(advertStream, emptyMap()))
+        advanceTimeBy(2_000)
+        runCurrent()
+
+        assertEquals(videoStream, session.state.value.media?.qualities?.firstOrNull()?.url)
+    }
+
     @Test
     fun `a page with two streams is not guessed at when a blob player is pressed`() = runTest {
         val harness = harness()

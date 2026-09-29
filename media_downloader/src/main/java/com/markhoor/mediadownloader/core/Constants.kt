@@ -335,6 +335,15 @@ internal object Constants {
         const val BITCHUTE_ORIGIN = "https://www.bitchute.com"
 
         /** The names a CDN gives the playlist beside its segments, nearest-first. */
+        /**
+         * The longest a find may run and still be taken for the advert before the video, and how
+         * many times shorter than the video it has to be. A pre-roll is fifteen to thirty seconds
+         * on a video that runs for minutes; a short video on its own page is still offered, since
+         * nothing longer ever arrives to displace it.
+         */
+        const val PREROLL_MAX_MS = 120_000L
+        const val PREROLL_SHARE_OF_VIDEO = 2
+
         val PLAYLIST_NAMES: List<String> = listOf(
             "rendition.m3u8", "index.m3u8", "playlist.m3u8", "chunklist.m3u8",
             "prog_index.m3u8", "media.m3u8", "master.m3u8",
