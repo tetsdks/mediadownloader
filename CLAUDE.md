@@ -101,7 +101,7 @@ repo because NewPipeExtractor is GPLv3 and GPL obligations travel with distribut
 
 | | repo | licence | coordinate |
 |---|---|---|---|
-| library | `Dev-Husnain/MediaDownloaderLibrary` (this one) | Apache-2.0 | `com.github.Dev-Husnain:MediaDownloaderLibrary:0.1.2` |
+| library | `Dev-Husnain/MediaDownloaderLibrary` (this one) | Apache-2.0 | `com.github.Dev-Husnain:MediaDownloaderLibrary:0.1.3` |
 | YouTube add-on | `Dev-Husnain/MediaDownloaderYouTube` (`D:\Other Data\DownloaderLibByHussnain\MediaDownloaderYouTube`) | GPL-3.0 | `com.github.Dev-Husnain:MediaDownloaderYouTube:0.1.0` |
 
 The dependency only ever points **add-on → library**, never back. Nothing in this repo may name
