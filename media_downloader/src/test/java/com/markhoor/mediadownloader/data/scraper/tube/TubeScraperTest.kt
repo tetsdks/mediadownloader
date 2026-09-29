@@ -161,11 +161,33 @@ class TubeScraperTest {
         assertEquals(1_297_000L, media.durationMillis)
     }
 
+    /** Redtube writes its endpoint as a path alone, to be read against the page it came from. */
+    @Test
+    fun `an endpoint written as a path is read against the page`() = runTest {
+        val page = "https://www.redtube.net/191294011"
+        val endpoint = "https://www.redtube.net/media/mp4?s=signed"
+        val html = """
+            <html><script>window.page_params = {"video":{"video_title":"Licking",
+            "mediaDefinitions":[{"format":"mp4","videoUrl":"/media/mp4?s=signed","remote":true}]}};
+            </script></html>
+        """.trimIndent()
+        val answered = """
+            [{"format":"mp4","quality":"240","videoUrl":"https://cdn.test/240P_240K.mp4?validto=1"}]
+        """.trimIndent()
+
+        val media = scraperOver(page to html, endpoint to answered).scrape(page).getOrThrow()
+
+        assertEquals("https://cdn.test/240P_240K.mp4?validto=1", media.qualities.single().url)
+        assertEquals("240p", media.qualities.single().label)
+    }
+
     @Test
     fun `an address that names one video is claimed however the site files it`() {
         val tube = scraperOver()
 
         assertTrue(tube.reads("https://m.hqporner.com/hdporn/128032-it_will_be_wild.html"))
+        // Redtube puts nothing in an address but the id.
+        assertTrue(tube.reads("https://www.redtube.net/191294011"))
         assertTrue(tube.reads("https://www.you-porn.com/watch/223569731/"))
         // A listing on the same sites is still not claimed.
         assertFalse(tube.reads("https://m.hqporner.com/category/indian"))

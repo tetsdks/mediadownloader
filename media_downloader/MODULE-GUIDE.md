@@ -691,6 +691,13 @@ its wiring in `MediaDownloaderComponent`.
   playlist shell from that region) and motherless (unreachable) were not tested. A tap during a
   pre-roll that streams from the player's own element waits for the video; one whose advert is
   served from a host not yet listed is now caught by its length instead.
+- **Redtube and youjizz, September 2026 on the Vivo.** Redtube reads from a pasted link - four
+  qualities, 1080p at 180.8 MB - and its 240p downloaded at 25.5 MB. Two things were in the way and
+  both were the reader's: an address that is nothing but an id (`redtube.net/191294011`) was not
+  taken for a video's page, and the network writes its endpoints as a path alone (`/media/mp4?s=…`)
+  rather than a url, so they are now read against the page they came from. youjizz reads as well,
+  though its size cannot be measured. xvideos remains unreachable here; it runs the same player as
+  xnxx, which is read, so it is expected to work where it can be reached.
 - **KVS, the script most of these sites run, is read from its own fields.** `video_url` with
   `video_url_text` for the quality's name, and `video_alt_url`, `video_alt_url2`… beside it: the
   site names its qualities, so a page whose files carry no height still has them. Its requests also
