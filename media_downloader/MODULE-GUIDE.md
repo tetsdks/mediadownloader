@@ -555,6 +555,21 @@ its wiring in `MediaDownloaderComponent`.
   stream from another host is never a master, so a pre-roll does not hide the video. A file the
   element hands over that is an advert is treated as no file at all, not as the answer. A page
   with several masters (a feed) is not guessed at.
+- **A stream the page preloads is the video.** `<link rel="preload" as="fetch" href="…m3u8">` is
+  what a page asks the browser to start fetching before its player exists, and the advert before
+  the video belongs to another network and is never preloaded. It is read last of the page shapes
+  and is what finally made xHamster readable from a pasted link - a site that encrypts everything
+  its player is handed still says in its head what it is about to play. (The idea came from the
+  `url-parser` module in the ViolationFix copy of `newdownloader`, whose `xhamster_desi` reader
+  does nothing else.)
+- **A player is restarted on a press only where there is more than one.** `load()` detaches a
+  MediaSource and a site's player does not always put it back: on xHamster the element was left
+  with no source at all ("The element has no supported sources"), so the video after the pre-roll
+  was never fetched and the press kept its answer of thirty seconds of advert. Restarting exists
+  to tell several players apart, so a page with one is left alone.
+- **An answer as short as an advert does not stand the sniffer down.** The press used to mark the
+  page answered, and nothing was listened to afterwards; now a pre-roll-shaped answer leaves the
+  page being listened to, so the video can take its place when it plays.
 - **An AV1 stream is offered as its H.264 twin.** An mp4 written by MediaMuxer holds H.264 and AAC
   and nothing else, and a player asks for AV1 wherever the device can decode it - so xHamster's
   video downloaded in full and then failed to join. Where a site keeps both codecs at one address
@@ -676,6 +691,10 @@ its wiring in `MediaDownloaderComponent`.
   playlist shell from that region) and motherless (unreachable) were not tested. A tap during a
   pre-roll that streams from the player's own element waits for the video; one whose advert is
   served from a host not yet listed is now caught by its length instead.
+- **xHamster, September 2026 on the Vivo.** Both `xhamster.com` and the `xhamster46.desi` mirror
+  now read from a pasted link: five qualities, 1080p at ~820 MB and ~209 MB, and the 144p file
+  downloaded and saved. Before this, a press during the pre-roll answered with thirty seconds of
+  advert and could never correct itself.
 - **Downloads, September 2026 on the Vivo with the VPN on.** Taken to a file on disk and then
   deleted: xhamster 144p (18.8 MB, HLS remuxed), xnxx 240p (8.4 MB), youporn (88.1 MB), tube8
   (193.4 MB), txxx (165.8 MB) and porntrex (85.3 MB); pornhub's 240p was taken on the SM-A26

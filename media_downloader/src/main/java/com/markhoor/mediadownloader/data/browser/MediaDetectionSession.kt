@@ -778,7 +778,20 @@ internal class MediaDetectionSession(
                     title = if (shown.title != media.title) shown.title else described.title,
                     thumbnailUrl = if (shown.thumbnailUrl != media.thumbnailUrl) shown.thumbnailUrl else described.thumbnailUrl,
                 )
-                if (page === offeredOn) page.offeredDurationMillis = described.durationMillis ?: standingNow
+                if (page === offeredOn) {
+                    page.offeredDurationMillis = described.durationMillis ?: standingNow
+                    // An answer as short as an advert is probably the advert, and the video is
+                    // still to come: the page is listened to again so the longer stream can take
+                    // its place. Answering and then falling silent is how a press during a
+                    // pre-roll used to end with thirty seconds of somebody else's video.
+                    // What the stream said, or what the player that was pressed said when the
+                    // stream said nothing: a master playlist often gives no running time at all.
+                    // An answer as short as an advert is probably the advert: the page is
+                    // listened to again, so the video behind it can take its place when it plays.
+                    if (isPrerollShaped(described.durationMillis ?: page.cardDurationMillis)) {
+                        page.scriptFoundMedia = false
+                    }
+                }
                 publish { it.copy(media = relabelled, isDescribingMedia = false) }
             }
         }
@@ -789,6 +802,10 @@ internal class MediaDetectionSession(
         page.offeredDurationMillis = null
         publish { it.copy(media = null, isDescribingMedia = false) }
     }
+
+    /** As short as an advert: what a pre-roll looks like when nothing longer has been heard yet. */
+    private fun isPrerollShaped(durationMillis: Long?): Boolean =
+        durationMillis != null && durationMillis > 0 && durationMillis <= Browser.PREROLL_MAX_MS
 
     /**
      * Whether [found] is too short beside what is already offered to be the same video. Only a
@@ -903,6 +920,7 @@ internal class MediaDetectionSession(
 
         /** How long the media now on offer runs, when its own stream said; see [offer]. */
         var offeredDurationMillis: Long? = null
+
         var awaitingMedia = false
 
         /** The page's one stream, while it has only one; see [rememberPageStream]. */

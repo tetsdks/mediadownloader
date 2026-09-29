@@ -1174,7 +1174,14 @@ function makeBtn(el, card){
                    makes that player fetch its own stream again; it is only ever called on the
                    element the reader pressed. */
                 try{ el.pause(); el.currentTime = 0; }catch(x){}
-                if(!directSrc(el)){ try{ el.load(); }catch(xL){} }
+                /* load() detaches a MediaSource, and a site's player does not always put it back:
+                   on xhamster the element was left with no source at all, so the video that plays
+                   after the pre-roll was never fetched and the press kept its answer of thirty
+                   seconds of advert. It is only needed to tell several players apart, so a page
+                   with one player is left alone. */
+                if(!directSrc(el) && document.getElementsByTagName('video').length > 1){
+                    try{ el.load(); }catch(xL){}
+                }
                 var p = el.play();
                 if(p && p.catch){ p.catch(function(){}); }
                 /* A player that has not loaded anything yet cannot be restarted from its element:

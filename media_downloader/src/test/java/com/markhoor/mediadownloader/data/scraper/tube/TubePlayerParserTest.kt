@@ -197,6 +197,38 @@ class TubePlayerParserTest {
         assertNull(TubePlayerParser.fromNamedFile(page, "https://www.porntrex.com/video/1/a"))
     }
 
+    /**
+     * A site that hands its player encrypted urls still asks the browser to start fetching the
+     * stream before the player is built. The advert before the video belongs to another network
+     * and is never preloaded, so this is the video.
+     */
+    @Test
+    fun `a stream the page preloads is read`() {
+        val page = """
+            <html><head><title>I share a bed - xHamster</title>
+            <link rel="preload" as="image" href="https://ic.test/028/031/985/1280x720.jpg">
+            <link rel="preload" as="fetch" href="https://video-nss-b.test/Ns-p2g==,1790690400/media=hls4/multi=256x144:144p:,1920x1080:1080p:/028/031/985/_TPL_.h264.mp4.m3u8">
+            <meta property="og:image" content="https://ic.test/cover.jpg">
+            </head><body></body></html>
+        """.trimIndent()
+
+        val media = TubePlayerParser.fromPreloadedStream(page, "https://xhamster46.desi/videos/a-video-xh1")!!
+
+        assertTrue(media.qualities.single().url.endsWith("_TPL_.h264.mp4.m3u8"))
+        assertEquals("https://ic.test/cover.jpg", media.thumbnailUrl)
+        assertTrue(media.title!!.startsWith("I share a bed"))
+    }
+
+    @Test
+    fun `a page that preloads only its pictures has no stream to give`() {
+        val page = """
+            <link rel="preload" as="image" href="https://ic.test/cover.jpg">
+            <link rel="preload" as="font" href="https://static.test/a.woff2">
+        """.trimIndent()
+
+        assertNull(TubePlayerParser.fromPreloadedStream(page, "https://xhamster.com/videos/a-video-xh1"))
+    }
+
     @Test
     fun `open graph is the last thing tried`() {
         val page = """
