@@ -403,6 +403,26 @@ class MediaDetectionSessionTest {
     }
 
     @Test
+    fun `a press on a video's own page picks the longer of the streams it loaded`() = runTest {
+        val (session) = harness(files = streamFiles(), realIo = true)
+        session.commit(rumblePage)
+
+        // The advert streams before the video, from a host no list holds; both are the page's.
+        session.onSignal(PageSignal.RequestSeen(advertStream, emptyMap()))
+        session.onSignal(PageSignal.RequestSeen(videoStream, emptyMap()))
+        session.state.first { it.media != null && !it.isDescribingMedia }
+
+        session.onSignal(
+            PageSignal.Script(ScriptMessage.MediaRequested(null, "A video", null, null, isPlaying = true, isImage = false)),
+        )
+        val offered = session.state.first {
+            it.media?.qualities?.firstOrNull()?.url == videoStream && !it.isDescribingMedia
+        }.media
+
+        assertEquals(600_000L, offered?.durationMillis)
+    }
+
+    @Test
     fun `a page with two streams is not guessed at when a blob player is pressed`() = runTest {
         val harness = harness()
         harness.session.commit("https://www.reddit.com/r/videos/")

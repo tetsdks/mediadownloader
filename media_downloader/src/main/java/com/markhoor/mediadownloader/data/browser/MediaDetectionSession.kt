@@ -376,7 +376,7 @@ internal class MediaDetectionSession(
             // A post a parser reads: its own link gives its name and every quality, and the feed stays put.
             cardPageUrl.isNotBlank() && policy.isParserLink(cardPageUrl) -> {
                 showMedia()
-                fetchParserMedia(cardPageUrl)
+                fetchParserMedia(cardPageUrl, fallBackToThePage = policy.readsBestEffort(cardPageUrl))
             }
             direct == null && !message.isPlaying && !message.isImage && cardPageUrl.isHttpUrl() ->
                 readCardPage(cardPageUrl)
@@ -418,6 +418,19 @@ internal class MediaDetectionSession(
         if (!isPlaying) showMedia()
         page.awaitingPressedStream = true
         val remembered = page.stream ?: page.masters.values.singleOrNull()
+        // A video's own page that loaded more than one stream is the video and the advert that
+        // played before it, not a feed of players: all of them are offered and the longest stands.
+        if (remembered == null && policy.pageShowsOneMedia(page.siteUrl) && page.streams.size > 1) {
+            page.streams.values.forEachIndexed { index, stream ->
+                offer(
+                    mediaOf(stream.url, MediaType.Video, page.cardTitle, page.cardThumb, stream.headers),
+                    showAtOnce = index == 0,
+                )
+            }
+            page.scriptFoundMedia = true
+            showMediaIfAwaited()
+            return
+        }
         fallBackToLastStream(
             master = remembered,
             waitMs = if (remembered != null) Browser.PRESSED_STREAM_WAIT_MS else Browser.SNIFFER_FALLBACK_MS,
@@ -575,8 +588,13 @@ internal class MediaDetectionSession(
      * players) makes it unknown which one a tap means, so none is remembered from then on.
      */
     private fun rememberPageStream(url: String, headers: Map<String, String>) {
-        if (page.hasSeveralStreams) return
         val folder = url.streamFolder()
+        // Kept whichever one it is: on a video's own page a second stream is the advert before the
+        // video, and which is which is decided by how long each runs, not by which was heard first.
+        if (page.streams.size < Browser.MAX_PAGE_STREAMS) {
+            page.streams.getOrPut(folder) { PageStream(folder, url, headers) }
+        }
+        if (page.hasSeveralStreams) return
         val known = page.stream
         when {
             known == null -> page.stream = PageStream(folder, url, headers)
@@ -657,7 +675,7 @@ internal class MediaDetectionSession(
     // region Media
 
     /** The parser's reading of the page itself (or a card on it); [url] is retried if it fails. */
-    private fun fetchParserMedia(url: String?) {
+    private fun fetchParserMedia(url: String?, fallBackToThePage: Boolean = false) {
         val link = url ?: page.parserRetryLink ?: return
         val token = page.token
         parserJob?.cancel()
@@ -671,7 +689,11 @@ internal class MediaDetectionSession(
                     offer(media.copy(sourceUrl = page.siteUrl.ifBlank { media.sourceUrl }))
                 }.onFailure {
                     page.parserRetryLink = link
-                    hideMedia()
+                    // A reader that only tries - the tube sites' - answers for the sites whose
+                    // pages say what they play and not for the ones that encrypt it. Standing
+                    // aside there would leave the press unanswered, so what the page loaded
+                    // answers it instead, exactly as it would on a site with no reader at all.
+                    if (fallBackToThePage) answerFromLoadedPage(isPlaying = true) else hideMedia()
                 }
             }
         }
@@ -700,7 +722,12 @@ internal class MediaDetectionSession(
      * second advert from a throwaway host before a video that runs for minutes, and both are
      * streams the page asks for, in that order. The longer one is the video.
      */
-    private fun offer(media: MediaModel, postUrl: String? = null, keepFoundUrl: Boolean = false) {
+    private fun offer(
+        media: MediaModel,
+        postUrl: String? = null,
+        keepFoundUrl: Boolean = false,
+        showAtOnce: Boolean = true,
+    ) {
         val generation = ++mediaGeneration
         val first = media.qualities.firstOrNull()
         val offeredOn = page
@@ -709,7 +736,7 @@ internal class MediaDetectionSession(
             if (first != null && first.url.isHlsPlaylistUrl() && locator.isSubtitlePlaylist(first.url, first.headers)) {
                 return@launch
             }
-            if (standing == null) {
+            if (showAtOnce && standing == null) {
                 withContext(serialDispatcher) {
                     if (generation != mediaGeneration) return@withContext
                     publish { it.copy(media = media, isDescribingMedia = true, isSearching = false) }
@@ -723,14 +750,17 @@ internal class MediaDetectionSession(
                     page.masters[first.url.streamFolder()] = PageStream(first.url.streamFolder(), first.url, first.headers)
                 }
                 if (generation != mediaGeneration) return@withContext
-                if (isShorterThanWhatIsOffered(described.durationMillis, standing)) return@withContext
+                // What is standing now, not what stood when this was asked for: several streams
+                // are offered together and each has to be measured against the one that won.
+                val standingNow = if (page === offeredOn) page.offeredDurationMillis else standing
+                if (isShorterThanWhatIsOffered(described.durationMillis, standingNow)) return@withContext
                 val shown = _state.value.media ?: media
                 // A card that relabelled the media meanwhile knows better than the first guess did.
                 val relabelled = described.copy(
                     title = if (shown.title != media.title) shown.title else described.title,
                     thumbnailUrl = if (shown.thumbnailUrl != media.thumbnailUrl) shown.thumbnailUrl else described.thumbnailUrl,
                 )
-                if (page === offeredOn) page.offeredDurationMillis = described.durationMillis ?: standing
+                if (page === offeredOn) page.offeredDurationMillis = described.durationMillis ?: standingNow
                 publish { it.copy(media = relabelled, isDescribingMedia = false) }
             }
         }
@@ -859,6 +889,9 @@ internal class MediaDetectionSession(
 
         /** The page's one stream, while it has only one; see [rememberPageStream]. */
         var stream: PageStream? = null
+
+        /** Every stream the page loaded, by folder, up to [Browser.MAX_PAGE_STREAMS]. */
+        val streams: LinkedHashMap<String, PageStream> = LinkedHashMap()
         var hasSeveralStreams = false
 
         /** A press is waiting to hear which stream the player it was on asks for. */
