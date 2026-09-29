@@ -95,7 +95,11 @@ internal object TubePlayerParser {
      * a `contentUrl` of its own, and reading the block whole offered the cover as the video.
      */
     fun fromLinkedData(html: String): ScrapedMediaDto? {
-        for (whole in LINKED_DATA.findAll(html).map { it.groupValues[1] }) {
+        // The blocks a page files under `ld+json`, and then the page itself: a site built on a
+        // JavaScript framework writes the same description into the data its pages are built from,
+        // where no script tag names it (brazzers does).
+        val blocks = LINKED_DATA.findAll(html).map { it.groupValues[1] } + sequenceOf(html)
+        for (whole in blocks) {
             val marker = whole.indexOf(VIDEO_OBJECT)
             if (marker < 0) continue
             val block = objectAround(whole, marker) ?: whole

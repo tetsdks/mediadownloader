@@ -691,6 +691,14 @@ its wiring in `MediaDownloaderComponent`.
   playlist shell from that region) and motherless (unreachable) were not tested. A tap during a
   pre-roll that streams from the player's own element waits for the video; one whose advert is
   served from a host not yet listed is now caught by its length instead.
+- **The five sites the ViolationFix `url-parser` covers, checked one by one on the Vivo.** From a
+  pasted link: pornhub (4 qualities, 240p downloaded), xhamster and its `xhamster46.desi` mirror
+  (5 qualities, 144p downloaded), xnxx (2 qualities, 240p downloaded) and inxxx (one quality; its
+  size cannot be measured and the download failed here). brazzers is not readable and nothing is
+  missing: its page says `"contentUrl": null` - the site is a subscription, and the page holds no
+  video to take. Reaching inxxx needed `/v/` among the paths a video is filed under, and brazzers
+  needed the linked data to be read from the page itself and not only from a `ld+json` block, which
+  is where a site built on a JavaScript framework writes it.
 - **xHamster, September 2026 on the Vivo.** Both `xhamster.com` and the `xhamster46.desi` mirror
   now read from a pasted link: five qualities, 1080p at ~820 MB and ~209 MB, and the 144p file
   downloaded and saved. Before this, a press during the pre-roll answered with thirty seconds of
