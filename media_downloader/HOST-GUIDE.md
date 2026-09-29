@@ -495,8 +495,18 @@ suspend fun read(text: String): Result<ParsedLink>
 | `read(text)` | `Result<ParsedLink>` | The same, for a host that does not know what it was handed: `ParsedLink.One` is a piece of media, `ParsedLink.Many` a collection - a playlist, an album - listing links to read later (§4.4). Use this rather than `parse` when a link may be either; `LinkParseViewModel` already does. |
 
 Sites the parser reads directly (paste or share a link): **Facebook, Instagram, Threads, TikTok,
-X/Twitter (needs the key), Pinterest (incl. `pin.it`), Dailymotion, LinkedIn**. Other supported
-sites are handled by the browser (§7.3).
+X/Twitter (needs the key), Pinterest (incl. `pin.it`), Dailymotion, LinkedIn**, and **the PornHub
+network** (`pornhub.com`, `pornhub.org`, `pornhubpremium.com`) - that last one only while
+`allowAdultSites` is on, and refused as `SiteBlocked` otherwise, which is the default. It is read
+from the page's own player data, so a watch page gives its title, its running time, its cover and
+every quality as a plain file, and the pre-roll the page also plays is never among them. In the
+browser the same pages are parser pages, so the button offers the video rather than whatever the
+player asked for first. Other supported sites are handled by the browser (§7.3).
+
+> Networks that filter this site mostly reset the connection rather than answer, which looks like
+> "no media behind that link". The module asks again a few times before giving up, and an app that
+> loads thumbnails itself may want to do the same - the cover comes from the same filtered hosts,
+> and it is served as AVIF.
 
 ### 4.3 Collections - playlists and the like
 

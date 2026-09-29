@@ -55,6 +55,7 @@ class HostSuppliedScraperTest {
         facebookVideo = SilentScraper(),
         facebookShare = SilentScraper(),
         instagram = SilentScraper(),
+        pornhub = SilentScraper(),
         linkedIn = SilentScraper(),
         tikTok = SilentScraper(),
         twitter = SilentScraper(),

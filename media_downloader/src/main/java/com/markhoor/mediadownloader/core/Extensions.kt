@@ -211,6 +211,13 @@ internal fun String.isDailymotionMetadataLink(): Boolean =
 internal fun String.isPinterestPinLink(): Boolean =
     (isSiteOf("pinterest.com") && urlPath()?.startsWith("/pin/") == true) || isSiteOf("pin.it")
 
+/** A watch page on the PornHub network; an embed of one plays the same video. */
+internal fun String.isPornhubVideoLink(): Boolean {
+    if (normalizedHost()?.isUnderAnyOf(Constants.Pornhub.HOSTS) != true) return false
+    val path = urlPath().orEmpty()
+    return (path.startsWith("/view_video.php") && contains("viewkey=")) || path.startsWith("/embed/")
+}
+
 // endregion
 
 // region Text decoding

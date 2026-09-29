@@ -17,6 +17,7 @@ class ScraperResolverTest {
         instagram = Named("instagram"),
         linkedIn = Named("linkedIn"),
         tikTok = Named("tikTok"),
+        pornhub = Named("pornhub"),
         twitter = twitter,
         dailymotion = Named("dailymotion"),
         pinterest = Named("pinterest"),
@@ -45,6 +46,10 @@ class ScraperResolverTest {
             "https://www.dailymotion.com/player/metadata/video/x8da0md" to listOf("dailymotion"),
             "https://www.pinterest.com/pin/62628251062820323/" to listOf("pinterest"),
             "https://pin.it/abc123" to listOf("pinterest"),
+            "https://www.pornhub.com/view_video.php?viewkey=abc123" to listOf("pornhub"),
+            // The network answers on more than one host, and an embed plays the same video.
+            "https://www.pornhub.org/view_video.php?viewkey=abc123" to listOf("pornhub"),
+            "https://www.pornhub.com/embed/abc123" to listOf("pornhub"),
         ).forEach { (url, expected) -> assertEquals(url, expected, scrapersFor(url)) }
     }
 
@@ -56,6 +61,10 @@ class ScraperResolverTest {
             "https://x.com/someone",
             "https://www.instagram.com/someone/",
             "https://www.pinterest.com/search/pins/?q=cats",
+            // The site's own pages that name no video, and a host that only looks like the site.
+            "https://www.pornhub.com/",
+            "https://www.pornhub.com/video?o=tr",
+            "https://www.pornhub.com.example.net/view_video.php?viewkey=abc123",
             "https://www.reddit.com/r/videos/",
             "",
         ).forEach { assertTrue(it, scrapersFor(it).isEmpty()) }

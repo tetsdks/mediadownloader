@@ -43,6 +43,7 @@ import com.markhoor.mediadownloader.data.scraper.instagram.InstagramScraper
 import com.markhoor.mediadownloader.data.scraper.instagram.InstagramSignedInScraper
 import com.markhoor.mediadownloader.data.scraper.linkedin.LinkedInScraper
 import com.markhoor.mediadownloader.data.scraper.pinterest.PinterestScraper
+import com.markhoor.mediadownloader.data.scraper.pornhub.PornhubScraper
 import com.markhoor.mediadownloader.data.scraper.tiktok.TikTokScraper
 import com.markhoor.mediadownloader.data.scraper.twitter.TwitterScraper
 import com.markhoor.mediadownloader.data.storage.DownloadStorage
@@ -311,6 +312,7 @@ internal class MediaDownloaderComponent(
                 ?.let { TwitterScraper(httpFetcher, it) },
             dailymotion = DailymotionScraper(httpFetcher, appPackage = appContext.packageName),
             pinterest = PinterestScraper(httpFetcher),
+            pornhub = PornhubScraper(httpFetcher),
             getInDevice = getInDevice,
             hostSupplied = hostSuppliedScrapers,
         )
