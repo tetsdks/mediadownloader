@@ -6,6 +6,8 @@ import com.markhoor.mediadownloader.core.decodeJsonEscapes
 import com.markhoor.mediadownloader.core.isAdvertMediaUrl
 import com.markhoor.mediadownloader.core.looksLikeImageUrl
 import com.markhoor.mediadownloader.core.metaProperty
+import com.markhoor.mediadownloader.core.normalizedHost
+import com.markhoor.mediadownloader.core.titleFromHtml
 import com.markhoor.mediadownloader.data.scraper.ScrapedMediaDto
 import com.markhoor.mediadownloader.data.scraper.ScrapedQualityDto
 import com.markhoor.mediadownloader.domain.models.MediaType
@@ -43,6 +45,11 @@ internal object TubePlayerParser {
     private val LD_FIELD = { name: String -> Regex(""""$name"\s*:\s*\[?\s*"([^"]+)"""") }
     private val ISO_DURATION = Regex("""P(?:T)?(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?""")
     private val HEIGHT_IN_URL = Regex("""(\d{3,4})p""")
+    private val FILE_IN_PAGE = Regex("""https?:(?:\\?/){2}[^"'\s]{10,200}?\.mp4(?:\?[^"'\s]{0,80})?""")
+
+    /** A hovered thumbnail's clip, which these sites file under a name of its own. */
+    private fun String.namesAPreview(): Boolean =
+        listOf("/tmb/", "/thumb", "/preview", "/trailer").any { contains(it, ignoreCase = true) }
 
     /**
      * The Aylo player object as JSON text, or `null` when the page carries none. The network's
@@ -98,6 +105,30 @@ internal object TubePlayerParser {
             )
         }
         return null
+    }
+
+    /**
+     * A file the page names outright. KVS - the script most of these sites run - writes its
+     * download as `/get_file/<keys>/<id>.mp4`, on the site's own host; others simply name an mp4.
+     * Only files on the page's own site count, so a preview on a thumbnail cdn and an advert's
+     * creative on somebody else's are not mistaken for the video.
+     */
+    fun fromNamedFile(html: String, pageUrl: String): ScrapedMediaDto? {
+        val host = pageUrl.normalizedHost() ?: return null
+        val files = FILE_IN_PAGE.findAll(html)
+            .map { it.value.decodeJsonEscapes() }
+            .filter { it.normalizedHost() == host && usable(it) && !it.namesAPreview() }
+            .distinct()
+            .map { quality(it, labelOf(it, QualityLabels.HD)) }
+            .sortedByDescending { it.label?.takeWhile(Char::isDigit)?.toIntOrNull() ?: 0 }
+            .distinctBy { it.label }
+            .toList()
+            .ifEmpty { return null }
+        return ScrapedMediaDto(
+            qualities = files,
+            title = html.titleFromHtml().ifBlank { null },
+            thumbnailUrl = html.metaProperty("og:image")?.ifBlank { null },
+        )
     }
 
     /** What the page tells a chat app it is showing, when nothing better is on the page. */

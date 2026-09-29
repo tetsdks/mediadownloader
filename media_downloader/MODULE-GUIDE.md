@@ -671,6 +671,14 @@ its wiring in `MediaDownloaderComponent`.
   playlist shell from that region) and motherless (unreachable) were not tested. A tap during a
   pre-roll that streams from the player's own element waits for the video; one whose advert is
   served from a host not yet listed is now caught by its length instead.
+- **September 2026, a third pass on the Vivo, with the phone's VPN on.** Read from a pasted link:
+  pornhub (4 qualities, 1080p 130.7 MB), youporn through its `you-porn.com` mirror (4, 629.0 MB),
+  tube8 through `tube8.es` (3, 720p 760.5 MB) and porntrex (3, 1080p 262.0 MB). Answered by the
+  browser's button, because their pages carry nothing a reader can use: spankbang (4 qualities,
+  1080p ~269 MB - its page answers a plain request with a 6 KB shell), txxx (15:28, 158.1 MB) and
+  drtuber (5:03, 41.6 MB). hqporner keeps its player in another frame and draws no button until
+  something plays, so it is still unmeasured. xvideos and hdzog were reset outright even with the
+  VPN on, and could not be reached at all.
 - **September 2026, a second pass on a Vivo V2066 (Android 13), same filtered network:**
   pornhub and youporn (through its `you-porn.com` mirror) both answer a pasted link with four
   qualities at their real sizes - 1080p at 130.7 MB and 629.0 MB. Reaching that took three fixes

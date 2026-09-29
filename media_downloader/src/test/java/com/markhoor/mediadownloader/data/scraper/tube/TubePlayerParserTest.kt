@@ -160,6 +160,43 @@ class TubePlayerParserTest {
         assertNull(TubePlayerParser.fromLinkedData(page))
     }
 
+    /**
+     * KVS - the script most of these sites run - writes its files into the page outright, at a
+     * path ending in `.mp4/`. The qualities are separate files, best last in the page.
+     */
+    @Test
+    fun `a file the page names outright is read`() {
+        val page = """
+            <html><head><title>5 big tit milfs - PornTrex</title></head><body><script>
+            rnd: '1790669502',
+            video_url: 'https://www.porntrex.com/get_file/5/c91f46/3347000/3347669/3347669.mp4/',
+            postfix: '.mp4',
+            video_alt_url: 'https://www.porntrex.com/get_file/5/58ee1a/3347000/3347669/3347669_720p.mp4/',
+            preview_url: 'https://www.porntrex.com/contents/videos/tmb/3347669/preview.mp4',
+            </script></body></html>
+        """.trimIndent()
+
+        val media = TubePlayerParser.fromNamedFile(page, "https://www.porntrex.com/video/3347669/5-big-tit-milfs")!!
+
+        // Every file the page names, best first, and never the hovered thumbnail's clip.
+        assertEquals(listOf("720p", "HD"), media.qualities.map { it.label })
+        assertEquals(
+            "https://www.porntrex.com/get_file/5/58ee1a/3347000/3347669/3347669_720p.mp4",
+            media.qualities.first().url,
+        )
+        assertTrue(media.qualities.none { it.url.contains("/tmb/") })
+        assertTrue(media.title!!.startsWith("5 big tit milfs"))
+    }
+
+    @Test
+    fun `a file on somebody else's host is not the page's video`() {
+        val page = """
+            <script>var ad = 'https://z6v2p9a8.bkcdn.net/library/773428/399ec545.mp4';</script>
+        """.trimIndent()
+
+        assertNull(TubePlayerParser.fromNamedFile(page, "https://www.porntrex.com/video/1/a"))
+    }
+
     @Test
     fun `open graph is the last thing tried`() {
         val page = """
