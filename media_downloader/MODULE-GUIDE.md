@@ -671,6 +671,17 @@ its wiring in `MediaDownloaderComponent`.
   playlist shell from that region) and motherless (unreachable) were not tested. A tap during a
   pre-roll that streams from the player's own element waits for the video; one whose advert is
   served from a host not yet listed is now caught by its length instead.
+- **September 2026, a second pass on a Vivo V2066 (Android 13), same filtered network:**
+  pornhub and youporn (through its `you-porn.com` mirror) both answer a pasted link with four
+  qualities at their real sizes - 1080p at 130.7 MB and 629.0 MB. Reaching that took three fixes
+  the mirrors made plain: a page's linked data describes its cover beside its video, as an
+  ImageObject with a `contentUrl` of its own, and the cover was being offered as the video (one
+  quality, 132.4 KB, the video's running time); the mirrors write the player object with nothing in
+  front of it, so it is now found by its own key; and they list no size beside an entry, naming the
+  quality instead, behind a signed endpoint that has to be followed. hqporner keeps its player in
+  another frame (`mydaddy.cc`) and carries nothing on its own page: it is a browser case, not a
+  reader's. spankbang is behind a Cloudflare challenge from here, and xvideos is reset outright -
+  neither was reachable to test.
 - **September 2026, on a filtered network without a VPN:** pornhub (parser and page button), xnxx
   and eporner answer with their qualities. xHamster's page cannot be parsed at all - it hands its
   player encrypted urls - and, though its stream is plainly fetched once the video plays
