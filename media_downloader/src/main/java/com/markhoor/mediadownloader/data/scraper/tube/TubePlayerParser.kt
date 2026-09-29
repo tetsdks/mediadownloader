@@ -4,6 +4,7 @@ import com.markhoor.mediadownloader.core.Constants.QualityLabels
 import com.markhoor.mediadownloader.core.decodeHtmlEntities
 import com.markhoor.mediadownloader.core.decodeJsonEscapes
 import com.markhoor.mediadownloader.core.isAdvertMediaUrl
+import com.markhoor.mediadownloader.core.looksLikeImageUrl
 import com.markhoor.mediadownloader.core.metaProperty
 import com.markhoor.mediadownloader.data.scraper.ScrapedMediaDto
 import com.markhoor.mediadownloader.data.scraper.ScrapedQualityDto
@@ -33,6 +34,8 @@ import com.markhoor.mediadownloader.domain.models.MediaType
 internal object TubePlayerParser {
 
     private val PLAYER_OBJECT = Regex("""var\s+flashvars_\d+\s*=\s*\{""")
+    private const val DEFINITIONS_KEY = "\"mediaDefinitions\""
+    private const val VIDEO_OBJECT = "VideoObject"
     private val PLAYER_CALL = Regex("""html5player\.set([A-Za-z]+)\s*\(\s*'([^']*)'\s*\)""")
     private val LINKED_DATA = Regex("""<script[^>]+application/ld\+json[^>]*>(.*?)</script>""",
         setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
@@ -41,10 +44,15 @@ internal object TubePlayerParser {
     private val ISO_DURATION = Regex("""P(?:T)?(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?""")
     private val HEIGHT_IN_URL = Regex("""(\d{3,4})p""")
 
-    /** The Aylo player object as JSON text, or `null` when the page carries none. */
+    /**
+     * The Aylo player object as JSON text, or `null` when the page carries none. The network's
+     * mirrors write the same object without the assignment that usually introduces it, so it is
+     * also looked for by the one key that matters: the object around it is the player's.
+     */
     fun playerObjectOf(html: String): String? {
-        val openingBrace = PLAYER_OBJECT.find(html)?.range?.last ?: return null
-        return objectAt(html, openingBrace)
+        PLAYER_OBJECT.find(html)?.range?.last?.let { return objectAt(html, it) }
+        val key = html.indexOf(DEFINITIONS_KEY)
+        return if (key < 0) null else objectAround(html, key)
     }
 
     /** xVideos and XNXX: the player is assembled by a run of `html5player.setX('…')` calls. */
@@ -70,11 +78,18 @@ internal object TubePlayerParser {
         )
     }
 
-    /** The schema.org VideoObject a tube page carries for search engines. */
+    /**
+     * The schema.org VideoObject a tube page carries for search engines - the node itself, not the
+     * block it sits in. A page often describes its cover in the same block, as an ImageObject with
+     * a `contentUrl` of its own, and reading the block whole offered the cover as the video.
+     */
     fun fromLinkedData(html: String): ScrapedMediaDto? {
-        for (block in LINKED_DATA.findAll(html).map { it.groupValues[1] }) {
-            if (!block.contains("VideoObject")) continue
-            val contentUrl = field(block, "contentUrl")?.takeIf(::usable) ?: continue
+        for (whole in LINKED_DATA.findAll(html).map { it.groupValues[1] }) {
+            val marker = whole.indexOf(VIDEO_OBJECT)
+            if (marker < 0) continue
+            val block = objectAround(whole, marker) ?: whole
+            val contentUrl = field(block, "contentUrl")
+                ?.takeIf { usable(it) && !it.looksLikeImageUrl() } ?: continue
             return ScrapedMediaDto(
                 qualities = listOf(quality(contentUrl, labelOf(contentUrl, QualityLabels.HD))),
                 title = field(block, "name")?.decodeHtmlEntities()?.trim()?.ifBlank { null },
@@ -119,6 +134,28 @@ internal object TubePlayerParser {
 
     private fun field(block: String, name: String): String? =
         LD_FIELD(name).find(block)?.groupValues?.get(1)?.decodeJsonEscapes()
+
+    /** The innermost object [text] holds around [marker], or `null` when it is in none. */
+    private fun objectAround(text: String, marker: Int): String? {
+        val starts = ArrayDeque<Int>()
+        var inString = false
+        var escaped = false
+        for (index in text.indices) {
+            val character = text[index]
+            when {
+                escaped -> escaped = false
+                inString && character == '\\' -> escaped = true
+                character == '"' -> inString = !inString
+                inString -> Unit
+                character == '{' -> starts.addLast(index)
+                character == '}' -> {
+                    val start = starts.removeLastOrNull() ?: continue
+                    if (start <= marker && marker <= index) return text.substring(start, index + 1)
+                }
+            }
+        }
+        return null
+    }
 
     /**
      * The JSON object that starts at [open], counted out brace by brace rather than matched by a

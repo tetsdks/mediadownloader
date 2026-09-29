@@ -128,6 +128,48 @@ class TubeScraperTest {
         assertEquals("Desi Stepsister", media.title)
     }
 
+    /**
+     * The network's mirrors write the player object with no assignment in front of it, list no
+     * sizes beside their entries, and hand every quality over behind a signed endpoint. Read the
+     * old way this page offered nothing at all - and before that, the cover it describes beside
+     * the video, at a few hundred kilobytes.
+     */
+    @Test
+    fun `a mirror's page is read through the endpoint it hands its qualities over behind`() = runTest {
+        val page = "https://www.you-porn.com/watch/223569731/"
+        val endpoint = "https://www.you-porn.com/media/mp4/?s=signed"
+        val mirror = """
+            <html><script>window.page_params = {"vkey":"223569731","video":{
+            "video_title":"Fiji Indian sexy girl","video_duration":1297,
+            "mediaDefinitions":[
+              {"format":"hls","videoUrl":"https://www.you-porn.com/media/hls/?s=signed","remote":true},
+              {"format":"mp4","videoUrl":"$endpoint","remote":true}]}};
+            </script></html>
+        """.trimIndent()
+        val answered = """
+            [{"format":"mp4","quality":"1080","videoUrl":"https://em.test/1080P_4000K.mp4?validto=1"},
+             {"format":"mp4","quality":"720","videoUrl":"https://em.test/720P_2000K.mp4?validto=1"}]
+        """.trimIndent()
+
+        val media = scraperOver(page to mirror, endpoint to answered).scrape(page).getOrThrow()
+
+        assertEquals(listOf("1080p", "720p"), media.qualities.map { it.label })
+        assertEquals("https://em.test/1080P_4000K.mp4?validto=1", media.qualities.first().url)
+        assertEquals("Fiji Indian sexy girl", media.title)
+        assertEquals(1_297_000L, media.durationMillis)
+    }
+
+    @Test
+    fun `an address that names one video is claimed however the site files it`() {
+        val tube = scraperOver()
+
+        assertTrue(tube.reads("https://m.hqporner.com/hdporn/128032-it_will_be_wild.html"))
+        assertTrue(tube.reads("https://www.you-porn.com/watch/223569731/"))
+        // A listing on the same sites is still not claimed.
+        assertFalse(tube.reads("https://m.hqporner.com/category/indian"))
+        assertFalse(tube.reads("https://m.hqporner.com/"))
+    }
+
     @Test
     fun `a page written in no shape it knows is a failure, not an empty result`() = runTest {
         val media = scraperOver(watchUrl to "<html><body>Video unavailable</body></html>")

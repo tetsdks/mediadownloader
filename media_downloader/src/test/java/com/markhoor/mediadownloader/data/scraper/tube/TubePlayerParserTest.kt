@@ -110,6 +110,47 @@ class TubePlayerParserTest {
         assertEquals("https://static.eporner.com/11_360.jpg", media.thumbnailUrl)
     }
 
+    /**
+     * A page describes its cover in the same block as its video, as an ImageObject with a
+     * contentUrl of its own. Read whole, the block offered the cover: a picture, a few hundred
+     * kilobytes, labelled as the video and as long as the video runs.
+     */
+    @Test
+    fun `the cover described beside the video is not taken for the video`() {
+        val page = """
+            <script type="application/ld+json">
+            {"@context":"http://schema.org","@graph":[
+              {"@type":"ImageObject","contentUrl":"https://pix.test/cover.jpg","name":"A cover"},
+              {"@type":"VideoObject","name":"A video","duration":"PT21M37S",
+               "thumbnailUrl":"https://pix.test/cover.jpg",
+               "contentUrl":"https://ev.test/videos/360P_360K_1.mp4"}]}
+            </script>
+        """.trimIndent()
+
+        val media = TubePlayerParser.fromLinkedData(page)!!
+
+        assertEquals("https://ev.test/videos/360P_360K_1.mp4", media.qualities.single().url)
+        assertEquals("A video", media.title)
+        assertEquals(1_297_000L, media.durationMillis)
+    }
+
+    /** The network's mirrors write the same player object without the assignment in front of it. */
+    @Test
+    fun `the player object is found by its own key when nothing introduces it`() {
+        val page = """
+            <script>window.page_params = {"vkey":"223569731","video":{"video_title":"On a mirror",
+            "mediaDefinitions":[{"format":"mp4","videoUrl":"https://www.mirror.test/media/mp4/?s=abc"}]}};
+            </script>
+        """.trimIndent()
+
+        val player = TubePlayerParser.playerObjectOf(page)!!
+
+        assertTrue(player.startsWith("{") && player.endsWith("}"))
+        assertTrue(player.contains(""""video_title":"On a mirror""""))
+        // The object around the key, not the page configuration it is nested in.
+        assertTrue(!player.contains("vkey"))
+    }
+
     @Test
     fun `linked data that describes something other than a video is passed over`() {
         val page = """

@@ -3,6 +3,8 @@ package com.markhoor.mediadownloader.data.scraper.tube
 import com.markhoor.mediadownloader.core.Constants.Network
 import com.markhoor.mediadownloader.core.Constants.Tube
 import com.markhoor.mediadownloader.core.decodeHtmlEntities
+import com.markhoor.mediadownloader.core.isHlsPlaylistUrl
+import com.markhoor.mediadownloader.core.isVideoFileUrl
 import com.markhoor.mediadownloader.core.normalizedHost
 import com.markhoor.mediadownloader.core.qualityNameFromResolution
 import com.markhoor.mediadownloader.core.titleFromHtml
@@ -15,6 +17,9 @@ import com.markhoor.mediadownloader.data.scraper.SiteScraper
 import com.markhoor.mediadownloader.domain.models.MediaType
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 
 /**
  * One reader for the tube sites, rather than one reader each. They are too many to write a scraper
@@ -33,12 +38,31 @@ internal class TubeScraper(
     private val isRestrictedSite: (String) -> Boolean,
 ) : SiteScraper() {
 
-    /** Whether this is a page worth reading: the right kind of site, and a video's address on it. */
+    private val ID_IN_NAME = Regex("""\d{4,}""")
+
+    /**
+     * Whether this is a page worth reading: the right kind of site, and a video's address on it.
+     *
+     * The sites agree on little, so an address is judged three ways: a path these sites file videos
+     * under, the query one network names the video in, or a last segment that names one thing -
+     * ending in `.html`, or carrying an id. A feed, a category or a profile is none of those, and
+     * claiming one would have the browser treat a listing as a single video's page.
+     */
     fun reads(url: String): Boolean {
         val host = url.normalizedHost() ?: return false
         if (!isRestrictedSite(host)) return false
         val path = url.urlPath().orEmpty()
-        return Tube.VIDEO_PATH_MARKERS.any { path.contains(it) } || url.contains(Tube.VIDEO_QUERY_MARKER)
+        if (Tube.VIDEO_PATH_MARKERS.any { path.contains(it) }) return true
+        if (url.contains(Tube.VIDEO_QUERY_MARKER)) return true
+        return namesOneThing(path)
+    }
+
+    /** A last segment that names one piece of media: `128032-a_title.html`, `a-title-12345`. */
+    private fun namesOneThing(path: String): Boolean {
+        val segments = path.split('/').filter { it.isNotBlank() }
+        if (segments.size < 2) return false
+        val last = segments.last()
+        return last.endsWith(Tube.PAGE_SUFFIX, ignoreCase = true) || ID_IN_NAME.containsMatchIn(last)
     }
 
     override suspend fun scrapeOrNull(url: String): ScrapedMediaDto? {
@@ -65,10 +89,15 @@ internal class TubeScraper(
      * address that asked for them, so they are read now rather than kept for later.
      */
     private suspend fun aylo(page: String, headers: Map<String, String>): ScrapedMediaDto? {
+        // A mirror's object is the page's whole player configuration, which is not always valid
+        // JSON; when it cannot be read the page is left to the shapes that come after it.
         val player = TubePlayerParser.playerObjectOf(page)
-            ?.let { fetcher.json.decodeFromString<AyloPlayerDto>(it) }
+            ?.let { runCatching { fetcher.json.decodeFromString<AyloPlayerDto>(it) }.getOrNull() }
             ?: return null
-        val qualities = filesOf(player, headers) ?: bestStreamOf(player) ?: return null
+        val definitions = withEndpointsFollowed(player.definitions, headers)
+        val qualities = qualitiesOf(definitions, Tube.FORMAT_FILE)
+            .ifEmpty { bestStreamOf(definitions) }
+            .ifEmpty { return null }
         return ScrapedMediaDto(
             qualities = qualities,
             title = player.title?.decodeHtmlEntities()?.trim()?.ifBlank { null },
@@ -77,15 +106,28 @@ internal class TubeScraper(
         )
     }
 
-    private suspend fun filesOf(
-        player: AyloPlayerDto,
+    /**
+     * The definitions, with the ones that name no file followed. The network lists some qualities
+     * outright and hands the rest over behind a signed endpoint that answers with the same list -
+     * one entry on the main sites, every entry on the mirrors. An entry is told from an endpoint by
+     * its url: a file or a playlist names itself, an endpoint is a query.
+     *
+     * The files those endpoints give are preferred to the streams listed beside them: one request
+     * per download, a size that can be measured before it starts, and no remux afterwards. They are
+     * signed for the address that asked, so they are read now rather than kept for later.
+     */
+    private suspend fun withEndpointsFollowed(
+        definitions: List<AyloDefinitionDto>,
         headers: Map<String, String>,
-    ): List<ScrapedQualityDto>? {
-        val endpoint = player.definitions
-            .firstOrNull { it.format == Tube.FORMAT_FILE && !it.videoUrl.isNullOrBlank() }
-            ?.videoUrl ?: return null
-        val files = fetcher.getJson<List<AyloDefinitionDto>>(endpoint, headers).getOrNull().orEmpty()
-        return qualitiesOf(files, Tube.FORMAT_FILE).ifEmpty { null }
+    ): List<AyloDefinitionDto> {
+        val (named, endpoints) = definitions
+            .filter { !it.videoUrl.isNullOrBlank() }
+            .partition { it.videoUrl.orEmpty().let { url -> url.isHlsPlaylistUrl() || url.isVideoFileUrl() } }
+        val answered = endpoints.flatMap { endpoint ->
+            fetcher.getJson<List<AyloDefinitionDto>>(endpoint.videoUrl.orEmpty(), headers)
+                .getOrNull().orEmpty()
+        }
+        return answered + named
     }
 
     /**
@@ -93,8 +135,8 @@ internal class TubeScraper(
      * further down the pipeline, and that only happens to a quality that arrives on its own:
      * handing over all four masters would offer the same video four times, unexpanded.
      */
-    private fun bestStreamOf(player: AyloPlayerDto): List<ScrapedQualityDto>? =
-        qualitiesOf(player.definitions, Tube.FORMAT_STREAM).take(1).ifEmpty { null }
+    private fun bestStreamOf(definitions: List<AyloDefinitionDto>): List<ScrapedQualityDto> =
+        qualitiesOf(definitions, Tube.FORMAT_STREAM).take(1)
 
     private fun qualitiesOf(
         definitions: List<AyloDefinitionDto>,
@@ -143,9 +185,9 @@ internal data class AyloPlayerDto(
 )
 
 /**
- * One quality. The site's own `quality` field is deliberately not read: it is a string on a stream
- * and an empty array on the entry that points at the files, while the size says the same thing in
- * both - and says it the way the rest of the module names qualities.
+ * One quality. The size is given as a width and a height on the main sites and as a bare `quality`
+ * on the mirrors and behind the endpoints - a string there, and an empty array on the entry that
+ * points at the endpoint itself, which is why it is read as whatever the site sent.
  */
 @Serializable
 internal data class AyloDefinitionDto(
@@ -153,9 +195,13 @@ internal data class AyloDefinitionDto(
     val width: Int? = null,
     val height: Int? = null,
     val videoUrl: String? = null,
+    val quality: JsonElement? = null,
 ) {
-    val resolution: String get() = "${width ?: height ?: 0}x${height ?: 0}"
-
     /** What the quality is named after: the short side, as it is for a stream's resolution. */
-    val shortSide: Int get() = listOfNotNull(width, height).minOrNull() ?: 0
+    val shortSide: Int
+        get() = listOfNotNull(width, height).minOrNull()
+            ?: (quality as? JsonPrimitive)?.contentOrNull?.toIntOrNull()
+            ?: 0
+
+    val resolution: String get() = "${shortSide}x$shortSide"
 }

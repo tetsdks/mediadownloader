@@ -527,6 +527,9 @@ internal object Constants {
         /** Aylo names the video in the query instead: `view_video.php?viewkey=…`. */
         const val VIDEO_QUERY_MARKER = "viewkey="
 
+        /** What a page that names one piece of media often ends with. */
+        const val PAGE_SUFFIX = ".html"
+
         const val HEADER_REFERER = "Referer"
 
         /** A browser's, because a bare client user agent gets a thinner page on some of these. */
