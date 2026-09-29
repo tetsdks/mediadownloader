@@ -57,6 +57,14 @@ internal class SniffPolicy(
     /** A link one of the parsers can read. */
     fun isParserLink(url: String): Boolean = resolver.scrapersFor(url).isNotEmpty()
 
+    /**
+     * A link only the generic tube reader claims. It reads what a page says about itself, so a
+     * site that encrypts that is claimed and still unreadable: the browser keeps watching the
+     * player's requests on these pages, and a press falls back to them when the read comes up
+     * empty.
+     */
+    fun readsBestEffort(url: String): Boolean = resolver.readsBestEffort(url)
+
     /** The path a card must lead to for the parser to read it on [pageUrl], or "" when any will do. */
     fun postPathFor(pageUrl: String): String {
         val host = pageUrl.normalizedHost() ?: return ""
@@ -107,7 +115,8 @@ internal class SniffPolicy(
 
     /** A site the parser reads, by host: on its feeds a card's own page is what to hand over. */
     fun isParserSite(pageUrl: String): Boolean =
-        pageUrl.normalizedHost()?.isUnderAnyOf(parserSiteHosts) == true
+        pageUrl.normalizedHost()?.isUnderAnyOf(parserSiteHosts) == true ||
+            resolver.readsBestEffort(pageUrl)
 
     /** Whether requests on [pageUrl] are listened to at all; the script sites report for themselves. */
     fun sniffsRequestsOn(pageUrl: String): Boolean = !hasOwnScript(pageUrl)
@@ -118,7 +127,8 @@ internal class SniffPolicy(
      */
     fun mayTake(requestUrl: String, pageUrl: String): Boolean =
         requestUrl.isNotBlank() && allowsDownloads(pageUrl) && !requestUrl.isRefusedRequest() &&
-            (!isParserLink(pageUrl) || requestUrl.isTikTokVideoFileUrl())
+            (!isParserLink(pageUrl) || requestUrl.isTikTokVideoFileUrl() ||
+                resolver.readsBestEffort(pageUrl))
 
     fun classify(requestUrl: String, pageUrl: String): SniffedRequest = when {
         requestUrl.isAdvertMediaUrl() || checkSiteAccess.blocksHostOf(requestUrl) -> SniffedRequest.Ignore

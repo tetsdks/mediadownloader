@@ -21,7 +21,8 @@ that uses it.
 
 - **Link parsing.** A pasted or shared link becomes a title, a thumbnail and every quality with its
   size. Read directly for Facebook, Instagram, Threads, TikTok, X/Twitter, Pinterest (incl.
-  `pin.it`), Dailymotion and LinkedIn.
+  `pin.it`), Dailymotion and LinkedIn - and, when the host app turns on `allowAdultSites`, for the
+  tube sites through one generic reader rather than a scraper per site.
 - **Browser detection.** Attach a WebView and the module finds the media the page is playing -
   page scripts, request sniffing, parser pages - and draws its own small download buttons in the
   page where it can.

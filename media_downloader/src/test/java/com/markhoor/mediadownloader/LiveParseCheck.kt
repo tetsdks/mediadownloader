@@ -18,8 +18,11 @@ import com.markhoor.mediadownloader.data.scraper.instagram.InstagramScraper
 import com.markhoor.mediadownloader.data.scraper.instagram.InstagramSignedInScraper
 import com.markhoor.mediadownloader.data.scraper.linkedin.LinkedInScraper
 import com.markhoor.mediadownloader.data.scraper.pinterest.PinterestScraper
+import com.markhoor.mediadownloader.data.scraper.tube.TubeScraper
 import com.markhoor.mediadownloader.data.scraper.tiktok.TikTokScraper
 import com.markhoor.mediadownloader.data.scraper.twitter.TwitterScraper
+import com.markhoor.mediadownloader.domain.policy.RestrictedCategory
+import com.markhoor.mediadownloader.domain.policy.RestrictedSites
 import com.markhoor.mediadownloader.domain.usecase.CheckSiteAccessUseCase
 import com.markhoor.mediadownloader.domain.usecase.ParseLinkUseCase
 import kotlinx.coroutines.Dispatchers
@@ -86,6 +89,9 @@ class LiveParseCheck {
             instagram = instagram,
             linkedIn = LinkedInScraper(fetcher),
             tikTok = TikTokScraper(fetcher),
+            tube = TubeScraper(fetcher, cookies = { null }) {
+                RestrictedSites.categoryOf(it) == RestrictedCategory.Adult
+            },
             twitter = twitterApiKey?.let { TwitterScraper(fetcher, it) },
             dailymotion = DailymotionScraper(fetcher, appPackage = "com.markhoor.mediadownloader.livecheck"),
             pinterest = PinterestScraper(fetcher),

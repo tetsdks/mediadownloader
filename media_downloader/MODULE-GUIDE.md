@@ -300,8 +300,51 @@ its wiring in `MediaDownloaderComponent`.
   lays its player out in `vh`: the video played, at the right resolution, inside a box zero pixels
   high, and the page read as broken while the button detection produced worked. Anything that
   renders blank in the browser is worth measuring a `100vh` element in before blaming detection.
-- **No adult-site scrapers.** The old url-parser carried six, unreachable behind the block
-  list; they were not brought over.
+- **One generic reader for the tube sites, reachable only by consent.** The old url-parser carried
+  six adult scrapers, unreachable behind the block list, and they were not brought over. There is
+  one now (`data/scraper/tube/`), and one is the point: the sites are too many to write a scraper
+  apiece for and too alike to need it. `TubePlayerParser` recognises the players rather than the
+  hosts - `flashvars` (Aylo), `html5player.setX(…)` (xVideos, XNXX), schema.org `VideoObject`,
+  then Open Graph - and every shape drops advert urls, because the pre-roll is often the only file
+  on the page before the video is asked for. Which links it claims is a category and a path, not a
+  list: `RestrictedSites` says the host is Adult and the path names a video. Nothing changes for an
+  app that leaves `allowAdultSites` off: the link is refused before any scraper is asked.
+- **A press falls back to the page when a best-effort read comes up empty.** Claiming a link sends
+  a press to the parser instead of to the streams the page loaded, which is right for a site whose
+  page says what it plays and wrong for one that encrypts it. So `fetchParserMedia` takes a
+  fallback: on a link only the tube reader claims, a failed read answers the press from the page,
+  exactly as a site with no reader at all would. Without it, claiming xHamster made its button stop
+  answering altogether - a reader that could not read left the page unable to try.
+- **Several streams on a video's own page are the video and its advert**, not a feed: they are all
+  offered and the longest stands (see the rule above). Only a page showing one media does this; a
+  listing is still not guessed at. Up to `Browser.MAX_PAGE_STREAMS` are kept.
+- **A parser that may come up empty does not switch the sniffer off.** Sites that encrypt their
+  player data (xHamster hands out hex blobs) cannot be read from the page at all, so
+  `ScraperResolver.readsBestEffort` marks the tube reader's links, and `SniffPolicy.mayTake` keeps
+  watching requests on them. The parser's answer still wins when it has one.
+- **The page is asked for more than once.** Networks that filter these sites reset the connection
+  instead of answering, and the reset lands on roughly half the attempts: measured on a filtered
+  network, one try parsed a watch page 2 times in 5 and four tries 5 times in 5. Retrying a reset
+  is not retrying an error the server gave - a server that answers is never asked twice.
+- **A string with no host is `Unsupported` in both modes.**
+- **A WebView the module makes is sized `MATCH_PARENT`, not left to its content.** Wrap content -
+  which is what a view with no layout parameters becomes inside a Compose `AndroidView` - makes
+  Chromium resolve `vh`/`dvh`/`svh` to zero, so a page cannot size the view that sizes it. Tiktok
+  lays its player out in `vh`: the video played, at the right resolution, inside a box zero pixels
+  high, and the page read as broken while the button detection produced worked. Anything that
+  renders blank in the browser is worth measuring a `100vh` element in before blaming detection.
+- **One adult-site scraper, reachable only by consent.** The old url-parser carried six,
+  unreachable behind the block list, and they were not brought over. The PornHub network has one
+  now (`data/scraper/pornhub/`) because an app that turns `allowAdultSites` on had no parser at
+  all there and fell through to the browser, which offered it the pre-roll. Nothing changes for an
+  app that leaves the switch off: `CheckSiteAccessUseCase` refuses the link before any scraper is
+  asked. The page's own player object is read rather than its markup or its media requests, which
+  is also what keeps the advert out - the advert is not in that object. Its hosts are in
+  `PARSER_SITE_HOSTS`, so the browser reads the page instead of sniffing it.
+- **The page is asked for more than once.** Networks that filter that site reset the connection
+  instead of answering, and the reset lands on roughly half the attempts: measured on a filtered
+  network, one try parsed 2 times in 5 and four tries 5 times in 5. Retrying a reset is not
+  retrying an error the server gave - a server that answers is never asked twice.
 - **The tweeload key is configuration**, not source (`MediaDownloaderConfig.twitterApiKey`).
   Without it X links are `LinkNotRecognised`. The app reads it from `local.properties`
   (`tweeload.apiKey`, gitignored) into `BuildConfig.TWEELOAD_API_KEY`; the value is the one the
@@ -512,6 +555,32 @@ its wiring in `MediaDownloaderComponent`.
   stream from another host is never a master, so a pre-roll does not hide the video. A file the
   element hands over that is an advert is treated as no file at all, not as the answer. A page
   with several masters (a feed) is not guessed at.
+- **A stream the page preloads is the video.** `<link rel="preload" as="fetch" href="…m3u8">` is
+  what a page asks the browser to start fetching before its player exists, and the advert before
+  the video belongs to another network and is never preloaded. It is read last of the page shapes
+  and is what finally made xHamster readable from a pasted link - a site that encrypts everything
+  its player is handed still says in its head what it is about to play. (The idea came from the
+  `url-parser` module in the ViolationFix copy of `newdownloader`, whose `xhamster_desi` reader
+  does nothing else.)
+- **A player is restarted on a press only where there is more than one.** `load()` detaches a
+  MediaSource and a site's player does not always put it back: on xHamster the element was left
+  with no source at all ("The element has no supported sources"), so the video after the pre-roll
+  was never fetched and the press kept its answer of thirty seconds of advert. Restarting exists
+  to tell several players apart, so a page with one is left alone.
+- **An answer as short as an advert does not stand the sniffer down.** The press used to mark the
+  page answered, and nothing was listened to afterwards; now a pre-roll-shaped answer leaves the
+  page being listened to, so the video can take its place when it plays.
+- **An AV1 stream is offered as its H.264 twin.** An mp4 written by MediaMuxer holds H.264 and AAC
+  and nothing else, and a player asks for AV1 wherever the device can decode it - so xHamster's
+  video downloaded in full and then failed to join. Where a site keeps both codecs at one address
+  (`_TPL_.av1.mp4.m3u8` beside `_TPL_.h264.mp4.m3u8`), `StreamLocator.h264TwinOf` reads the twin
+  and that is what is offered; a stream with no twin is offered as it is.
+- **The longer stream wins.** Once something with a known running time is on offer, a later find
+  is described before it is shown and is left where it is when it turns out to be a fraction as
+  long (`Browser.PREROLL_MAX_MS`, `PREROLL_SHARE_OF_VIDEO`). That is the shape of a pre-roll seen
+  from here: thirty seconds before a video that runs for minutes. It is the only rule that catches
+  an advert served from a throwaway host - one domain per campaign, which no list can hold - and it
+  works in both directions, so an advert heard after the video does not take its place either.
 - **A variant is offered as its master.** A player asks for the one variant it plays and never
   again for its master, so a variant whose folder holds a master already read on the page is
   replaced by that master, with every quality. Only a playlist actually read as a master counts,
@@ -621,7 +690,78 @@ its wiring in `MediaDownloaderComponent`.
   single use, so its file is offered but the download can fail cleanly as unusable. Redtube (only a
   playlist shell from that region) and motherless (unreachable) were not tested. A tap during a
   pre-roll that streams from the player's own element waits for the video; one whose advert is
-  served from a host not yet listed can still offer the advert.
+  served from a host not yet listed is now caught by its length instead.
+- **Redtube and youjizz, September 2026 on the Vivo.** Redtube reads from a pasted link - four
+  qualities, 1080p at 180.8 MB - and its 240p downloaded at 25.5 MB. Two things were in the way and
+  both were the reader's: an address that is nothing but an id (`redtube.net/191294011`) was not
+  taken for a video's page, and the network writes its endpoints as a path alone (`/media/mp4?s=…`)
+  rather than a url, so they are now read against the page they came from. youjizz reads as well,
+  though its size cannot be measured. xvideos remains unreachable here; it runs the same player as
+  xnxx, which is read, so it is expected to work where it can be reached.
+- **KVS, the script most of these sites run, is read from its own fields.** `video_url` with
+  `video_url_text` for the quality's name, and `video_alt_url`, `video_alt_url2`… beside it: the
+  site names its qualities, so a page whose files carry no height still has them. Its requests also
+  carry `kt_tcookie=1` and whatever cookies the browser holds for the site, because KVS hands its
+  files only to a visitor whose player has loaded.
+  It is still not enough everywhere: inxxx reads (title, one quality) and its file comes back as a
+  page of some 150 kB. KVS ties a `get_file` link to the session that built the page, and the copy
+  of this in the ViolationFix `url-parser` gets past that by carrying a captured `PHPSESSID` in its
+  source - a session that will stop working, so it was not copied.
+- **The five sites the ViolationFix `url-parser` covers, checked one by one on the Vivo.** From a
+  pasted link: pornhub (4 qualities, 240p downloaded), xhamster and its `xhamster46.desi` mirror
+  (5 qualities, 144p downloaded), xnxx (2 qualities, 240p downloaded) and inxxx (one quality; its
+  size cannot be measured and the download failed here). brazzers is not readable and nothing is
+  missing: its page says `"contentUrl": null` - the site is a subscription, and the page holds no
+  video to take. Reaching inxxx needed `/v/` among the paths a video is filed under, and brazzers
+  needed the linked data to be read from the page itself and not only from a `ld+json` block, which
+  is where a site built on a JavaScript framework writes it.
+- **xHamster, September 2026 on the Vivo.** Both `xhamster.com` and the `xhamster46.desi` mirror
+  now read from a pasted link: five qualities, 1080p at ~820 MB and ~209 MB, and the 144p file
+  downloaded and saved. Before this, a press during the pre-roll answered with thirty seconds of
+  advert and could never correct itself.
+- **Downloads, September 2026 on the Vivo with the VPN on.** Taken to a file on disk and then
+  deleted: xhamster 144p (18.8 MB, HLS remuxed), xnxx 240p (8.4 MB), youporn (88.1 MB), tube8
+  (193.4 MB), txxx (165.8 MB) and porntrex (85.3 MB); pornhub's 240p was taken on the SM-A26
+  earlier. Only eporner failed, and not in the module: the `contentUrl` its linked data gives
+  (`gvideo.eporner.com/<id>/<id>.mp4`) answers with something a browser cannot decode either, so
+  there is nothing there to fetch.
+  Two things to know when reading a failure here. A big file over a filtered network is reset
+  repeatedly - the worker resumes from what is on disk and the row can still end as failed after
+  its attempts run out, having downloaded 98% of the file; the log says
+  `SocketException: Connection reset`, not a refusal. And a download started twice fails the second
+  time, because the first spent the link.
+- **September 2026, a third pass on the Vivo, with the phone's VPN on.** Read from a pasted link:
+  pornhub (4 qualities, 1080p 130.7 MB), youporn through its `you-porn.com` mirror (4, 629.0 MB),
+  tube8 through `tube8.es` (3, 720p 760.5 MB) and porntrex (3, 1080p 262.0 MB). Answered by the
+  browser's button, because their pages carry nothing a reader can use: spankbang (4 qualities,
+  1080p ~269 MB - its page answers a plain request with a 6 KB shell), txxx (15:28, 158.1 MB) and
+  drtuber (5:03, 41.6 MB). hqporner keeps its player in another frame, and its own player errored
+  here ("Oops.. Something went wrong"); its page's *Alternative player* then played the video, whose
+  play control navigates straight to the file, and the button on that offered it at 56:01 and
+  305.8 MB. Nothing is found there until something plays, which is the rule everywhere: a page that
+  has asked for no media has none to give. xvideos and hdzog were reset outright even with the
+  VPN on, and could not be reached at all.
+- **September 2026, a second pass on a Vivo V2066 (Android 13), same filtered network:**
+  pornhub and youporn (through its `you-porn.com` mirror) both answer a pasted link with four
+  qualities at their real sizes - 1080p at 130.7 MB and 629.0 MB. Reaching that took three fixes
+  the mirrors made plain: a page's linked data describes its cover beside its video, as an
+  ImageObject with a `contentUrl` of its own, and the cover was being offered as the video (one
+  quality, 132.4 KB, the video's running time); the mirrors write the player object with nothing in
+  front of it, so it is now found by its own key; and they list no size beside an entry, naming the
+  quality instead, behind a signed endpoint that has to be followed. hqporner keeps its player in
+  another frame (`mydaddy.cc`) and carries nothing on its own page: it is a browser case, not a
+  reader's. spankbang is behind a Cloudflare challenge from here, and xvideos is reset outright -
+  neither was reachable to test.
+- **September 2026, on a filtered network without a VPN:** pornhub (parser and page button), xnxx
+  and eporner answer with their qualities. xHamster's page cannot be parsed at all - it hands its
+  player encrypted urls - and, though its stream is plainly fetched once the video plays
+  (`…xhpingcdn.com/…/_TPL_.av1.mp4.m3u8`, which the stream rules now name after the site moved off
+  `xhcdn.com`), a press on its player now answers with the video - its own title and 17:35, not the
+  thirty second pre-roll, and its download now completes: pressed on the playing video, the sheet
+  offers 1080p (~610 MB) down to 144p (~17.8 MB) and the 144p file saved at 18.78 MB. What had been
+  wrong was the codec, not the request - a plain fetch of that signed master answers 200 with no
+  referer and no cookies, but the stream it names is AV1, which the mp4 remux cannot take. The
+  H.264 twin beside it is read instead.
 
 ## 8. Build & test
 

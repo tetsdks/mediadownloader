@@ -8,12 +8,14 @@ import com.markhoor.mediadownloader.core.isInstagramPostLink
 import com.markhoor.mediadownloader.core.isLinkedInPostLink
 import com.markhoor.mediadownloader.core.isPinterestPinLink
 import com.markhoor.mediadownloader.core.isThreadsPostLink
+import com.markhoor.mediadownloader.data.scraper.tube.TubeScraper
 import com.markhoor.mediadownloader.core.isTikTokLink
 import com.markhoor.mediadownloader.core.isTwitterStatusLink
 
 /**
- * Which scrapers can read a link, most specific rule first. Adult sites have no scrapers at all:
- * they never get this far, because site access refuses them before any link is read.
+ * Which scrapers can read a link, most specific rule first. An adult site reaches this only when
+ * the host app allowed the category; site access refuses the link before any scraper is asked
+ * otherwise, which is why one appearing here changes nothing for an app that left it off.
  *
  * @param twitter `null` when the host app supplied no tweeload key; X links then have no parser.
  * @param hostSupplied readers the host app brought, asked only for links none of the above claims -
@@ -28,9 +30,17 @@ internal class ScraperResolver(
     private val twitter: SiteScraper?,
     private val dailymotion: SiteScraper,
     private val pinterest: SiteScraper,
+    private val tube: TubeScraper,
     private val getInDevice: SiteScraper,
     private val hostSupplied: List<HostSuppliedScraper> = emptyList(),
 ) {
+
+    /**
+     * Whether the link is one only the generic tube reader claims. It reads what a page says about
+     * itself and cannot read a site that encrypts that, so the browser keeps watching the player's
+     * own requests on these pages instead of standing aside for a parser that may come up empty.
+     */
+    fun readsBestEffort(url: String): Boolean = tube.reads(url)
 
     /** The hosts the app's own readers cover; the browser treats them as sites the parser reads. */
     val hostSuppliedHosts: Set<String> = hostSupplied.flatMapTo(mutableSetOf()) { it.hosts }
@@ -49,6 +59,7 @@ internal class ScraperResolver(
         url.isTwitterStatusLink() -> listOfNotNull(twitter)
         url.isDailymotionVideoLink() || url.isDailymotionMetadataLink() -> listOf(dailymotion)
         url.isPinterestPinLink() -> listOf(pinterest)
+        tube.reads(url) -> listOf(tube)
         else -> emptyList()
     }
 }

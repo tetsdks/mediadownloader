@@ -355,6 +355,115 @@ class MediaDetectionSessionTest {
         assertEquals("both of the master's qualities", 2, offered?.qualities?.size)
     }
 
+    /**
+     * The advert before the video comes from a host no list will ever hold - a throwaway domain
+     * per campaign - so the only thing that tells the two apart is how long each one runs.
+     */
+    private fun clip(seconds: Int, segment: String) =
+        "#EXTM3U\n#EXT-X-TARGETDURATION:10\n" +
+            "#EXTINF:10.0,\n$segment\n".repeat(seconds / 10) + "#EXT-X-ENDLIST\n"
+
+    private val advertStream = "https://svacdn77.throwaway.test/hls/850x480.mp4.m3u8"
+    private val videoStream = "https://video-nss-a.cdn.test/media=hls4/480p.av1.mp4.m3u8"
+
+    private fun streamFiles() = mapOf(
+        advertStream to clip(20, "https://svacdn77.throwaway.test/hls/seg-1.ts").toByteArray(),
+        "https://svacdn77.throwaway.test/hls/seg-1.ts" to sampleBytes(500),
+        videoStream to clip(600, "https://video-nss-a.cdn.test/media=hls4/seg-1.ts").toByteArray(),
+        "https://video-nss-a.cdn.test/media=hls4/seg-1.ts" to sampleBytes(5_000),
+    )
+
+    @Test
+    fun `a stream that runs for minutes replaces the advert heard before it`() = runTest {
+        val (session) = harness(files = streamFiles(), realIo = true)
+        session.commit("https://www.reddit.com/r/videos/comments/abc/a_post/")
+
+        session.onSignal(PageSignal.RequestSeen(advertStream, emptyMap()))
+        session.state.first { it.media?.qualities?.firstOrNull()?.url == advertStream }
+        session.onSignal(PageSignal.RequestSeen(videoStream, emptyMap()))
+
+        val offered = session.state.first {
+            it.media?.qualities?.firstOrNull()?.url == videoStream && !it.isDescribingMedia
+        }.media
+        assertEquals(600_000L, offered?.durationMillis)
+    }
+
+    @Test
+    fun `an advert heard after the video does not take its place`() = runTest {
+        val (session) = harness(files = streamFiles(), realIo = true)
+        session.commit("https://www.reddit.com/r/videos/comments/abc/a_post/")
+
+        session.onSignal(PageSignal.RequestSeen(videoStream, emptyMap()))
+        session.state.first { it.media?.durationMillis == 600_000L && !it.isDescribingMedia }
+        session.onSignal(PageSignal.RequestSeen(advertStream, emptyMap()))
+        advanceTimeBy(2_000)
+        runCurrent()
+
+        assertEquals(videoStream, session.state.value.media?.qualities?.firstOrNull()?.url)
+    }
+
+    @Test
+    fun `a press on a video's own page picks the longer of the streams it loaded`() = runTest {
+        val (session) = harness(files = streamFiles(), realIo = true)
+        session.commit(rumblePage)
+
+        // The advert streams before the video, from a host no list holds; both are the page's.
+        session.onSignal(PageSignal.RequestSeen(advertStream, emptyMap()))
+        session.onSignal(PageSignal.RequestSeen(videoStream, emptyMap()))
+        session.state.first { it.media != null && !it.isDescribingMedia }
+
+        session.onSignal(
+            PageSignal.Script(ScriptMessage.MediaRequested(null, "A video", null, null, isPlaying = true, isImage = false)),
+        )
+        val offered = session.state.first {
+            it.media?.qualities?.firstOrNull()?.url == videoStream && !it.isDescribingMedia
+        }.media
+
+        assertEquals(600_000L, offered?.durationMillis)
+    }
+
+    /**
+     * A player asks for AV1 wherever the device can decode it, and an mp4 written by MediaMuxer
+     * holds H.264: the AV1 stream downloaded in full and then could not be joined. The same stream
+     * in H.264 sits beside it on the sites that serve both.
+     */
+    @Test
+    fun `an av1 stream is offered as its h264 twin`() = runTest {
+        val folder = "https://video-nss-a.cdn.test/media=hls4/027/568/945"
+        val av1 = "$folder/_TPL_.av1.mp4.m3u8"
+        val h264 = "$folder/_TPL_.h264.mp4.m3u8"
+        val files = mapOf(
+            av1 to clip(600, "$folder/av1-1.ts").toByteArray(),
+            h264 to clip(600, "$folder/h264-1.ts").toByteArray(),
+            "$folder/av1-1.ts" to sampleBytes(4_000),
+            "$folder/h264-1.ts" to sampleBytes(4_000),
+        )
+        val (session) = harness(files = files, realIo = true)
+        session.commit(rumblePage)
+
+        session.onSignal(PageSignal.RequestSeen(av1, emptyMap()))
+
+        val offered = session.state.first { it.media != null && !it.isDescribingMedia }.media
+        assertEquals(h264, offered?.qualities?.firstOrNull()?.url)
+    }
+
+    @Test
+    fun `an av1 stream with no twin is offered as it is`() = runTest {
+        val folder = "https://video-nss-a.cdn.test/media=hls4/027/568/945"
+        val av1 = "$folder/_TPL_.av1.mp4.m3u8"
+        val files = mapOf(
+            av1 to clip(600, "$folder/av1-1.ts").toByteArray(),
+            "$folder/av1-1.ts" to sampleBytes(4_000),
+        )
+        val (session) = harness(files = files, realIo = true)
+        session.commit(rumblePage)
+
+        session.onSignal(PageSignal.RequestSeen(av1, emptyMap()))
+
+        val offered = session.state.first { it.media != null && !it.isDescribingMedia }.media
+        assertEquals(av1, offered?.qualities?.firstOrNull()?.url)
+    }
+
     @Test
     fun `a page with two streams is not guessed at when a blob player is pressed`() = runTest {
         val harness = harness()

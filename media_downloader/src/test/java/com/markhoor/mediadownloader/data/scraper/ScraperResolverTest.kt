@@ -1,5 +1,6 @@
 package com.markhoor.mediadownloader.data.scraper
 
+import com.markhoor.mediadownloader.data.browser.testTube
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -11,12 +12,20 @@ class ScraperResolverTest {
         override fun toString() = name
     }
 
+    /** Stands in for the category test the module makes; the rule under test is the resolver's. */
+    private val tube = testTube(
+        isRestrictedSite = { host ->
+            listOf("pornhub.com", "xnxx.com", "xhamster.com", "eporner.com").any { host.endsWith(it) }
+        },
+    )
+
     private fun resolver(twitter: SiteScraper? = Named("twitter")) = ScraperResolver(
         facebookVideo = Named("facebookVideo"),
         facebookShare = Named("facebookShare"),
         instagram = Named("instagram"),
         linkedIn = Named("linkedIn"),
         tikTok = Named("tikTok"),
+        tube = tube,
         twitter = twitter,
         dailymotion = Named("dailymotion"),
         pinterest = Named("pinterest"),
@@ -24,7 +33,7 @@ class ScraperResolverTest {
     )
 
     private fun scrapersFor(url: String, twitter: SiteScraper? = Named("twitter")) =
-        resolver(twitter).scrapersFor(url).map { it.toString() }
+        resolver(twitter).scrapersFor(url).map { if (it === tube) "tube" else it.toString() }
 
     @Test
     fun `each site's links reach its own scrapers`() {
@@ -45,6 +54,12 @@ class ScraperResolverTest {
             "https://www.dailymotion.com/player/metadata/video/x8da0md" to listOf("dailymotion"),
             "https://www.pinterest.com/pin/62628251062820323/" to listOf("pinterest"),
             "https://pin.it/abc123" to listOf("pinterest"),
+            // One reader for the tube sites: what makes a link its own is the category of the
+            // host and a path that names a video, not a list of sites.
+            "https://www.pornhub.com/view_video.php?viewkey=abc123" to listOf("tube"),
+            "https://www.xnxx.com/video-1ajfxte3/desi" to listOf("tube"),
+            "https://xhamster.com/videos/some-slug-xh7FMCw" to listOf("tube"),
+            "https://www.eporner.com/video-OzG1R7X34gv/indian-babe" to listOf("tube"),
         ).forEach { (url, expected) -> assertEquals(url, expected, scrapersFor(url)) }
     }
 
@@ -56,6 +71,9 @@ class ScraperResolverTest {
             "https://x.com/someone",
             "https://www.instagram.com/someone/",
             "https://www.pinterest.com/search/pins/?q=cats",
+            // A tube site's own pages that name no video.
+            "https://www.pornhub.com/",
+            "https://xhamster.com/categories",
             "https://www.reddit.com/r/videos/",
             "",
         ).forEach { assertTrue(it, scrapersFor(it).isEmpty()) }
