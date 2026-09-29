@@ -546,6 +546,12 @@ its wiring in `MediaDownloaderComponent`.
   stream from another host is never a master, so a pre-roll does not hide the video. A file the
   element hands over that is an advert is treated as no file at all, not as the answer. A page
   with several masters (a feed) is not guessed at.
+- **The longer stream wins.** Once something with a known running time is on offer, a later find
+  is described before it is shown and is left where it is when it turns out to be a fraction as
+  long (`Browser.PREROLL_MAX_MS`, `PREROLL_SHARE_OF_VIDEO`). That is the shape of a pre-roll seen
+  from here: thirty seconds before a video that runs for minutes. It is the only rule that catches
+  an advert served from a throwaway host - one domain per campaign, which no list can hold - and it
+  works in both directions, so an advert heard after the video does not take its place either.
 - **A variant is offered as its master.** A player asks for the one variant it plays and never
   again for its master, so a variant whose folder holds a master already read on the page is
   replaced by that master, with every quality. Only a playlist actually read as a master counts,
@@ -655,7 +661,13 @@ its wiring in `MediaDownloaderComponent`.
   single use, so its file is offered but the download can fail cleanly as unusable. Redtube (only a
   playlist shell from that region) and motherless (unreachable) were not tested. A tap during a
   pre-roll that streams from the player's own element waits for the video; one whose advert is
-  served from a host not yet listed can still offer the advert.
+  served from a host not yet listed is now caught by its length instead.
+- **September 2026, on a filtered network without a VPN:** pornhub (parser and page button), xnxx
+  and eporner answer with their qualities. xHamster's page cannot be parsed at all - it hands its
+  player encrypted urls - and, though its stream is plainly fetched once the video plays
+  (`…xhpingcdn.com/…/_TPL_.av1.mp4.m3u8`, which the stream rules now name after the site moved off
+  `xhcdn.com`), a press on its player still answers with nothing. Unfinished, and the next thing to
+  look at there.
 
 ## 8. Build & test
 
