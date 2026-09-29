@@ -47,6 +47,7 @@ class TubeScraperTest {
             FakeMediaServer(served.associate { (url, body) -> url to body.toByteArray() }).client,
             HttpClientFactory.json,
         ),
+        cookies = { null },
         isRestrictedSite = { true },
     )
 
@@ -69,6 +70,7 @@ class TubeScraperTest {
     fun `a site outside the category is never claimed, whatever its address looks like`() {
         val tube = TubeScraper(
             HttpFetcher(FakeMediaServer(emptyMap()).client, HttpClientFactory.json),
+            cookies = { null },
             isRestrictedSite = { false },
         )
 
@@ -202,7 +204,11 @@ class TubeScraperTest {
             if (asked == watchUrl && resets++ < times) throw SocketException("Connection reset")
             served[asked]?.let { respond(it, HttpStatusCode.OK) } ?: respond("", HttpStatusCode.NotFound)
         })
-        return TubeScraper(HttpFetcher(client, HttpClientFactory.json), isRestrictedSite = { true })
+        return TubeScraper(
+            HttpFetcher(client, HttpClientFactory.json),
+            cookies = { null },
+            isRestrictedSite = { true },
+        )
     }
 
     @Test

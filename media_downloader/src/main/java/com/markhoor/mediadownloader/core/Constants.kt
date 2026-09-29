@@ -35,6 +35,7 @@ internal object Constants {
 
         const val HEADER_COOKIE = "Cookie"
         const val HEADER_REFERER = "Referer"
+
         const val HEADER_USER_AGENT = "User-Agent"
         const val ACCEPT_LANGUAGE = "en-US,en;q=0.9"
     }
@@ -538,6 +539,13 @@ internal object Constants {
         const val PAGE_SUFFIX = ".html"
 
         const val HEADER_REFERER = "Referer"
+
+        /**
+         * KVS - the script a great many of these sites run - hands its files only to a visitor
+         * whose player has loaded, and this cookie is how it knows. Without it the file is refused
+         * and its size cannot even be measured.
+         */
+        const val PLAYER_COOKIE = "kt_tcookie=1"
 
         /** A browser's, because a bare client user agent gets a thinner page on some of these. */
         const val USER_AGENT =

@@ -21,7 +21,8 @@ internal fun testTube(
     isRestrictedSite: (String) -> Boolean = { false },
 ) = TubeScraper(
     HttpFetcher(FakeMediaServer(files.mapValues { it.value.toByteArray() }).client, HttpClientFactory.json),
-    isRestrictedSite,
+    cookies = { null },
+    isRestrictedSite = isRestrictedSite,
 )
 
 internal fun testResolver() = ScraperResolver(
