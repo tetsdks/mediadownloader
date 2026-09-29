@@ -528,7 +528,7 @@ internal object Constants {
 
         /** Paths a video's own page is filed under, across sites that agree on little else. */
         val VIDEO_PATH_MARKERS: Set<String> = setOf(
-            "/video", "/watch", "/view_video", "/embed/", "/movies/", "/clip",
+            "/video", "/watch", "/view_video", "/embed/", "/movies/", "/clip", "/v/",
         )
 
         /** Aylo names the video in the query instead: `view_video.php?viewkey=…`. */
