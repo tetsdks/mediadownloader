@@ -422,6 +422,48 @@ class MediaDetectionSessionTest {
         assertEquals(600_000L, offered?.durationMillis)
     }
 
+    /**
+     * A player asks for AV1 wherever the device can decode it, and an mp4 written by MediaMuxer
+     * holds H.264: the AV1 stream downloaded in full and then could not be joined. The same stream
+     * in H.264 sits beside it on the sites that serve both.
+     */
+    @Test
+    fun `an av1 stream is offered as its h264 twin`() = runTest {
+        val folder = "https://video-nss-a.cdn.test/media=hls4/027/568/945"
+        val av1 = "$folder/_TPL_.av1.mp4.m3u8"
+        val h264 = "$folder/_TPL_.h264.mp4.m3u8"
+        val files = mapOf(
+            av1 to clip(600, "$folder/av1-1.ts").toByteArray(),
+            h264 to clip(600, "$folder/h264-1.ts").toByteArray(),
+            "$folder/av1-1.ts" to sampleBytes(4_000),
+            "$folder/h264-1.ts" to sampleBytes(4_000),
+        )
+        val (session) = harness(files = files, realIo = true)
+        session.commit(rumblePage)
+
+        session.onSignal(PageSignal.RequestSeen(av1, emptyMap()))
+
+        val offered = session.state.first { it.media != null && !it.isDescribingMedia }.media
+        assertEquals(h264, offered?.qualities?.firstOrNull()?.url)
+    }
+
+    @Test
+    fun `an av1 stream with no twin is offered as it is`() = runTest {
+        val folder = "https://video-nss-a.cdn.test/media=hls4/027/568/945"
+        val av1 = "$folder/_TPL_.av1.mp4.m3u8"
+        val files = mapOf(
+            av1 to clip(600, "$folder/av1-1.ts").toByteArray(),
+            "$folder/av1-1.ts" to sampleBytes(4_000),
+        )
+        val (session) = harness(files = files, realIo = true)
+        session.commit(rumblePage)
+
+        session.onSignal(PageSignal.RequestSeen(av1, emptyMap()))
+
+        val offered = session.state.first { it.media != null && !it.isDescribingMedia }.media
+        assertEquals(av1, offered?.qualities?.firstOrNull()?.url)
+    }
+
     @Test
     fun `a page with two streams is not guessed at when a blob player is pressed`() = runTest {
         val harness = harness()

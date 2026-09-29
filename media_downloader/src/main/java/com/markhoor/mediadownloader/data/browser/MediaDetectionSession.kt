@@ -632,13 +632,31 @@ internal class MediaDetectionSession(
                 val sent = master?.headers ?: headers
                 if (!page.seenMedia.add(url)) return
                 page.lastSniffed = url to sent
-                // The page's own name only once it has one; right after a navigation the WebView
-                // reports the url as the title, and the slug is readable at once.
-                val title = page.cardTitle.ifBlank { page.siteUrl.titleFromSlug() }.ifBlank { page.title.trim() }
-                offer(mediaOf(url, MediaType.Video, title, page.cardThumb, sent))
-                showMediaIfAwaited()
+                // An AV1 stream is asked for by the player and cannot be written into an mp4; the
+                // same stream in H.264 usually sits beside it, and that is what is offered.
+                if (url.contains(Browser.AV1_IN_URL) && url.isHlsPlaylistUrl()) {
+                    val token = page.token
+                    workScope.launch(ioDispatcher) {
+                        val twin = locator.h264TwinOf(url, sent)
+                        withContext(serialDispatcher) {
+                            if (token != page.token) return@withContext
+                            offerStream(twin ?: url, sent)
+                        }
+                    }
+                    return
+                }
+                offerStream(url, sent)
             }
         }
+    }
+
+    /** Hands a stream over as the page's media, named by whatever the page has said so far. */
+    private fun offerStream(url: String, headers: Map<String, String>) {
+        // The page's own name only once it has one; right after a navigation the WebView reports
+        // the url as the title, and the slug is readable at once.
+        val title = page.cardTitle.ifBlank { page.siteUrl.titleFromSlug() }.ifBlank { page.title.trim() }
+        offer(mediaOf(url, MediaType.Video, title, page.cardThumb, headers))
+        showMediaIfAwaited()
     }
 
     /** Runs a lookup off the page's thread and treats its answer as a request the page made. */

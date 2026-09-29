@@ -343,6 +343,13 @@ internal object Constants {
          */
         const val PREROLL_MAX_MS = 120_000L
 
+        /**
+         * What a stream's address calls its codec, where a site serves both. The mp4 the module
+         * writes holds H.264, so the AV1 one is swapped for its twin before it is offered.
+         */
+        const val AV1_IN_URL = ".av1."
+        const val H264_IN_URL = ".h264."
+
         /** How many of a page's streams are kept as candidates for a press. */
         const val MAX_PAGE_STREAMS = 6
         const val PREROLL_SHARE_OF_VIDEO = 2

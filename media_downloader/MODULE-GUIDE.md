@@ -555,6 +555,11 @@ its wiring in `MediaDownloaderComponent`.
   stream from another host is never a master, so a pre-roll does not hide the video. A file the
   element hands over that is an advert is treated as no file at all, not as the answer. A page
   with several masters (a feed) is not guessed at.
+- **An AV1 stream is offered as its H.264 twin.** An mp4 written by MediaMuxer holds H.264 and AAC
+  and nothing else, and a player asks for AV1 wherever the device can decode it - so xHamster's
+  video downloaded in full and then failed to join. Where a site keeps both codecs at one address
+  (`_TPL_.av1.mp4.m3u8` beside `_TPL_.h264.mp4.m3u8`), `StreamLocator.h264TwinOf` reads the twin
+  and that is what is offered; a stream with no twin is offered as it is.
 - **The longer stream wins.** Once something with a known running time is on offer, a later find
   is described before it is shown and is left where it is when it turns out to be a fraction as
   long (`Browser.PREROLL_MAX_MS`, `PREROLL_SHARE_OF_VIDEO`). That is the shape of a pre-roll seen
@@ -698,9 +703,11 @@ its wiring in `MediaDownloaderComponent`.
   player encrypted urls - and, though its stream is plainly fetched once the video plays
   (`…xhpingcdn.com/…/_TPL_.av1.mp4.m3u8`, which the stream rules now name after the site moved off
   `xhcdn.com`), a press on its player now answers with the video - its own title and 17:35, not the
-  thirty second pre-roll. The download then fails as unavailable: the module's own request for that
-  signed master is refused where the page's succeeds, and the stream it names is AV1, which the MP4
-  remux cannot take either. That is where this stands.
+  thirty second pre-roll, and its download now completes: pressed on the playing video, the sheet
+  offers 1080p (~610 MB) down to 144p (~17.8 MB) and the 144p file saved at 18.78 MB. What had been
+  wrong was the codec, not the request - a plain fetch of that signed master answers 200 with no
+  referer and no cookies, but the stream it names is AV1, which the mp4 remux cannot take. The
+  H.264 twin beside it is read instead.
 
 ## 8. Build & test
 
