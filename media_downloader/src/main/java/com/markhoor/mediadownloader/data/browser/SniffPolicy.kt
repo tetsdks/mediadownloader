@@ -57,6 +57,14 @@ internal class SniffPolicy(
     /** A link one of the parsers can read. */
     fun isParserLink(url: String): Boolean = resolver.scrapersFor(url).isNotEmpty()
 
+    /**
+     * A link only the generic tube reader claims. It reads what a page says about itself, so a
+     * site that encrypts that is claimed and still unreadable: the browser keeps watching the
+     * player's requests on these pages, and a press falls back to them when the read comes up
+     * empty.
+     */
+    fun readsBestEffort(url: String): Boolean = resolver.readsBestEffort(url)
+
     /** The path a card must lead to for the parser to read it on [pageUrl], or "" when any will do. */
     fun postPathFor(pageUrl: String): String {
         val host = pageUrl.normalizedHost() ?: return ""

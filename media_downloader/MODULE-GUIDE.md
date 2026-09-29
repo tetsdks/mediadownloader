@@ -309,6 +309,15 @@ its wiring in `MediaDownloaderComponent`.
   on the page before the video is asked for. Which links it claims is a category and a path, not a
   list: `RestrictedSites` says the host is Adult and the path names a video. Nothing changes for an
   app that leaves `allowAdultSites` off: the link is refused before any scraper is asked.
+- **A press falls back to the page when a best-effort read comes up empty.** Claiming a link sends
+  a press to the parser instead of to the streams the page loaded, which is right for a site whose
+  page says what it plays and wrong for one that encrypts it. So `fetchParserMedia` takes a
+  fallback: on a link only the tube reader claims, a failed read answers the press from the page,
+  exactly as a site with no reader at all would. Without it, claiming xHamster made its button stop
+  answering altogether - a reader that could not read left the page unable to try.
+- **Several streams on a video's own page are the video and its advert**, not a feed: they are all
+  offered and the longest stands (see the rule above). Only a page showing one media does this; a
+  listing is still not guessed at. Up to `Browser.MAX_PAGE_STREAMS` are kept.
 - **A parser that may come up empty does not switch the sniffer off.** Sites that encrypt their
   player data (xHamster hands out hex blobs) cannot be read from the page at all, so
   `ScraperResolver.readsBestEffort` marks the tube reader's links, and `SniffPolicy.mayTake` keeps
@@ -666,8 +675,10 @@ its wiring in `MediaDownloaderComponent`.
   and eporner answer with their qualities. xHamster's page cannot be parsed at all - it hands its
   player encrypted urls - and, though its stream is plainly fetched once the video plays
   (`…xhpingcdn.com/…/_TPL_.av1.mp4.m3u8`, which the stream rules now name after the site moved off
-  `xhcdn.com`), a press on its player still answers with nothing. Unfinished, and the next thing to
-  look at there.
+  `xhcdn.com`), a press on its player now answers with the video - its own title and 17:35, not the
+  thirty second pre-roll. The download then fails as unavailable: the module's own request for that
+  signed master is refused where the page's succeeds, and the stream it names is AV1, which the MP4
+  remux cannot take either. That is where this stands.
 
 ## 8. Build & test
 

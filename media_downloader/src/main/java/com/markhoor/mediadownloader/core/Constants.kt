@@ -342,6 +342,9 @@ internal object Constants {
          * nothing longer ever arrives to displace it.
          */
         const val PREROLL_MAX_MS = 120_000L
+
+        /** How many of a page's streams are kept as candidates for a press. */
+        const val MAX_PAGE_STREAMS = 6
         const val PREROLL_SHARE_OF_VIDEO = 2
 
         val PLAYLIST_NAMES: List<String> = listOf(
