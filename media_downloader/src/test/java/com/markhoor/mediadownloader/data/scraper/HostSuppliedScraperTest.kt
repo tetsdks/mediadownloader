@@ -1,6 +1,7 @@
 package com.markhoor.mediadownloader.data.scraper
 
 import com.markhoor.mediadownloader.MediaSource
+import com.markhoor.mediadownloader.data.browser.testTube
 import com.markhoor.mediadownloader.data.browser.SilentScraper
 import com.markhoor.mediadownloader.domain.models.MediaModel
 import com.markhoor.mediadownloader.domain.models.MediaQualityModel
@@ -55,7 +56,7 @@ class HostSuppliedScraperTest {
         facebookVideo = SilentScraper(),
         facebookShare = SilentScraper(),
         instagram = SilentScraper(),
-        pornhub = SilentScraper(),
+        tube = testTube(),
         linkedIn = SilentScraper(),
         tikTok = SilentScraper(),
         twitter = SilentScraper(),

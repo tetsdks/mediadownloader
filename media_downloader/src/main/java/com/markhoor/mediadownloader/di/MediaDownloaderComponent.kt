@@ -43,13 +43,15 @@ import com.markhoor.mediadownloader.data.scraper.instagram.InstagramScraper
 import com.markhoor.mediadownloader.data.scraper.instagram.InstagramSignedInScraper
 import com.markhoor.mediadownloader.data.scraper.linkedin.LinkedInScraper
 import com.markhoor.mediadownloader.data.scraper.pinterest.PinterestScraper
-import com.markhoor.mediadownloader.data.scraper.pornhub.PornhubScraper
+import com.markhoor.mediadownloader.data.scraper.tube.TubeScraper
 import com.markhoor.mediadownloader.data.scraper.tiktok.TikTokScraper
 import com.markhoor.mediadownloader.data.scraper.twitter.TwitterScraper
 import com.markhoor.mediadownloader.data.storage.DownloadStorage
 import com.markhoor.mediadownloader.data.work.DownloadNotifier
 import com.markhoor.mediadownloader.data.work.DownloadRunLocks
 import com.markhoor.mediadownloader.data.work.DownloadScheduler
+import com.markhoor.mediadownloader.domain.policy.RestrictedCategory
+import com.markhoor.mediadownloader.domain.policy.RestrictedSites
 import com.markhoor.mediadownloader.domain.repo.DownloadRepository
 import com.markhoor.mediadownloader.domain.repo.MediaDetector
 import com.markhoor.mediadownloader.domain.usecase.CheckSiteAccessUseCase
@@ -312,7 +314,9 @@ internal class MediaDownloaderComponent(
                 ?.let { TwitterScraper(httpFetcher, it) },
             dailymotion = DailymotionScraper(httpFetcher, appPackage = appContext.packageName),
             pinterest = PinterestScraper(httpFetcher),
-            pornhub = PornhubScraper(httpFetcher),
+            tube = TubeScraper(httpFetcher) {
+                RestrictedSites.categoryOf(it) == RestrictedCategory.Adult
+            },
             getInDevice = getInDevice,
             hostSupplied = hostSuppliedScrapers,
         )
