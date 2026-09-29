@@ -47,6 +47,13 @@ internal object TubePlayerParser {
     private val LD_FIELD = { name: String -> Regex(""""$name"\s*:\s*\[?\s*"([^"]+)"""") }
     private val ISO_DURATION = Regex("""P(?:T)?(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?""")
     private val HEIGHT_IN_URL = Regex("""(\d{3,4})p""")
+    private val KVS_FIELD = Regex("""(\w+):\s*'([^']*)'""")
+
+    /** What KVS calls its qualities, in the order the player writes them. */
+    private val KVS_URL_FIELDS = listOf(
+        "video_url", "video_alt_url", "video_alt_url2", "video_alt_url3", "video_alt_url4",
+    )
+
     private val PRELOAD_LINK = Regex("""<link[^>]+preload[^>]*>""", RegexOption.IGNORE_CASE)
     private val HREF = Regex("""href=["']([^"']+)["']""", RegexOption.IGNORE_CASE)
     private val FILE_IN_PAGE = Regex("""https?:(?:\\?/){2}[^"'\s]{10,200}?\.mp4(?:\?[^"'\s]{0,80})?""")
@@ -113,6 +120,31 @@ internal object TubePlayerParser {
             )
         }
         return null
+    }
+
+    /**
+     * The KVS player's own fields. The script most of these sites run writes its video out as
+     * `video_url`, with `video_url_text` for what to call that quality, and any others beside it
+     * as `video_alt_url`, `video_alt_url2` and so on - so the qualities are named by the site
+     * instead of guessed from a file name, and a page whose files carry no height still has them.
+     */
+    fun fromKvsPlayer(html: String, pageUrl: String): ScrapedMediaDto? {
+        val host = pageUrl.normalizedHost() ?: return null
+        val fields = KVS_FIELD.findAll(html)
+            .associate { it.groupValues[1] to it.groupValues[2].decodeJsonEscapes() }
+            .takeIf { it.isNotEmpty() } ?: return null
+        val qualities = KVS_URL_FIELDS
+            .mapNotNull { name -> fields[name]?.let { url -> url to fields[name + "_text"] } }
+            .filter { (url, _) -> url.normalizedHost() == host && usable(url) && !url.namesAPreview() }
+            .distinctBy { (url, _) -> url }
+            .map { (url, name) -> quality(url, name?.ifBlank { null } ?: labelOf(url, QualityLabels.HD)) }
+            .ifEmpty { return null }
+        return ScrapedMediaDto(
+            qualities = qualities,
+            title = fields["video_title"]?.decodeHtmlEntities()?.trim()?.ifBlank { null }
+                ?: html.titleFromHtml().ifBlank { null },
+            thumbnailUrl = fields["preview_url"]?.ifBlank { null },
+        )
     }
 
     /**

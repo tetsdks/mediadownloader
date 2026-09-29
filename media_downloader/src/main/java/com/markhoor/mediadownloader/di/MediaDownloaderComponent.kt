@@ -314,7 +314,7 @@ internal class MediaDownloaderComponent(
                 ?.let { TwitterScraper(httpFetcher, it) },
             dailymotion = DailymotionScraper(httpFetcher, appPackage = appContext.packageName),
             pinterest = PinterestScraper(httpFetcher),
-            tube = TubeScraper(httpFetcher) {
+            tube = TubeScraper(httpFetcher, WebViewCookieSource) {
                 RestrictedSites.categoryOf(it) == RestrictedCategory.Adult
             },
             getInDevice = getInDevice,

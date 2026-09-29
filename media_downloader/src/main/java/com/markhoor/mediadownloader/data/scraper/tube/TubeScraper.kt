@@ -9,6 +9,7 @@ import com.markhoor.mediadownloader.core.normalizedHost
 import com.markhoor.mediadownloader.core.qualityNameFromResolution
 import com.markhoor.mediadownloader.core.titleFromHtml
 import com.markhoor.mediadownloader.core.urlPath
+import com.markhoor.mediadownloader.data.network.CookieSource
 import com.markhoor.mediadownloader.data.network.HttpFetcher
 import com.markhoor.mediadownloader.data.scraper.NoMediaException
 import com.markhoor.mediadownloader.data.scraper.ScrapedMediaDto
@@ -35,6 +36,7 @@ import kotlinx.serialization.json.contentOrNull
  */
 internal class TubeScraper(
     private val fetcher: HttpFetcher,
+    private val cookies: CookieSource,
     private val isRestrictedSite: (String) -> Boolean,
 ) : SiteScraper() {
 
@@ -71,6 +73,7 @@ internal class TubeScraper(
         val media = aylo(page, headers)
             ?: TubePlayerParser.fromPlayerCalls(page)
             ?: TubePlayerParser.fromLinkedData(page)
+            ?: TubePlayerParser.fromKvsPlayer(page, url)
             ?: TubePlayerParser.fromNamedFile(page, url)
             ?: TubePlayerParser.fromPreloadedStream(page, url)
             ?: TubePlayerParser.fromOpenGraph(page)
@@ -171,9 +174,16 @@ internal class TubeScraper(
         throw failure ?: NoMediaException("No page at $url")
     }
 
-    /** A browser's user agent, and the site's own front page as where the request came from. */
+    /**
+     * A browser's user agent, the site's own front page as where the request came from, and the
+     * cookies the browser holds for it. KVS hands its files only to a visitor whose player has
+     * loaded, and a site the reader has been browsed to has a session of its own besides - the
+     * page reads without either, the file often does not.
+     */
     private fun headersFor(url: String): Map<String, String> = buildMap {
         put(Network.HEADER_USER_AGENT, Tube.USER_AGENT)
+        val held = cookies.cookiesFor(url)?.takeIf { it.isNotBlank() }
+        put(Network.HEADER_COOKIE, listOfNotNull(Tube.PLAYER_COOKIE, held).joinToString("; "))
         url.normalizedHost()?.let { put(Tube.HEADER_REFERER, "https://$it/") }
     }
 }

@@ -89,7 +89,7 @@ class LiveParseCheck {
             instagram = instagram,
             linkedIn = LinkedInScraper(fetcher),
             tikTok = TikTokScraper(fetcher),
-            tube = TubeScraper(fetcher) {
+            tube = TubeScraper(fetcher, cookies = { null }) {
                 RestrictedSites.categoryOf(it) == RestrictedCategory.Adult
             },
             twitter = twitterApiKey?.let { TwitterScraper(fetcher, it) },

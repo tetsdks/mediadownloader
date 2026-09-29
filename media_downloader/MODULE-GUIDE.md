@@ -691,6 +691,15 @@ its wiring in `MediaDownloaderComponent`.
   playlist shell from that region) and motherless (unreachable) were not tested. A tap during a
   pre-roll that streams from the player's own element waits for the video; one whose advert is
   served from a host not yet listed is now caught by its length instead.
+- **KVS, the script most of these sites run, is read from its own fields.** `video_url` with
+  `video_url_text` for the quality's name, and `video_alt_url`, `video_alt_url2`… beside it: the
+  site names its qualities, so a page whose files carry no height still has them. Its requests also
+  carry `kt_tcookie=1` and whatever cookies the browser holds for the site, because KVS hands its
+  files only to a visitor whose player has loaded.
+  It is still not enough everywhere: inxxx reads (title, one quality) and its file comes back as a
+  page of some 150 kB. KVS ties a `get_file` link to the session that built the page, and the copy
+  of this in the ViolationFix `url-parser` gets past that by carrying a captured `PHPSESSID` in its
+  source - a session that will stop working, so it was not copied.
 - **The five sites the ViolationFix `url-parser` covers, checked one by one on the Vivo.** From a
   pasted link: pornhub (4 qualities, 240p downloaded), xhamster and its `xhamster46.desi` mirror
   (5 qualities, 144p downloaded), xnxx (2 qualities, 240p downloaded) and inxxx (one quality; its
