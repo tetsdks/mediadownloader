@@ -647,6 +647,15 @@ its wiring in `MediaDownloaderComponent`.
   `visibility: hidden`) gives its button up, so the poster can take it; a poster only stands aside
   for a video that has a button of its own. Imdb's few-second autoplay preview
   (`hls-preview-….m3u8`) is not offered as the film.
+- **"display" is not "play".** A picture is judged a video's cover partly by what is drawn over it:
+  a play badge or a running time, found by class name. That was a substring test, and Pexels hangs
+  an "Edit in Canva" button over every photograph carrying `DisplayNone_mobile-tablet` - which
+  contains the word. Every photo on the site was therefore taken for a video card: its picture was
+  never offered, the press went looking for a video that does not exist, and the sheet opened as
+  "HD, size unknown". The word is now looked for again with "display" taken out of the way, which
+  leaves `player`, `play-button` and `playlist` counting as they did; measured on the device
+  afterwards, a photo gives its own 399.7 kB and a video card still gives its 3.0 MB rather than a
+  thumbnail. The class is read with `getAttribute`, since an svg's `className` is an object.
 - **The generic script's titles** skip text that is not rendered (xvideos keeps its age gate's
   heading hidden in the page), a lone media file name (YouPorn's player debug panel), the
   player's own labels (quality and speed menus, "Player settings"), loading notices, and rows of
