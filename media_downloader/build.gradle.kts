@@ -24,14 +24,14 @@ val gitDescribe: String? by lazy {
 }
 
 // The coordinates. JitPack passes its own -Pgroup/-Pversion and those win: it builds this module,
-// finds the one artifact, and serves it as com.github.Dev-Husnain:MediaDownloaderLibrary:<tag> -
+// finds the one artifact, and serves it as com.github.tetsdks:mediadownloader:<tag> -
 // the repository's name, not the module's, because the repo publishes a single artifact.
 //
 // A release is therefore only ever a git tag; there is no version to edit here. What is left is
 // what a *local* publish is called, and that follows git too, so publishing an unreleased working
 // tree can never quietly overwrite a real version in ~/.m2 - its name says what it is.
 group = (findProperty("group") as? String)?.takeIf { it.contains('.') }
-    ?: "com.github.Dev-Husnain.MediaDownloaderLibrary"
+    ?: "com.github.tetsdks.mediadownloader"
 version = (findProperty("version") as? String)?.takeIf { it != Project.DEFAULT_VERSION }
     ?: gitDescribe
     ?: "0.0.0-local"
@@ -110,7 +110,7 @@ publishing {
                 description.set(
                     "Link parsing, in-browser media detection and background downloads for Android.",
                 )
-                url.set("https://github.com/Dev-Husnain/MediaDownloaderLibrary")
+                url.set("https://github.com/tetsdks/mediadownloader")
                 licenses {
                     license {
                         name.set("The Apache License, Version 2.0")
@@ -119,8 +119,8 @@ publishing {
                 }
                 developers {
                     developer {
-                        id.set("Dev-Husnain")
-                        name.set("Hussnain Mehdi")
+                        id.set("tetsdks")
+                        name.set("tetsdks")
                     }
                 }
             }

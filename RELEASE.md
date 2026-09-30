@@ -6,11 +6,13 @@ The library lives in two repositories and a release goes to both at once:
 
 | repository | coordinate | branch pushed |
 |---|---|---|
-| `tetsdks/mediadownloader` | `com.github.tetsdks:mediadownloader` | `tetsdks-main` (main, re-authored, + its own naming) |
-| `Dev-Husnain/MediaDownloaderLibrary` | `com.github.Dev-Husnain:MediaDownloaderLibrary` | `main` |
+| `tetsdks/mediadownloader` | `com.github.tetsdks:mediadownloader` | `for-tetsdks` |
+| `Dev-Husnain/MediaDownloaderLibrary` | `com.github.Dev-Husnain:MediaDownloaderLibrary` | `for-dev-husnain` |
 
-They carry the same work and the same tag. Two things differ: whose name is on it - the commits,
-the README's coordinate and the pom's project page and owner - and nothing else. `tools/release.sh` does both itself - see CLAUDE.md, *Two homes*.
+They carry the same work and the same tag; what differs is whose name is on it - the commits, the
+README's coordinate and the pom's project page and owner. Neither repository is pushed the branch
+you work on: each gets a branch generated from `main` in its own name - see CLAUDE.md, *Two
+homes*. `tools/release.sh` does both itself - see CLAUDE.md, *Two homes*.
 
 JitPack builds the tag and passes `-Pversion=<tag>` into the build, so the tag decides what gets
 published. `media_downloader/build.gradle.kts` only falls back to `git describe` for local
@@ -18,7 +20,7 @@ publishes, which is why a working-tree publish is called something like
 `0.1.0-2-gab12cd3-dirty` and can never quietly overwrite a real release in `~/.m2`.
 
 Between releases, `tools/push.sh` pushes `main` to both homes the same way, without a tag. It is
-the only push there is: never push `tetsdks-main` by hand, and never merge it back.
+the only push there is: never commit on a generated branch, and never merge one back.
 
 ## One command
 
@@ -40,14 +42,14 @@ The step everyone forgets - the install snippet in `README.md` - is the one it d
 
 # 2. Commit anything outstanding, then tag and push. This is the release.
 git tag 0.2.0
-git push dev-husnain main
-git push dev-husnain 0.2.0
+git push dev-husnain for-dev-husnain:main
+git push dev-husnain refs/tags/Dev-Husnain-0.2.0:refs/tags/0.2.0
 ```
 
 Then, once JitPack has built it (a minute or two), update the version in `README.md`,
 `media_downloader/HOST-GUIDE.md` and `CLAUDE.md` so the install snippets show the newest release,
-and commit that - and rebuild `tetsdks-main` from `main` with the other owner's name on every
-commit, write its own README and pom metadata, and push the same tag there. The badge at the top of each README
+and commit that - and build each home's branch from `main` with that owner's name on every
+commit, write the other home's own README and pom metadata, and push the same tag to both. The badge at the top of each README
 needs no edit; it reads the newest tag itself. All of this is what the script exists to save you
 from; the rebuild in particular is fiddly enough that doing it by hand is how a stray name ends up
 on a contributor list.

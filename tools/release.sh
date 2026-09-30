@@ -39,29 +39,33 @@ if git diff --quiet; then
 else
     git commit -aqm "Say $version in the install instructions"
 fi
-
-echo "== $HOME_REPO"
+# What the release is, here: the tag `git describe` reads, so a local publish off this commit is
+# named after it. Each home's own tag is made on its own branch below, because a tag can point at
+# only one commit in one clone - and both repositories call theirs $version.
 git tag -a "$version" -m "${message:-$version}"
-push_home
-git push "$HOME_REMOTE" "$version"
 
-echo "== $MIRROR_REPO"
-rebuild_mirror
-# The tag is called $version in that repository too; here it needs a name of its own, because a
-# tag can point at only one commit in one clone.
-git tag -f -a "mirror-$version" -m "${message:-$version}" >/dev/null
-push_mirror
-git push --force "$MIRROR_REMOTE" "refs/tags/mirror-$version:refs/tags/$version"
-back_to_main
+echo "== $TET_REPO"
+branch_for_tetsdks
+git tag -f -a "$TET_OWNER-$version" -m "${message:-$version}" >/dev/null
+push_branch "$TET_REMOTE" "$TET_BRANCH"
+git push --force "$TET_REMOTE" "refs/tags/$TET_OWNER-$version:refs/tags/$version"
+
+echo "== $DH_REPO"
+branch_for_dev_husnain
+git tag -f -a "$DH_OWNER-$version" -m "${message:-$version}" >/dev/null
+push_branch "$DH_REMOTE" "$DH_BRANCH"
+git push --force "$DH_REMOTE" "refs/tags/$DH_OWNER-$version:refs/tags/$version"
+
+back_to_work
 
 cat <<NOTE
 
 Pushed to both. JitPack builds on the first request for an artifact, so ask each one once:
 
   curl -s -o /dev/null -w "%{http_code}\n" \
-    https://jitpack.io/com/github/${HOME_REPO/\//\/}/$version/${HOME_REPO#*/}-$version.pom
+    https://jitpack.io/com/github/${TET_REPO/\//\/}/$version/${TET_REPO#*/}-$version.pom
   curl -s -o /dev/null -w "%{http_code}\n" \
-    https://jitpack.io/com/github/${MIRROR_REPO/\//\/}/$version/${MIRROR_REPO#*/}-$version.pom
+    https://jitpack.io/com/github/${DH_REPO/\//\/}/$version/${DH_REPO#*/}-$version.pom
 
 200 means it is being served. The end of each build.log beside those files prints the coordinate
 that was actually published - read that rather than assuming.
