@@ -6,11 +6,12 @@ The library lives in two repositories and a release goes to both at once:
 
 | repository | coordinate | branch pushed |
 |---|---|---|
-| `tetsdks/mediadownloader` | `com.github.tetsdks:mediadownloader` | `tetsdks-main` (main + its own README) |
+| `tetsdks/mediadownloader` | `com.github.tetsdks:mediadownloader` | `tetsdks-main` (main, re-authored, + its own README) |
 | `Dev-Husnain/MediaDownloaderLibrary` | `com.github.Dev-Husnain:MediaDownloaderLibrary` | `main` |
 
-They carry the same commits and the same tag; only the README differs, since each front page names
-its own coordinate. `tools/release.sh` makes that one commit itself - see CLAUDE.md, *Two homes*.
+They carry the same work and the same tag. Two things differ: the README, since each front page
+names its own coordinate, and the name on the commits, since each repository's contributor list
+should be its own owner alone. `tools/release.sh` does both itself - see CLAUDE.md, *Two homes*.
 
 JitPack builds the tag and passes `-Pversion=<tag>` into the build, so the tag decides what gets
 published. `media_downloader/build.gradle.kts` only falls back to `git describe` for local
@@ -37,15 +38,17 @@ The step everyone forgets - the install snippet in `README.md` - is the one it d
 
 # 2. Commit anything outstanding, then tag and push. This is the release.
 git tag 0.2.0
-git push origin main
-git push origin 0.2.0
+git push dev-husnain main
+git push dev-husnain 0.2.0
 ```
 
 Then, once JitPack has built it (a minute or two), update the version in `README.md`,
 `media_downloader/HOST-GUIDE.md` and `CLAUDE.md` so the install snippets show the newest release,
-and commit that - and push the same tag to the other repository, with its own README on
-`tetsdks-main`. The badge at the top of each README needs no edit; it reads the newest tag itself.
-This is what the script exists to save you from.
+and commit that - and rebuild `tetsdks-main` from `main` with the other owner's name on every
+commit, write its own README, and push the same tag there. The badge at the top of each README
+needs no edit; it reads the newest tag itself. All of this is what the script exists to save you
+from; the rebuild in particular is fiddly enough that doing it by hand is how a stray name ends up
+on a contributor list.
 
 ## Checking the release
 
