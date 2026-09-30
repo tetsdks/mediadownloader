@@ -159,19 +159,22 @@ The library never learns about YouTube; a host registers a reader in `MediaDownl
 
 ## Branches in this repo
 
-- `main` — published, Apache-2.0, no YouTube. The only branch that is pushed.
+- `main` — published, Apache-2.0, no YouTube. **The only branch worked on.**
+- `tetsdks-main` — not a branch to work on: `tools/push.sh` throws it away and rebuilds it from
+  `main` every time (see *Two homes*). Anything committed on it by hand is lost on the next push.
 - `youtube-demo` — `main` + the demo wired to the *published* add-on, for hands-on YouTube testing.
   Local only; the hook blocks pushing it.
 - `archive/youtube-in-library` (tag `archive/youtube-in-library-2026-09`) — the old shape, when the
   YouTube scraper still lived inside the library. Kept for reference, never merged.
 
-All three build from a clean checkout. After switching branches in Android Studio use
+All of them build from a clean checkout. After switching branches in Android Studio use
 **File → Reload All from Disk**; a stale open buffer has silently overwritten
 `gradle/libs.versions.toml` here before.
 
 ## Working agreements
 
-- Commits and tags are authored by **Hussnain Mehdi** alone, over SSH remote `github-dev-husnain`.
+- Commits and tags on `main` are authored by **Hussnain Mehdi** alone, over SSH remote
+  `github-dev-husnain`; the mirror's copies carry `tetsdks` and are written by the script.
   No AI/assistant attribution or co-author lines in commit messages.
 - Releases are cut by tag in both repos; JitPack caches a tag, so a bad publish needs a *new* tag.
 - The `newdownloader` app still carries its own copy of the module and is bumped to the published
