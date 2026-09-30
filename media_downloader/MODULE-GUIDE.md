@@ -652,8 +652,17 @@ its wiring in `MediaDownloaderComponent`.
 
 ## 7. Known gaps
 
-- Instagram, Facebook and LinkedIn scrapers are verified by unit tests on sample pages, not yet
-  live: they need a signed-in session or real post links.
+- Instagram and Facebook scrapers are verified by unit tests on sample pages, not yet live: they
+  need a signed-in session or real post links. LinkedIn has been read live, through a `lnkd.in`
+  link, since the shortener was added.
+- **A `lnkd.in` link is read by following it, not by resolving it.** The address says nothing about
+  what is behind it, so `isLinkedInPostLink` claims the whole host and the request (which follows
+  redirects) lands on the page it was written for. LinkedIn wraps *every* outside link a post
+  mentions in one of these, so the page is then asked for its own address (`og:url`): a page that
+  is not a post is left alone, because its cover picture would otherwise be offered as the post's
+  media. A short link that leads to a site the module could read on its own - a YouTube video, say
+  - still fails, since nothing re-enters the pipeline with the resolved address; that would have to
+  re-run the site check too.
 - The module logs only failures it cannot report any other way (a job started before
   `initialize`, background upkeep errors), under the tag `MediaDownloader`.
 - Pinterest downloads are filed under `Website`, as in the old app; `Constants.Storage.SITE_FOLDERS`

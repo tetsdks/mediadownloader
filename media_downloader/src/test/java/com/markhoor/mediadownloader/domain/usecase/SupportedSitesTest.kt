@@ -48,7 +48,8 @@ class SupportedSitesTest {
     fun everyHostTheAppNamesIsSupported() {
         listOf(
             "9gag.com", "bitchute.com", "dailymotion.com", "facebook.com", "fb.watch",
-            "imdb.com", "instagram.com", "linkedin.com", "moj.sharechat.com", "mojapp.in",
+            "imdb.com", "instagram.com", "linkedin.com", "lnkd.in", "moj.sharechat.com",
+            "mojapp.in",
             "pexels.com", "pin.it", "pinterest.com", "redd.it", "reddit.com", "rumble.com",
             "snackvideo.com", "ted.com", "threads.com", "threads.net", "tiktok.com",
             "tumblr.com", "twitch.tv", "twitter.com", "vimeo.com", "x.com",

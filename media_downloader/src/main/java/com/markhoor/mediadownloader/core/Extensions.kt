@@ -193,7 +193,14 @@ internal fun String.isThreadsVideoFileUrl(): Boolean =
 internal fun String.isThreadsMediaPage(): Boolean =
     THREADS_MEDIA_PAGE.matches(take(Constants.Twitter.MATCH_LIMIT))
 
-internal fun String.isLinkedInPostLink(): Boolean = isSiteOf("linkedin.com") && contains("/posts/")
+/**
+ * A post's own page, or the shortener LinkedIn hands out when a post is shared from its app. Where
+ * a `lnkd.in` link leads is only known once it has been followed, and it need not be a post at all
+ * - LinkedIn wraps every outside link a post mentions in one too - so the scraper judges the page
+ * it lands on rather than the address.
+ */
+internal fun String.isLinkedInPostLink(): Boolean =
+    (isSiteOf("linkedin.com") && contains("/posts/")) || isSiteOf("lnkd.in")
 
 /** The whole host: TikTok's feed never puts the post id in the address bar. */
 internal fun String.isTikTokLink(): Boolean = isSiteOf("tiktok.com")

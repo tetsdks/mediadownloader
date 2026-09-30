@@ -5,6 +5,8 @@ import com.markhoor.mediadownloader.core.Constants.Network
 import com.markhoor.mediadownloader.core.Constants.QualityLabels
 import com.markhoor.mediadownloader.core.decodeHtmlEntities
 import com.markhoor.mediadownloader.core.isHttpUrl
+import com.markhoor.mediadownloader.core.isLinkedInPostLink
+import com.markhoor.mediadownloader.core.isSiteOf
 import com.markhoor.mediadownloader.core.titleFromHtml
 import com.markhoor.mediadownloader.data.network.HttpFetcher
 import com.markhoor.mediadownloader.data.scraper.ScrapedMediaDto
@@ -16,6 +18,9 @@ import com.markhoor.mediadownloader.domain.models.MediaType
  * A public LinkedIn post, read from LinkedIn's own page. The player's `data-sources` attribute
  * lists every encode (url, type, bitrate), largest first here; a post without a player is a
  * picture post, whose picture is its og:image.
+ *
+ * A `lnkd.in` short link is read the same way: the request follows it, and what comes back is the
+ * page it was written for.
  */
 internal class LinkedInScraper(private val fetcher: HttpFetcher) : SiteScraper() {
 
@@ -25,6 +30,7 @@ internal class LinkedInScraper(private val fetcher: HttpFetcher) : SiteScraper()
     private val bitrate = Regex(""""data-bitrate"\s*:\s*(\d+)""")
     private val heightInUrl = Regex("""/mp4-(\d{3,4})p-""")
     private val ogImage = Regex("""property="og:image"\s+content="([^"]+)"""")
+    private val ownAddress = Regex("""property="og:url"\s+content="([^"]+)"""")
 
     private val headers = mapOf(
         "User-Agent" to LinkedIn.USER_AGENT,
@@ -34,6 +40,7 @@ internal class LinkedInScraper(private val fetcher: HttpFetcher) : SiteScraper()
 
     override suspend fun scrapeOrNull(url: String): ScrapedMediaDto? {
         val page = fetcher.getText(url, headers).getOrThrow().ifBlank { return null }
+        if (url.isSiteOf("lnkd.in") && !leadsToAPost(page)) return null
         val title = page.titleFromHtml().ifBlank { null }
 
         val videos = videoQualities(page)
@@ -49,6 +56,15 @@ internal class LinkedInScraper(private val fetcher: HttpFetcher) : SiteScraper()
             thumbnailUrl = picture,
         )
     }
+
+    /**
+     * Whether the page a short link led to is a post's. LinkedIn wraps every outside link a post
+     * mentions in a `lnkd.in` of its own, so such a link lands as often on somebody else's site as
+     * on a post - and that site has a cover picture too, which would otherwise be offered as this
+     * post's media. The page says its own address, so it is asked.
+     */
+    private fun leadsToAPost(page: String): Boolean =
+        ownAddress.find(page)?.groupValues?.get(1)?.decodeHtmlEntities()?.isLinkedInPostLink() == true
 
     /** Every encode, named by the height in its path (`/mp4-720p-...`) or else by its bitrate. */
     private fun videoQualities(page: String): List<ScrapedQualityDto> {
