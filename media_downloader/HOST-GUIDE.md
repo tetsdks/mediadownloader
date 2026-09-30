@@ -497,7 +497,8 @@ suspend fun read(text: String): Result<ParsedLink>
 | `read(text)` | `Result<ParsedLink>` | The same, for a host that does not know what it was handed: `ParsedLink.One` is a piece of media, `ParsedLink.Many` a collection - a playlist, an album - listing links to read later (§4.4). Use this rather than `parse` when a link may be either; `LinkParseViewModel` already does. |
 
 Sites the parser reads directly (paste or share a link): **Facebook, Instagram, Threads, TikTok,
-X/Twitter (needs the key), Pinterest (incl. `pin.it`), Dailymotion, LinkedIn**, and - only while
+X/Twitter (needs the key), Pinterest (incl. `pin.it`), Dailymotion, LinkedIn (incl. `lnkd.in`)**,
+and - only while
 `allowAdultSites` is on, and refused as `SiteBlocked` otherwise, which is the default - **the tube
 sites**, through one generic reader rather than a scraper each.
 

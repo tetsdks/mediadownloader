@@ -408,7 +408,8 @@ internal object Constants {
 
         /** Sites the parser reads, as hosts: on their feeds a card's own page is worth handing over. */
         val PARSER_SITE_HOSTS: Set<String> = setOf(
-            "linkedin.com", "dailymotion.com", "pinterest.com", "pin.it", "imdb.com", "tiktok.com",
+            "linkedin.com", "lnkd.in", "dailymotion.com", "pinterest.com", "pin.it", "imdb.com",
+            "tiktok.com",
         )
     }
 
@@ -578,7 +579,8 @@ internal object Constants {
         val SUPPORTED: Set<String> = setOf(
             // Social & community
             "facebook.com", "fb.watch", "instagram.com", "x.com", "twitter.com", "tiktok.com",
-            "threads.net", "threads.com", "pinterest.com", "pin.it", "linkedin.com", "tumblr.com",
+            "threads.net", "threads.com", "pinterest.com", "pin.it", "linkedin.com", "lnkd.in",
+            "tumblr.com",
             "reddit.com", "redd.it", "snapchat.com", "bsky.app", "mastodon.social", "weibo.com",
             "t.me", "medium.com", "quora.com",
             // Video

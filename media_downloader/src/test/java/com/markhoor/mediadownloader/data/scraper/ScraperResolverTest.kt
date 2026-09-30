@@ -46,6 +46,8 @@ class ScraperResolverTest {
             "https://www.instagram.com/p/abc/" to listOf("instagram"),
             "https://www.threads.com/@someone/post/abc" to listOf("instagram"),
             "https://www.linkedin.com/posts/someone_activity-1" to listOf("linkedIn"),
+            // The shortener LinkedIn hands out when a post is shared from its app.
+            "https://lnkd.in/p/ekARMhxS" to listOf("linkedIn"),
             "https://www.tiktok.com/@someone/video/7684717011754093844" to listOf("tikTok", "getInDevice"),
             "https://www.tiktok.com/foryou" to listOf("tikTok", "getInDevice"),
             "https://x.com/someone/status/1234567890" to listOf("twitter"),
