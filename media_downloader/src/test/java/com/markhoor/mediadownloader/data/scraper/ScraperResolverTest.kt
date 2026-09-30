@@ -24,6 +24,7 @@ class ScraperResolverTest {
         facebookShare = Named("facebookShare"),
         instagram = Named("instagram"),
         linkedIn = Named("linkedIn"),
+        imdb = Named("imdb"),
         tikTok = Named("tikTok"),
         tube = tube,
         twitter = twitter,
@@ -55,6 +56,7 @@ class ScraperResolverTest {
             "https://www.dailymotion.com/video/x8da0md" to listOf("dailymotion"),
             "https://www.dailymotion.com/player/metadata/video/x8da0md" to listOf("dailymotion"),
             "https://www.pinterest.com/pin/62628251062820323/" to listOf("pinterest"),
+            "https://www.imdb.com/video/vi3481586201/" to listOf("imdb"),
             "https://pin.it/abc123" to listOf("pinterest"),
             // One reader for the tube sites: what makes a link its own is the category of the
             // host and a path that names a video, not a list of sites.

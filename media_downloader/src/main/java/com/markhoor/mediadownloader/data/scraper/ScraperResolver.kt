@@ -4,6 +4,7 @@ import com.markhoor.mediadownloader.core.isDailymotionMetadataLink
 import com.markhoor.mediadownloader.core.isDailymotionVideoLink
 import com.markhoor.mediadownloader.core.isFacebookShareLink
 import com.markhoor.mediadownloader.core.isFacebookVideoLink
+import com.markhoor.mediadownloader.core.isImdbVideoPage
 import com.markhoor.mediadownloader.core.isInstagramPostLink
 import com.markhoor.mediadownloader.core.isLinkedInPostLink
 import com.markhoor.mediadownloader.core.isPinterestPinLink
@@ -26,6 +27,7 @@ internal class ScraperResolver(
     private val facebookShare: SiteScraper,
     private val instagram: SiteScraper,
     private val linkedIn: SiteScraper,
+    private val imdb: SiteScraper,
     private val tikTok: SiteScraper,
     private val twitter: SiteScraper?,
     private val dailymotion: SiteScraper,
@@ -59,6 +61,7 @@ internal class ScraperResolver(
         url.isTwitterStatusLink() -> listOfNotNull(twitter)
         url.isDailymotionVideoLink() || url.isDailymotionMetadataLink() -> listOf(dailymotion)
         url.isPinterestPinLink() -> listOf(pinterest)
+        url.isImdbVideoPage() -> listOf(imdb)
         tube.reads(url) -> listOf(tube)
         else -> emptyList()
     }

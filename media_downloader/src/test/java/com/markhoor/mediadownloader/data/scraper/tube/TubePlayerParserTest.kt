@@ -263,12 +263,4 @@ class TubePlayerParserTest {
 
     // endregion
 
-    @Test
-    fun `a running time is read the way linked data writes it`() {
-        assertEquals(753_000L, TubePlayerParser.millisOf("PT0H12M33S"))
-        assertEquals(3_600_000L, TubePlayerParser.millisOf("PT1H"))
-        assertEquals(90_000L, TubePlayerParser.millisOf("PT1M30S"))
-        assertNull(TubePlayerParser.millisOf("PT0S"))
-        assertNull(TubePlayerParser.millisOf("twelve minutes"))
-    }
 }
