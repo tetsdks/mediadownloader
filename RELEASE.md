@@ -17,6 +17,9 @@ published. `media_downloader/build.gradle.kts` only falls back to `git describe`
 publishes, which is why a working-tree publish is called something like
 `0.1.0-2-gab12cd3-dirty` and can never quietly overwrite a real release in `~/.m2`.
 
+Between releases, `tools/push.sh` pushes `main` to both homes the same way, without a tag. It is
+the only push there is: never push `tetsdks-main` by hand, and never merge it back.
+
 ## One command
 
 ```bash

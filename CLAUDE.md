@@ -25,6 +25,7 @@ both in step with code changes.
 ./gradlew :media_downloader:lintDebug
 ./gradlew :app:installDebug                         # demo app
 ./gradlew :media_downloader:publishToMavenLocal     # for a local consumer
+tools/push.sh                                       # push main to both homes (see below)
 ```
 
 - Live scraper check against real sites (skipped unless the env var is set):
@@ -46,14 +47,16 @@ the commits, because each repository's contributor list should show its own owne
 | `main` | `dev-husnain` | `Dev-Husnain/MediaDownloaderLibrary` | `com.github.Dev-Husnain:MediaDownloaderLibrary` | `Hussnain Mehdi <hussnain.personal@gmail.com>` |
 | `tetsdks-main` | `origin` | `tetsdks/mediadownloader` | `com.github.tetsdks:mediadownloader` | `tetsdks <topedgetech111@gmail.com>` |
 
-Work happens on `main` only, authored by Hussnain. `tetsdks-main` is **never developed on and never
-merged back**: `tools/release.sh` rebuilds it from `main` each release, rewriting every commit to
-the other name and adding one commit that names that repository instead of this one - its README,
-and the pom metadata in `media_downloader/build.gradle.kts`, so a consumer of one coordinate is
-never pointed at the other repository. The rewrite keeps the original dates, so a
-commit comes out with the same hash every time and the branch grows by exactly what `main` grew by;
-its push is forced because the README commit is made afresh, and the tags keep every published
-commit reachable. A fresh clone must be given its identity
+Work happens on `main` only, authored by Hussnain. `tetsdks-main` is **never developed on, never
+committed to by hand and never merged back**, so there is one branch to think about and one way to
+push: **`tools/push.sh`**. It pushes `main` to its own home, then rebuilds `tetsdks-main` from
+`main` - rewriting every commit to the other name and adding one commit that names that repository
+instead of this one: its README, and the pom metadata in `media_downloader/build.gradle.kts`, so a
+consumer of one coordinate is never pointed at the other repository. `tools/release.sh` does the
+same with a version and a tag on top, and both share `tools/homes.sh`, where the two homes are
+described once. The rewrite keeps the original dates, so a commit comes out with the same hash
+every time and the branch grows by exactly what `main` grew by; the mirror's push is forced because
+its own last commit is made afresh, and the tags keep every published commit reachable. A fresh clone must be given its identity
 (`git config user.email hussnain.personal@gmail.com`) before committing - the script refuses to
 release if anyone else authored a commit on `main`, because a pushed commit cannot be corrected
 without rewriting history. Nothing in a build file names either repository: JitPack passes the
