@@ -1,6 +1,6 @@
 # MediaDownloaderLibrary
 
-[![JitPack](https://jitpack.io/v/Dev-Husnain/MediaDownloaderLibrary.svg)](https://jitpack.io/#Dev-Husnain/MediaDownloaderLibrary)
+[![JitPack](https://jitpack.io/v/tetsdks/mediadownloader.svg)](https://jitpack.io/#tetsdks/mediadownloader)
 
 An Android library that turns a link into media and downloads it: link parsing, in-browser media
 detection, background downloads with progress, pause/resume/retry, and HLS streams remuxed to MP4.
@@ -61,7 +61,7 @@ dependencyResolutionManagement {
 ```kotlin
 // app/build.gradle.kts
 dependencies {
-    implementation("com.github.Dev-Husnain:MediaDownloaderLibrary:0.1.4")
+    implementation("com.github.tetsdks:mediadownloader:0.1.4")
 }
 ```
 
