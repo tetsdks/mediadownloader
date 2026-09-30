@@ -350,6 +350,22 @@ its wiring in `MediaDownloaderComponent`.
   (`tweeload.apiKey`, gitignored) into `BuildConfig.TWEELOAD_API_KEY`; the value is the one the
   old url-parser had hard-coded, so a build machine needs that line to parse X links. Instagram's and Pinterest's anonymous
   browser-session cookies stay in `Constants.kt`: they identify no account.
+- **A post is read as the reader sees it.** Instagram has always been read with the browser's own
+  cookies; Facebook, TikTok and IMDb are too. A Facebook post shared with friends, or one inside a
+  group the reader belongs to, and a TikTok video a private account left up for its followers, are
+  invisible to a request carrying no session - which is what those scrapers used to send, so the
+  press came back with nothing and the reader was told the media could not be found. Signed out
+  there are no cookies to send and every request goes exactly as it did before, so a public post is
+  unaffected either way. Two things this does not fix: a post Facebook itself will not show ("this
+  content isn't available at the moment") has nothing behind it whatever session asks, and a link
+  pasted into an app that has never browsed the site has no session to borrow.
+- **TikTok is asked of the api first and of its own page second.** tikwm answers a public video
+  best - several files, each with its size, fetchable by anyone - but it is a stranger to the
+  reader's account, so `TikTokPageScraper` reads the site itself when the api has nothing. The page
+  carries the files in a `<script id="api-data">` block. They are handed over **with** the session
+  that was given them: measured against the site, the play url answers `403` to a request with no
+  cookies however it is dressed up, and `206` with the cookies, a browser's name and the site as
+  where it came from - so all three travel with the media rather than being left behind at the page.
 - **Ktor only.** The size probe and the signed-in Instagram request moved off their own OkHttp
   clients onto the shared Ktor client; nothing depends on OkHttp directly.
 - **HTML entities are decoded in pure Kotlin** (numeric + common named) instead of

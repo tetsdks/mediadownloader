@@ -13,11 +13,21 @@ import java.net.URLEncoder
 
 /**
  * A TikTok video, through the tikwm api, which gives its title, cover and SD, watermarked and HD
- * files. When the api has nothing, a video link still yields tikwm's direct play url for its id.
+ * files.
+ *
+ * The api is asked first, because for a video anyone can watch it answers best: several files, each
+ * with its size, and no session needed to fetch them. It is a stranger to the reader's account
+ * though, so a video shared with friends only - or one from a private account the reader follows -
+ * is invisible to it; [signedInPage] then reads TikTok's own page with the browser's cookies.
+ * Failing both, a video link still yields tikwm's direct play url for its id.
  */
-internal class TikTokScraper(private val fetcher: HttpFetcher) : SiteScraper() {
+internal class TikTokScraper(
+    private val fetcher: HttpFetcher,
+    private val signedInPage: SiteScraper,
+) : SiteScraper() {
 
-    override suspend fun scrapeOrNull(url: String): ScrapedMediaDto? = fromApi(url) ?: directPlay(url)
+    override suspend fun scrapeOrNull(url: String): ScrapedMediaDto? =
+        fromApi(url) ?: signedInPage.scrape(url).getOrNull() ?: directPlay(url)
 
     private suspend fun fromApi(url: String): ScrapedMediaDto? {
         val apiUrl = "${TikTok.TIKWM_API_URL}?url=${URLEncoder.encode(url, "UTF-8")}&hd=1"
