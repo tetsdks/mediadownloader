@@ -674,6 +674,17 @@ function looksLikeVideoCard(el){
                 }
                 var marks = node.querySelectorAll('[class*="play" i],[aria-label*="play" i],[class*="duration" i]');
                 for(var i = 0; i < marks.length; i++){
+                    /* "display" is not "play". Pexels hangs an "Edit in Canva" button over every
+                       photo with DisplayNone_mobile-tablet on it, and a substring match read that
+                       as a play badge - so every photograph on the site was taken for a video
+                       card: its picture was never offered, the press went looking for a video
+                       that does not exist, and the sheet opened as "HD, size unknown". The word
+                       is looked for again with "display" taken out of the way, which leaves
+                       "player", "play-button" and "playlist" counting as they did. Read through
+                       getAttribute, since an svg's className is an object rather than a string. */
+                    var mksMark = ((marks[i].getAttribute('class') || '') + ' ' +
+                        (marks[i].getAttribute('aria-label') || '')).replace(/display/gi, '');
+                    if(!/play|duration/i.test(mksMark)) continue;
                     var r = marks[i].getBoundingClientRect();
                     if(r.width > 10 && r.height > 10 && over(r)) return true;
                 }
