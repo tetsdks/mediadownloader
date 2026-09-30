@@ -52,7 +52,9 @@ on. **`tools/push.sh`** is the only push there is: for each home it throws that 
 builds it again from `main` with that home's name on every commit, and force-pushes it as that
 repository's `main`. The two generated branches are **never developed on, never committed to by
 hand and never merged back** - anything committed on one is gone at the next push. Because both are
-re-authored, it does not matter which name this clone commits as.
+re-authored, it does not matter which name this clone commits as. `main` deliberately tracks no
+remote branch: it is never pushed as it stands, so an ahead/behind count against either repository
+would only mislead.
 
 `main` is written in **tetsdks** own name - it is the public face - so `for-tetsdks` only needs
 re-authoring, while `for-dev-husnain` also swaps those names for its own in one commit: the README,
