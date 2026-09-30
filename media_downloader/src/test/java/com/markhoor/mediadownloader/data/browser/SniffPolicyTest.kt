@@ -111,6 +111,9 @@ class SniffPolicyTest {
         // A short link is one post already, so it needs no hint about where posts live.
         assertEquals("", policy.postPathFor("https://pin.it/abc"))
         assertEquals("/video/", policy.postPathFor("https://www.imdb.com/"))
+        // A post's page lists other people's posts under it; this is how a button on one of
+        // those knows which post it is on, rather than handing over the page's own.
+        assertEquals("/posts/", policy.postPathFor("https://www.linkedin.com/posts/someone_a-1"))
         assertEquals("", policy.postPathFor("https://www.dailymotion.com/pk"))
         assertEquals("", policy.postPathFor("https://rumble.com/videos"))
     }
