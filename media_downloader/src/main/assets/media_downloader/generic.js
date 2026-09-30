@@ -1057,9 +1057,13 @@ function makeBtn(el, card){
                media's page and its slate links to the trailer's own page, so handing over the
                film page offered nothing at all; the poster's card is the page that has it. */
             var mksPosterCard = el.tagName !== 'VIDEO' && el.tagName !== 'IFRAME' && card && card.href;
+            /* Which post this press is for, where the page holds more than its own - see
+               mksOwnPostHref. Empty on every page that holds only what its url names, which
+               leaves the choice below exactly as it was. */
+            var mksOwn = mksOwnPostHref(el);
             var href = (window.mksSingle && !mksPosterCard)
-                ? location.href
-                : ((card && card.href) || findLink(el) || location.href);
+                ? (mksOwn || location.href)
+                : ((card && card.href) || findLink(el) || mksOwn || location.href);
             var poster = '';
             if(el.tagName === 'IMG'){ poster = mksUsablePoster(el.src); }
             else if(el.getAttribute){ poster = mksUsablePoster(el.getAttribute('poster')); }
@@ -1073,13 +1077,13 @@ function makeBtn(el, card){
                take the biggest one there. It cannot be read off the video itself: the frame is
                cross origin, so a canvas of it is tainted and refuses to be read. */
             if(!poster && el.tagName === 'VIDEO'){
-                poster = (window.mksSingle ? ogImage() : '') || coverNear(el) || frameOf(el);
+                poster = ((window.mksSingle && !mksOwn) ? ogImage() : '') || coverNear(el) || frameOf(el);
             }
             /* Still nothing, and this is the only video the page holds: the page's own cover is
                this video's. streamable and archive.org set no poster on their player and have
                no card around it, so their downloads came with a grey square. A feed has many
                videos and never takes this, so one card is never given the page's cover. */
-            if(!poster && el.tagName === 'VIDEO' && mksDeepAll('video').length === 1){ poster = ogImage(); }
+            if(!poster && !mksOwn && el.tagName === 'VIDEO' && mksDeepAll('video').length === 1){ poster = ogImage(); }
             /* A picture post. Its card holds a still and no video anywhere - the post's own
                page has none either - so the picture is the download, and it is right here. A
                video's card carries an animated preview instead (webp or gif on 9gag), which is
@@ -1095,15 +1099,19 @@ function makeBtn(el, card){
                badge the card test does not recognise, so the poster was taken and a 13 kB
                thumbnail was offered for a nine second video. Asking the parser costs nothing for
                a picture pin either, since it answers those with the picture. */
+            /* And on a single media's page, a picture belonging to one of the other posts it
+               lists is not the download either: what is on screen is a downscaled copy -
+               linkedin serves feedshare-shrink_800 - while that post's own page has the
+               picture itself. */
             var mksPic = ((el.tagName === 'IMG' || (mksBgUrl(el) && !card)) &&
-                !looksLikeVideoCard(el) && !(window.mksParserSite && !window.mksSingle))
+                !looksLikeVideoCard(el) && !(window.mksParserSite && (!window.mksSingle || mksOwn)))
                 ? stillImageOf(el) : '';
             /* A picture's own description, where the page keeps one. Pinterest names every pin
                in the image's alt text and nowhere else on the card, so without this its
                downloads were all called "Unknown". */
             /* And that page states its name in its own og tag, which beats anything guessed
                at from the dom around the player. */
-            var mksName = window.mksSingle ? (ogTitle() || findTitle(el)) : findTitle(el);
+            var mksName = (window.mksSingle && !mksOwn) ? (ogTitle() || findTitle(el)) : findTitle(el);
             var mksAlt = el.tagName === 'IMG'
                 ? (el.getAttribute('alt') || '').replace(/\s+/g, ' ').trim()
                 : '';
@@ -1159,7 +1167,7 @@ function makeBtn(el, card){
                row with no link anywhere around them, each its own file, and withholding those
                left every press to be answered from whatever stream the page had already heard:
                the same title and the same size for every video on the page. */
-            var mksParserFeed = window.mksParserSite && !window.mksSingle && !!card;
+            var mksParserFeed = window.mksParserSite && ((!window.mksSingle && !!card) || !!mksOwn);
             var mksMedia = (mksFrame || mksParserFeed)
                 ? '' : (mksPic || (window.mksSingle ? '' : directSrc(el)));
             if(mksFrame){ href = location.href; }
@@ -1540,6 +1548,46 @@ function cardUnderMedia(el){
         }
     }catch(err){ }
     return null;
+}
+
+/* A url with nothing after the path: two links to the same post differ by the tracking their
+   site hangs off them, and one of them ends in a slash. */
+function mksBareUrl(h){
+    return (h || '').split('?')[0].split('#')[0].replace(/\/+$/, '');
+}
+
+/* The post this media belongs to, on a page that is one post's own and lists others under it.
+   Linkedin's post page ends with a "related posts" section - eleven more articles, each with a
+   video or a picture of its own - and the page's url answers with the post at the top, so every
+   button down there handed the top post over: a press on one of those videos offered a picture
+   from a different post altogether.
+
+   The nearest thing above the media naming exactly one post is that post's own page. A node
+   naming several is the list around it, so the walk stops there and the page stands, and a media
+   whose nearest post is the page's own gives nothing back - there is nothing to correct. Asked
+   only where the site's posts live at a known path, which is what tells one apart from the
+   profile, hashtag and sign-up links beside it. */
+function mksOwnPostHref(el){
+    if(!window.mksParserSite || !window.mksPostPath) return '';
+    var here = mksBareUrl(location.href);
+    var node = el;
+    for(var i = 0; i < 8 && node; i++){
+        var one = '';
+        if(node.querySelectorAll){
+            var as = node.querySelectorAll('a[href]');
+            for(var k = 0; k < as.length; k++){
+                var h = as[k].href;
+                if(typeof h !== 'string' ||
+                   h.indexOf(location.origin + window.mksPostPath) !== 0) continue;
+                h = mksBareUrl(h);
+                if(one && h !== one) return '';
+                one = h;
+            }
+        }
+        if(one) return one === here ? '' : one;
+        node = mksUp(node);
+    }
+    return '';
 }
 
 /* Whether [card] leads to a post on a site the parser reads. Only asked on those sites' feeds,

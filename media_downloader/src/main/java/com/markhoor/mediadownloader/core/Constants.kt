@@ -404,6 +404,10 @@ internal object Constants {
             // Imdb's home is a poster per film linking to the film, and its editorial cards link to
             // a listing; only a video's own page holds something to download.
             "imdb.com" to "/video/",
+            // A LinkedIn post's page lists other people's posts under it, each with media of its
+            // own; this is what tells their links from the profile and hashtag links beside them,
+            // so a button down there hands over the post it is actually on.
+            "linkedin.com" to "/posts/",
         )
 
         /** Sites the parser reads, as hosts: on their feeds a card's own page is worth handing over. */

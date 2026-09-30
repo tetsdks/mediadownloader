@@ -616,6 +616,18 @@ its wiring in `MediaDownloaderComponent`.
   posts live at `/video/`, so its home - a poster per film, with the section's link lying beside
   each - draws no buttons at all; a picture there needs a link of its own, not one found next to
   it. A press on a player is never turned into a press on the tile.
+- **A page can be one post's own and still list other posts under it.** Linkedin ends a post's
+  page with a "related posts" section - eleven more articles, each with a video or a picture of
+  its own - and the page's url answers with the post at the top, so every button down there handed
+  that one over: a press on one of those videos offered a 56 kB picture from a different post
+  altogether. A press now looks for the post the pressed media belongs to first: the nearest thing
+  above it naming exactly one post (`window.mksPostPath` again) is that post's own page, while a
+  node naming several is the list around it and the walk stops there. Found, it is also treated
+  like a card on a feed - the poster on screen is not the download, since that post's own page has
+  the picture itself rather than linkedin's `feedshare-shrink_800` copy, and neither the page's
+  `og:title` nor its `og:image` describes it. Not found - which is every page holding only what
+  its url names - nothing changes. Verified on the device against both: a related post's video
+  offered its own 720p/640p, and the page's own video still offered the page's.
 - **A poster standing for a video on another page** is handed over as that page, even on a page
   read as holding one media: imdb's film page shows the trailer's slate, whose link is the page
   that has it. A video hidden again (imdb keeps its trailer's `<video>` behind the poster with
