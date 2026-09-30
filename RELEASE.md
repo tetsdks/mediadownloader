@@ -2,6 +2,16 @@
 
 **A release is a git tag. There is no version number to edit anywhere.**
 
+The library lives in two repositories and a release goes to both at once:
+
+| repository | coordinate | branch pushed |
+|---|---|---|
+| `tetsdks/mediadownloader` | `com.github.tetsdks:mediadownloader` | `tetsdks-main` (main + its own README) |
+| `Dev-Husnain/MediaDownloaderLibrary` | `com.github.Dev-Husnain:MediaDownloaderLibrary` | `main` |
+
+They carry the same commits and the same tag; only the README differs, since each front page names
+its own coordinate. `tools/release.sh` makes that one commit itself - see CLAUDE.md, *Two homes*.
+
 JitPack builds the tag and passes `-Pversion=<tag>` into the build, so the tag decides what gets
 published. `media_downloader/build.gradle.kts` only falls back to `git describe` for local
 publishes, which is why a working-tree publish is called something like
@@ -33,7 +43,9 @@ git push origin 0.2.0
 
 Then, once JitPack has built it (a minute or two), update the version in `README.md`,
 `media_downloader/HOST-GUIDE.md` and `CLAUDE.md` so the install snippets show the newest release,
-and commit that. The badge at the top of the README needs no edit - it reads the newest tag itself.
+and commit that - and push the same tag to the other repository, with its own README on
+`tetsdks-main`. The badge at the top of each README needs no edit; it reads the newest tag itself.
+This is what the script exists to save you from.
 
 ## Checking the release
 
