@@ -1,0 +1,97 @@
+package com.markhoor.mediadownloader.data.repo
+
+import com.markhoor.mediadownloader.core.Constants.QualityLabels
+import com.markhoor.mediadownloader.core.asMediaTitle
+import com.markhoor.mediadownloader.core.cleanTitle
+import com.markhoor.mediadownloader.core.isHlsPlaylistUrl
+import com.markhoor.mediadownloader.core.isHttpUrl
+import com.markhoor.mediadownloader.core.sensibleSize
+import com.markhoor.mediadownloader.data.hls.HlsMedia
+import com.markhoor.mediadownloader.data.hls.HlsQualityReader
+import com.markhoor.mediadownloader.data.network.MediaSizeProbe
+import com.markhoor.mediadownloader.data.scraper.ScrapedMediaDto
+import com.markhoor.mediadownloader.data.scraper.ScraperRacer
+import com.markhoor.mediadownloader.data.scraper.ScraperResolver
+import com.markhoor.mediadownloader.domain.models.MediaModel
+import com.markhoor.mediadownloader.domain.models.MediaParseException
+import com.markhoor.mediadownloader.domain.models.MediaQualityModel
+import com.markhoor.mediadownloader.domain.models.MediaType
+import com.markhoor.mediadownloader.domain.repo.MediaParserRepository
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.withContext
+
+/**
+ * Scrapes a link and turns what the scrapers read into media ready to offer: a lone HLS stream is
+ * expanded into its qualities, every other quality is measured, sizes that cannot be true are
+ * dropped, and the title is cleaned.
+ */
+internal class MediaParserRepositoryImpl(
+    private val resolver: ScraperResolver,
+    private val racer: ScraperRacer,
+    private val hlsQualityReader: HlsQualityReader,
+    private val sizeProbe: MediaSizeProbe,
+    private val ioDispatcher: CoroutineDispatcher,
+) : MediaParserRepository {
+
+    override suspend fun parse(url: String): Result<MediaModel> = withContext(ioDispatcher) {
+        val scrapers = resolver.scrapersFor(url)
+        if (scrapers.isEmpty()) return@withContext Result.failure(MediaParseException.LinkNotRecognised(url))
+        racer.firstSuccess(scrapers, url).fold(
+            onSuccess = { scraped -> Result.success(mediaModelOf(scraped, url)) },
+            onFailure = { error -> Result.failure(MediaParseException.MediaNotFound(url, error)) },
+        )
+    }
+
+    private suspend fun mediaModelOf(scraped: ScrapedMediaDto, sourceUrl: String): MediaModel {
+        val expanded = expandedQualities(scraped)
+        val sized = coroutineScope { expanded.qualities.map { async { withSensibleSize(it) } }.awaitAll() }
+        return MediaModel(
+            title = scraped.title?.cleanTitle()?.asMediaTitle().orEmpty(),
+            thumbnailUrl = scraped.thumbnailUrl?.takeIf { it.isHttpUrl() },
+            qualities = sized,
+            sourceUrl = sourceUrl,
+            // What the site said, and failing that what its stream turned out to be: several sites
+            // hand over a playlist and say nothing else about the video at all.
+            durationMillis = scraped.durationMillis ?: expanded.durationMillis,
+        )
+    }
+
+    /** The scraped qualities, or - when the only one is an HLS playlist - the qualities it lists. */
+    private suspend fun expandedQualities(scraped: ScrapedMediaDto): HlsMedia {
+        val qualities = scraped.qualities.filter { it.url.isNotBlank() }.map { quality ->
+            MediaQualityModel(
+                url = quality.url,
+                label = quality.label?.ifBlank { null } ?: QualityLabels.HD,
+                type = quality.type,
+                sizeBytes = quality.sizeBytes,
+                audioUrl = quality.audioUrl,
+                headers = scraped.headers,
+            )
+        }
+        val stream = qualities.singleOrNull()?.takeIf { it.url.isHlsPlaylistUrl() }
+            ?: return HlsMedia(qualities, null)
+        val read = hlsQualityReader.qualitiesOf(stream.url, stream.headers)
+        return if (read.qualities.isEmpty()) HlsMedia(qualities, read.durationMillis) else read
+    }
+
+    /** A file is asked its size; a stream's size was already worked out from its playlist. */
+    private suspend fun withSensibleSize(quality: MediaQualityModel): MediaQualityModel {
+        val measured = if (quality.url.isHlsPlaylistUrl()) null else sizeProbe.sizeOf(quality.url, quality.headers)
+        val whole = measured?.let { it + soundBytes(quality) }
+        return quality.copy(sizeBytes = (whole ?: quality.sizeBytes).sensibleSize(isVideo = quality.type == MediaType.Video))
+    }
+
+    /**
+     * The sound's own bytes, for a quality whose sound is a second file.
+     *
+     * Both files are downloaded and joined, so the picture alone is not what this costs - and the
+     * progress is measured against this number: a 71 MB picture with 100 MB of sound behind it sat
+     * at "100%, 71.4 MB / 71.4 MB" for as long again while the sound came down.
+     */
+    private suspend fun soundBytes(quality: MediaQualityModel): Long =
+        quality.audioUrl?.takeIf { !it.isHlsPlaylistUrl() }
+            ?.let { sizeProbe.sizeOf(it, quality.headers) } ?: 0L
+}
