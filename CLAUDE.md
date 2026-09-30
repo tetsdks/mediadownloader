@@ -38,29 +38,36 @@ tools/push.sh                                       # push main to both homes (s
 
 ## Two homes
 
-The library is published from two repositories. They hold the same work and the same tags. Two
-things differ: the README, because each front page has to name its own coordinate, and the name on
-the commits, because each repository's contributor list should show its own owner and nobody else.
+The library is published from two repositories. They hold the same work and the same tags; what
+differs is whose name is on it, because each contributor list should show one owner and nobody
+else.
 
-| branch | remote | repository | coordinate | author |
+| generated branch | remote | repository | coordinate | name on every commit |
 |---|---|---|---|---|
-| `main` | `dev-husnain` | `Dev-Husnain/MediaDownloaderLibrary` | `com.github.Dev-Husnain:MediaDownloaderLibrary` | `Hussnain Mehdi <hussnain.personal@gmail.com>` |
-| `tetsdks-main` | `origin` | `tetsdks/mediadownloader` | `com.github.tetsdks:mediadownloader` | `tetsdks <topedgetech111@gmail.com>` |
+| `for-tetsdks` | `origin` | `tetsdks/mediadownloader` | `com.github.tetsdks:mediadownloader` | `tetsdks <topedgetech111@gmail.com>` |
+| `for-dev-husnain` | `dev-husnain` | `Dev-Husnain/MediaDownloaderLibrary` | `com.github.Dev-Husnain:MediaDownloaderLibrary` | `Hussnain Mehdi <hussnain.personal@gmail.com>` |
 
-Work happens on `main` only, authored by Hussnain. `tetsdks-main` is **never developed on, never
-committed to by hand and never merged back**, so there is one branch to think about and one way to
-push: **`tools/push.sh`**. It pushes `main` to its own home, then rebuilds `tetsdks-main` from
-`main` - rewriting every commit to the other name and adding one commit that names that repository
-instead of this one: its README, and the pom metadata in `media_downloader/build.gradle.kts`, so a
-consumer of one coordinate is never pointed at the other repository. `tools/release.sh` does the
-same with a version and a tag on top, and both share `tools/homes.sh`, where the two homes are
-described once. The rewrite keeps the original dates, so a commit comes out with the same hash
-every time and the branch grows by exactly what `main` grew by; the mirror's push is forced because
-its own last commit is made afresh, and the tags keep every published commit reachable. A fresh clone must be given its identity
-(`git config user.email hussnain.personal@gmail.com`) before committing - the script refuses to
-release if anyone else authored a commit on `main`, because a pushed commit cannot be corrected
-without rewriting history. Nothing in a build file names either repository: JitPack passes the
-coordinate in (`-Pgroup`/`-Pversion`), which is why one build file serves both.
+**You work on `main` and nothing else**, and neither repository is ever pushed the branch you work
+on. **`tools/push.sh`** is the only push there is: for each home it throws that home's branch away,
+builds it again from `main` with that home's name on every commit, and force-pushes it as that
+repository's `main`. The two generated branches are **never developed on, never committed to by
+hand and never merged back** - anything committed on one is gone at the next push. Because both are
+re-authored, it does not matter which name this clone commits as.
+
+`main` is written in **tetsdks** own name - it is the public face - so `for-tetsdks` only needs
+re-authoring, while `for-dev-husnain` also swaps those names for its own in one commit: the README,
+where the coordinate is copied from and the badge reads that repository's tags, and the pom
+metadata in `media_downloader/build.gradle.kts`, so a consumer of one coordinate is never pointed
+at the other repository. Nothing else differs, down to the tree. Documentation that deliberately
+names *both* homes (this file, `RELEASE.md`) is left alone.
+
+The rewrite keeps every original date, so a commit comes out with the hash it came out with last
+time and a branch grows by exactly what `main` grew by; only each branch's own last commit is made
+afresh, which is why the pushes are forced - and each repository's tags pin every commit JitPack
+has been served, so a forced push cannot lose one. `tools/release.sh` does all of this with a
+version and a tag on top; both share `tools/homes.sh`, where the two homes are described once.
+Nothing in a build file needs the version: JitPack passes the coordinate in (`-Pgroup`/`-Pversion`)
+from the tag.
 
 ## Releasing
 
@@ -129,7 +136,7 @@ repo because NewPipeExtractor is GPLv3 and GPL obligations travel with distribut
 
 | | repo | licence | coordinate |
 |---|---|---|---|
-| library | `Dev-Husnain/MediaDownloaderLibrary` (this one) | Apache-2.0 | `com.github.Dev-Husnain:MediaDownloaderLibrary:0.1.4` |
+| library | `tetsdks/mediadownloader` + `Dev-Husnain/MediaDownloaderLibrary` (this one, both homes) | Apache-2.0 | `com.github.tetsdks:mediadownloader:0.1.4` |
 | YouTube add-on | `Dev-Husnain/MediaDownloaderYouTube` (`D:\Other Data\DownloaderLibByHussnain\MediaDownloaderYouTube`) | GPL-3.0 | `com.github.Dev-Husnain:MediaDownloaderYouTube:0.1.0` |
 
 The dependency only ever points **add-on → library**, never back. Nothing in this repo may name
@@ -160,8 +167,9 @@ The library never learns about YouTube; a host registers a reader in `MediaDownl
 ## Branches in this repo
 
 - `main` — published, Apache-2.0, no YouTube. **The only branch worked on.**
-- `tetsdks-main` — not a branch to work on: `tools/push.sh` throws it away and rebuilds it from
-  `main` every time (see *Two homes*). Anything committed on it by hand is lost on the next push.
+- `for-tetsdks`, `for-dev-husnain` — not branches to work on: `tools/push.sh` throws each away
+  and builds it again from `main` every time (see *Two homes*). Anything committed on one by hand
+  is lost at the next push.
 - `youtube-demo` — `main` + the demo wired to the *published* add-on, for hands-on YouTube testing.
   Local only; the hook blocks pushing it.
 - `archive/youtube-in-library` (tag `archive/youtube-in-library-2026-09`) — the old shape, when the
@@ -173,8 +181,10 @@ All of them build from a clean checkout. After switching branches in Android Stu
 
 ## Working agreements
 
-- Commits and tags on `main` are authored by **Hussnain Mehdi** alone, over SSH remote
-  `github-dev-husnain`; the mirror's copies carry `tetsdks` and are written by the script.
+- Each repository's history carries one name only - `tetsdks` on `tetsdks/mediadownloader`,
+  **Hussnain Mehdi** on `Dev-Husnain/MediaDownloaderLibrary` - and the script puts it there, so
+  what this clone commits as is its own business. Dev-Husnain is pushed over SSH remote
+  `github-dev-husnain`, tetsdks over HTTPS.
   No AI/assistant attribution or co-author lines in commit messages.
 - Releases are cut by tag in both repos; JitPack caches a tag, so a bad publish needs a *new* tag.
 - The `newdownloader` app still carries its own copy of the module and is bumped to the published
