@@ -699,6 +699,25 @@ its wiring in `MediaDownloaderComponent`.
   its `MVideo`/`ServerMVideo`/`inlineVideo` container - and stand aside if it already carries one.
   The card is asked rather than the whole post, so a post holding a picture beside its video keeps
   the picture's own button.
+- **The reels tray is a strip of covers, and its button opens what a cover stands for.** On
+  `m.facebook.com/watch` the Reels row holds an `<img>` per reel inside Facebook's own
+  `role="button"`, and that is all it holds: no player, no id, no link, because Facebook resolves
+  the tap on its own server (the page's 369 KB of html names no reel at all, and the cover's file
+  name has nothing to do with the video's id - both were checked). The picture rules leave the row
+  alone on purpose, since a tile is 135px of a 384px screen, which is the shape of the stories tray,
+  and a button there downloaded the cover. So its button claims nothing: it presses the tile and
+  leaves a note in `sessionStorage`, and the script on the page that opens reads the note and hands
+  the reel over by the id in the new address - one press, and the sheet opens on the reel that was
+  pressed. The note carries the address it was written on and the moment it was written, so it
+  cannot fire on a page the reader reached some other way, and a plain tap on a tile leaves no note
+  and opens the reel with nothing else happening. Two things the shape forced: the button is drawn
+  against the viewport from `document.body`, because the strip slides under a `transform` (which a
+  `position: fixed` child is measured from) and sits in a box stacking below the invisible fixed
+  layer Facebook keeps its "Open Facebook" banner in - inside the tile it was visible and took no
+  presses at all; and the handover waits 1.2s, because the script arrives with the new page's first
+  answer, while the app is still letting go of the page the press was made on, and a reel handed
+  over then reached nothing. Drawn only on `/watch`, `/reel` and `/videos/`, so the stories tray on
+  the feed - built exactly the same way - is still left alone.
 - The Facebook page parser matches `"browser_native_hd_url":"…"` as plain JSON. The old code also
   read the key when a page wrote it escaped inside a script string; whether Facebook still serves
   that shape is unverified, so the stricter match was kept (it also stops an SD url being taken for
