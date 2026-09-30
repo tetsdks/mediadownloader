@@ -35,14 +35,30 @@ both in step with code changes.
 - The demo app reads the X/Twitter key from `local.properties` (`tweeload.apiKey=…`) into
   `BuildConfig.TWEELOAD_API_KEY`; without it only X links fail. Never put the key in source.
 
+## Two homes, one history
+
+The library is published from two repositories. They hold the same commits and the same tags; the
+only difference is the README, because each front page has to name its own coordinate.
+
+| branch | remote | repository | coordinate |
+|---|---|---|---|
+| `main` | `dev-husnain` | `Dev-Husnain/MediaDownloaderLibrary` | `com.github.Dev-Husnain:MediaDownloaderLibrary` |
+| `tetsdks-main` | `origin` | `tetsdks/mediadownloader` | `com.github.tetsdks:mediadownloader` |
+
+`tetsdks-main` is **main plus one commit** - its own README - and is never developed on:
+`tools/release.sh` rebuilds it by merging `main` in, taking main's side of every file, and writing
+that one file again. Work happens on `main` only. Nothing in a build file names either repository:
+JitPack passes the coordinate in (`-Pgroup`/`-Pversion`), which is why one build file serves both.
+
 ## Releasing
 
 Releases are cut by git tag; JitPack builds only the library (`jitpack.yml`: JDK 21,
 `publishToMavenLocal -x test`) and serves it as
-`com.github.Dev-Husnain:MediaDownloaderLibrary:<tag>` (the repo name, not the module path). **There
-is no version to edit in a build file** - the tag is the version (`git describe` only fills it in
-for local publishes). Cut one with `tools/release.sh <version> "what changed"`, which also rewrites
-the version the docs tell people to copy. `RELEASE.md` has the whole procedure.
+`com.github.<owner>:<repo>:<tag>` (the repo name, not the module path). **There is no version to
+edit in a build file** - the tag is the version (`git describe` only fills it in for local
+publishes). Cut one with `tools/release.sh <version> "what changed"`: it builds and tests, rewrites
+the version the docs tell people to copy, then tags and pushes **both** repositories, each with its
+own README. `RELEASE.md` has the whole procedure.
 
 ## Architecture (library)
 
