@@ -536,8 +536,13 @@ internal class MediaDetectionSession(
                 // Only the generic script reads a url out of the page, and a site may serve its own
                 // file only to a request that looks like it came from its page.
                 val headers = if (message.source == ScriptSource.Generic) headersForPageMedia() else emptyMap()
+                // A picture is its own artwork. The site scripts hand the file over on its own -
+                // facebook's picture press sends no thumbnail at all - and the sheet then opened
+                // with an empty grey square over a photograph whose address it already had.
+                val artwork = message.thumbnail.orEmpty()
+                    .ifBlank { mediaUrl.takeIf { message.type == MediaType.Image }.orEmpty() }
                 offer(
-                    media = mediaOf(mediaUrl, message.type, message.title.orEmpty().asMediaTitle(), message.thumbnail.orEmpty(), headers),
+                    media = mediaOf(mediaUrl, message.type, message.title.orEmpty().asMediaTitle(), artwork, headers),
                     postUrl = postUrl,
                     keepFoundUrl = message.source == ScriptSource.Threads,
                 )

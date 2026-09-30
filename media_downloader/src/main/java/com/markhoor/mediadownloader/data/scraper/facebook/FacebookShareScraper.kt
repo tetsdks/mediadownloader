@@ -21,10 +21,13 @@ import com.markhoor.mediadownloader.domain.models.MediaType
  * to [instagram]), a native video post (read like any video page), or a photo post, whose picture
  * is its og:image.
  *
- * Both pages are asked for with the browser's own cookies where there are any, so a post shared
- * with friends, or one inside a group the reader belongs to, is read as that reader sees it. A
- * share link to something Facebook itself will not show - "this content isn't available at the
- * moment" - still comes back with nothing, because there is nothing to come back with.
+ * Read as a stranger first and only then as the reader, for the reason [FacebookVideoScraper]
+ * gives: a public post comes back in the shape these parsers know, and the same page fetched with a
+ * session comes back as the signed-in app instead. The session is the second question, asked only
+ * where there is one and the first came back empty - which is what a post shared with friends, or
+ * one inside a group the reader belongs to, looks like from outside. A share link to something
+ * Facebook itself will not show - "this content isn't available at the moment" - still comes back
+ * with nothing, because there is nothing to come back with.
  */
 internal class FacebookShareScraper(
     private val fetcher: HttpFetcher,
@@ -39,24 +42,40 @@ internal class FacebookShareScraper(
         Regex(""""story_fbid":"[^"]*".*?"id":"(\d+)"""", RegexOption.DOT_MATCHES_ALL)
     private val crossPostedReel = Regex("""https:\\/\\/www\.instagram\.com\\/reel\\/([A-Za-z0-9_-]{1,20})\\/""")
 
-    private fun headersFor(url: String): Map<String, String> = buildMap {
+    private fun headersFor(session: String?): Map<String, String> = buildMap {
         put("Accept", Network.ACCEPT_HTML)
-        cookies.cookiesFor(url)?.takeIf { it.isNotBlank() }?.let { put("Cookie", it) }
+        session?.let { put("Cookie", it) }
     }
 
-    override suspend fun scrapeOrNull(url: String): ScrapedMediaDto? {
-        val sharePage = fetcher.getText(url, headersFor(url)).getOrThrow()
+    override suspend fun scrapeOrNull(url: String): ScrapedMediaDto? =
+        read(url, session = null) ?: sessionFor(url)?.let { read(url, session = it) }
+
+    /** The browser's cookies for this site, or `null` when the reader has never signed in. */
+    private fun sessionFor(url: String): String? = cookies.cookiesFor(url)?.takeIf { it.isNotBlank() }
+
+    private suspend fun read(url: String, session: String?): ScrapedMediaDto? {
+        val sharePage = fetcher.getText(url, headersFor(session)).getOrThrow()
+        // Where the share link simply leads to the post, the page in hand is already the post's:
+        // a group's post lives at /groups/<group>/posts/<story>/, which is not the address built
+        // below, so rebuilding it asked Facebook for a page that does not exist and the reader was
+        // told the media could not be found. Whatever is in front of us is read first.
+        readMedia(sharePage)?.let { return it }
         // Both spellings appear, and the first may not be a number while a later one is.
         val story = storyFbId.findAll(sharePage).firstNotNullOfOrNull { it.groupValues[1].toLongOrNull() } ?: return null
         val author = authorIdOf(sharePage) ?: return null
 
         val postUrl = "${Facebook.PAGE_URL}$author/posts/$story"
-        val postPage = fetcher.getText(postUrl, headersFor(postUrl)).getOrThrow()
+        val postPage = fetcher.getText(postUrl, headersFor(session)).getOrThrow()
 
-        crossPostedReel.find(postPage)?.groupValues?.get(1)?.let { reelId ->
+        return readMedia(postPage)
+    }
+
+    /** A page that holds the post: a cross-posted reel, a native video, or a picture. */
+    private suspend fun readMedia(page: String): ScrapedMediaDto? {
+        crossPostedReel.find(page)?.groupValues?.get(1)?.let { reelId ->
             return instagram.scrape("${Instagram.REEL_URL}$reelId/").getOrThrow()
         }
-        return FacebookPageParser.parse(postPage) ?: photoPost(postPage)
+        return FacebookPageParser.parse(page) ?: photoPost(page)
     }
 
     /** The author's id: from the base64 story id (`S:_I<author>:...`), or the id beside the story. */
