@@ -688,7 +688,17 @@ its wiring in `MediaDownloaderComponent`.
   hardware: low-end mode was verified by forcing it on the SM-A266B (the SM-J810F was offline).
 - Facebook, Instagram and Threads page scripts are ported unchanged but not yet exercised on
   device: they need signed-in pages. X link parsing and download are verified on device (with
-  the key); its page script is not.
+  the key); its page script is not. Signed *out*, the Facebook script was measured on the reels
+  feed, a reel's own page and a watch page in September 2026.
+- **A button per rule, not per video.** `facebook.js` draws from several rules in turn, and two of
+  them hung a second button on a video that already had one: on `m.facebook.com/reel/<id>` (and
+  `/watch/?v=<id>`) the address carries an id, so the permalink rule drew at a third of the card's
+  height over the MVideo rule's button at 0.6 of it - the two red discs a reader sees stacked. It
+  looked only at the video's own parent, which is below the container the earlier rules hang their
+  button on. Both that rule and the `[role="article"]` one now ask the card that owns the video -
+  its `MVideo`/`ServerMVideo`/`inlineVideo` container - and stand aside if it already carries one.
+  The card is asked rather than the whole post, so a post holding a picture beside its video keeps
+  the picture's own button.
 - The Facebook page parser matches `"browser_native_hd_url":"…"` as plain JSON. The old code also
   read the key when a page wrote it escaped inside a script string; whether Facebook still serves
   that shape is unverified, so the stricter match was kept (it also stops an SD url being taken for
