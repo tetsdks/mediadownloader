@@ -6,6 +6,7 @@ import com.markhoor.mediadownloader.core.Constants.Instagram
 import com.markhoor.mediadownloader.core.Constants.Network
 import com.markhoor.mediadownloader.core.Constants.QualityLabels
 import com.markhoor.mediadownloader.core.metaProperty
+import com.markhoor.mediadownloader.data.network.CookieSource
 import com.markhoor.mediadownloader.data.network.HttpFetcher
 import com.markhoor.mediadownloader.data.scraper.ScrapedMediaDto
 import com.markhoor.mediadownloader.data.scraper.ScrapedQualityDto
@@ -19,10 +20,16 @@ import com.markhoor.mediadownloader.domain.models.MediaType
  * own page is read next. That page is one of three things: a cross-posted Instagram reel (handed
  * to [instagram]), a native video post (read like any video page), or a photo post, whose picture
  * is its og:image.
+ *
+ * Both pages are asked for with the browser's own cookies where there are any, so a post shared
+ * with friends, or one inside a group the reader belongs to, is read as that reader sees it. A
+ * share link to something Facebook itself will not show - "this content isn't available at the
+ * moment" - still comes back with nothing, because there is nothing to come back with.
  */
 internal class FacebookShareScraper(
     private val fetcher: HttpFetcher,
     private val instagram: SiteScraper,
+    private val cookies: CookieSource,
 ) : SiteScraper() {
 
     private val jsonString = """"((?:\\.|[^"\\])*)""""
@@ -32,16 +39,19 @@ internal class FacebookShareScraper(
         Regex(""""story_fbid":"[^"]*".*?"id":"(\d+)"""", RegexOption.DOT_MATCHES_ALL)
     private val crossPostedReel = Regex("""https:\\/\\/www\.instagram\.com\\/reel\\/([A-Za-z0-9_-]{1,20})\\/""")
 
+    private fun headersFor(url: String): Map<String, String> = buildMap {
+        put("Accept", Network.ACCEPT_HTML)
+        cookies.cookiesFor(url)?.takeIf { it.isNotBlank() }?.let { put("Cookie", it) }
+    }
+
     override suspend fun scrapeOrNull(url: String): ScrapedMediaDto? {
-        val sharePage = fetcher.getText(url).getOrThrow()
+        val sharePage = fetcher.getText(url, headersFor(url)).getOrThrow()
         // Both spellings appear, and the first may not be a number while a later one is.
         val story = storyFbId.findAll(sharePage).firstNotNullOfOrNull { it.groupValues[1].toLongOrNull() } ?: return null
         val author = authorIdOf(sharePage) ?: return null
 
-        val postPage = fetcher.getText(
-            url = "${Facebook.PAGE_URL}$author/posts/$story",
-            headers = mapOf("Accept" to Network.ACCEPT_HTML),
-        ).getOrThrow()
+        val postUrl = "${Facebook.PAGE_URL}$author/posts/$story"
+        val postPage = fetcher.getText(postUrl, headersFor(postUrl)).getOrThrow()
 
         crossPostedReel.find(postPage)?.groupValues?.get(1)?.let { reelId ->
             return instagram.scrape("${Instagram.REEL_URL}$reelId/").getOrThrow()

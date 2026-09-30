@@ -45,6 +45,7 @@ import com.markhoor.mediadownloader.data.scraper.imdb.ImdbScraper
 import com.markhoor.mediadownloader.data.scraper.linkedin.LinkedInScraper
 import com.markhoor.mediadownloader.data.scraper.pinterest.PinterestScraper
 import com.markhoor.mediadownloader.data.scraper.tube.TubeScraper
+import com.markhoor.mediadownloader.data.scraper.tiktok.TikTokPageScraper
 import com.markhoor.mediadownloader.data.scraper.tiktok.TikTokScraper
 import com.markhoor.mediadownloader.data.scraper.twitter.TwitterScraper
 import com.markhoor.mediadownloader.data.storage.DownloadStorage
@@ -306,12 +307,12 @@ internal class MediaDownloaderComponent(
             getInDevice = getInDevice,
         )
         ScraperResolver(
-            facebookVideo = FacebookVideoScraper(httpFetcher),
-            facebookShare = FacebookShareScraper(httpFetcher, instagram),
+            facebookVideo = FacebookVideoScraper(httpFetcher, WebViewCookieSource),
+            facebookShare = FacebookShareScraper(httpFetcher, instagram, WebViewCookieSource),
             instagram = instagram,
             linkedIn = LinkedInScraper(httpFetcher),
             imdb = ImdbScraper(httpFetcher, WebViewCookieSource),
-            tikTok = TikTokScraper(httpFetcher),
+            tikTok = TikTokScraper(httpFetcher, TikTokPageScraper(httpFetcher, WebViewCookieSource)),
             twitter = config.twitterApiKey?.takeIf { it.isNotBlank() }
                 ?.let { TwitterScraper(httpFetcher, it) },
             dailymotion = DailymotionScraper(httpFetcher, appPackage = appContext.packageName),

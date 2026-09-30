@@ -502,6 +502,13 @@ IMDb**, and - only while
 `allowAdultSites` is on, and refused as `SiteBlocked` otherwise, which is the default - **the tube
 sites**, through one generic reader rather than a scraper each.
 
+Facebook, Instagram, Threads, TikTok and IMDb are read with **the browser's own cookies** when the
+reader has been signed in there in `MediaBrowser`: a post shared with friends, one inside a group,
+or a video a private account left up for its followers is then read as that reader sees it. Nothing
+is asked of the host app, and signed out every request goes as it always did - a public post needs
+no session. A link pasted with no browsing behind it has none to borrow, and a post the site itself
+refuses to show has nothing behind it either way.
+
 That reader recognises the few players those thousands of sites are built on, in the order they
 know the most: the `flashvars` object (Aylo's network - PornHub, RedTube, YouPorn, Tube8), the
 `html5player.setX(…)` calls (xVideos, XNXX), the schema.org `VideoObject` most tube pages carry for

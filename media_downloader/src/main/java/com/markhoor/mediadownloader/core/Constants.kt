@@ -501,6 +501,14 @@ internal object Constants {
     object TikTok {
         const val TIKWM_API_URL = "https://www.tikwm.com/api/"
         const val TIKWM_PLAY_URL = "https://www.tikwm.com/video/media/play/"
+
+        /** Where the site's own pages and files say a request came from. */
+        const val SITE_URL = "https://www.tiktok.com/"
+
+        /** A browser's: the page is a shell without one, and the files are refused outright. */
+        const val USER_AGENT =
+            "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 " +
+                "(KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
     }
 
     object Twitter {

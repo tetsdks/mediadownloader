@@ -20,6 +20,7 @@ import com.markhoor.mediadownloader.data.scraper.imdb.ImdbScraper
 import com.markhoor.mediadownloader.data.scraper.linkedin.LinkedInScraper
 import com.markhoor.mediadownloader.data.scraper.pinterest.PinterestScraper
 import com.markhoor.mediadownloader.data.scraper.tube.TubeScraper
+import com.markhoor.mediadownloader.data.scraper.tiktok.TikTokPageScraper
 import com.markhoor.mediadownloader.data.scraper.tiktok.TikTokScraper
 import com.markhoor.mediadownloader.data.scraper.twitter.TwitterScraper
 import com.markhoor.mediadownloader.domain.policy.RestrictedCategory
@@ -85,12 +86,12 @@ class LiveParseCheck {
             getInDevice = getInDevice,
         )
         val resolver = ScraperResolver(
-            facebookVideo = FacebookVideoScraper(fetcher),
-            facebookShare = FacebookShareScraper(fetcher, instagram),
+            facebookVideo = FacebookVideoScraper(fetcher, cookies = { null }),
+            facebookShare = FacebookShareScraper(fetcher, instagram, cookies = { null }),
             instagram = instagram,
             linkedIn = LinkedInScraper(fetcher),
             imdb = ImdbScraper(fetcher, cookies = { null }),
-            tikTok = TikTokScraper(fetcher),
+            tikTok = TikTokScraper(fetcher, TikTokPageScraper(fetcher, cookies = { null })),
             tube = TubeScraper(fetcher, cookies = { null }) {
                 RestrictedSites.categoryOf(it) == RestrictedCategory.Adult
             },
