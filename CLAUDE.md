@@ -35,20 +35,27 @@ both in step with code changes.
 - The demo app reads the X/Twitter key from `local.properties` (`tweeload.apiKey=…`) into
   `BuildConfig.TWEELOAD_API_KEY`; without it only X links fail. Never put the key in source.
 
-## Two homes, one history
+## Two homes
 
-The library is published from two repositories. They hold the same commits and the same tags; the
-only difference is the README, because each front page has to name its own coordinate.
+The library is published from two repositories. They hold the same work and the same tags. Two
+things differ: the README, because each front page has to name its own coordinate, and the name on
+the commits, because each repository's contributor list should show its own owner and nobody else.
 
-| branch | remote | repository | coordinate |
-|---|---|---|---|
-| `main` | `dev-husnain` | `Dev-Husnain/MediaDownloaderLibrary` | `com.github.Dev-Husnain:MediaDownloaderLibrary` |
-| `tetsdks-main` | `origin` | `tetsdks/mediadownloader` | `com.github.tetsdks:mediadownloader` |
+| branch | remote | repository | coordinate | author |
+|---|---|---|---|---|
+| `main` | `dev-husnain` | `Dev-Husnain/MediaDownloaderLibrary` | `com.github.Dev-Husnain:MediaDownloaderLibrary` | `Hussnain Mehdi <hussnain.personal@gmail.com>` |
+| `tetsdks-main` | `origin` | `tetsdks/mediadownloader` | `com.github.tetsdks:mediadownloader` | `tetsdks <topedgetech111@gmail.com>` |
 
-`tetsdks-main` is **main plus one commit** - its own README - and is never developed on:
-`tools/release.sh` rebuilds it by merging `main` in, taking main's side of every file, and writing
-that one file again. Work happens on `main` only. Nothing in a build file names either repository:
-JitPack passes the coordinate in (`-Pgroup`/`-Pversion`), which is why one build file serves both.
+Work happens on `main` only, authored by Hussnain. `tetsdks-main` is **never developed on and never
+merged back**: `tools/release.sh` rebuilds it from `main` each release, rewriting every commit to
+the other name and adding one commit for its README. The rewrite keeps the original dates, so a
+commit comes out with the same hash every time and the branch grows by exactly what `main` grew by;
+its push is forced because the README commit is made afresh, and the tags keep every published
+commit reachable. A fresh clone must be given its identity
+(`git config user.email hussnain.personal@gmail.com`) before committing - the script refuses to
+release if anyone else authored a commit on `main`, because a pushed commit cannot be corrected
+without rewriting history. Nothing in a build file names either repository: JitPack passes the
+coordinate in (`-Pgroup`/`-Pversion`), which is why one build file serves both.
 
 ## Releasing
 
