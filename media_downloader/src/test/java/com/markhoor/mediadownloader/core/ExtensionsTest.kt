@@ -144,6 +144,17 @@ class ExtensionsTest {
 
     // region Urls and media
 
+    /** Linked data's own way of writing how long something runs; read by two parsers now. */
+    @Test
+    fun `a running time is read the way linked data writes it`() {
+        assertEquals(753_000L, "PT0H12M33S".iso8601DurationMillis())
+        assertEquals(3_600_000L, "PT1H".iso8601DurationMillis())
+        assertEquals(90_000L, "PT1M30S".iso8601DurationMillis())
+        assertNull("PT0S".iso8601DurationMillis())
+        assertNull("twelve minutes".iso8601DurationMillis())
+    }
+
+
     @Test
     fun `relative links resolve against the page they were found in`() {
         val base = "https://cdn.example.com/a/b/master.m3u8?t=1"

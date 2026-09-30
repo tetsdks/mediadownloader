@@ -20,12 +20,17 @@ internal class FakeMediaServer(
 ) {
     /** Every request as `"<url> <Range or ->"`, in the order they arrived. */
     val requests: MutableList<String> = Collections.synchronizedList(mutableListOf())
+
+    /** What the last request carried, for a site that answers nothing without being asked right. */
+    val lastHeaders: MutableMap<String, String> = Collections.synchronizedMap(mutableMapOf())
     private var rangesHonoured = 0
 
     val client = HttpClient(MockEngine { request ->
         val url = request.url.toString()
         val range = request.headers[HttpHeaders.Range]
         requests += "$url ${range ?: "-"}"
+        lastHeaders.clear()
+        request.headers.forEach { name, values -> lastHeaders[name] = values.joinToString("; ") }
         val body = files[url] ?: return@MockEngine respond("", HttpStatusCode.NotFound)
 
         val honour = range != null && synchronized(this@FakeMediaServer) { rangesHonoured++ < ignoresRangesAfter }

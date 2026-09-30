@@ -215,6 +215,10 @@ internal fun String.isDailymotionVideoLink(): Boolean =
 internal fun String.isDailymotionMetadataLink(): Boolean =
     isSiteOf("dailymotion.com") && urlPath()?.startsWith("/player/metadata/video/") == true
 
+/** A video's own page, which is the only page on the site that holds one. */
+internal fun String.isImdbVideoPage(): Boolean =
+    isSiteOf("imdb.com") && urlPath()?.startsWith("/video/") == true
+
 internal fun String.isPinterestPinLink(): Boolean =
     (isSiteOf("pinterest.com") && urlPath()?.startsWith("/pin/") == true) || isSiteOf("pin.it")
 
@@ -440,6 +444,21 @@ internal fun Long?.sensibleSize(isVideo: Boolean): Long? {
     return size
 }
 
+/**
+ * A running time as linked data writes it - `PT0H12M33S` - in milliseconds, or `null` when it says
+ * nothing (`PT0S`) or is not written that way at all.
+ */
+internal fun String.iso8601DurationMillis(): Long? {
+    val match = ISO_DURATION.matchEntire(trim()) ?: return null
+    val (hours, minutes, seconds) = match.destructured
+    val total = (hours.toLongOrNull() ?: 0) * 3_600 +
+        (minutes.toLongOrNull() ?: 0) * 60 +
+        (seconds.toDoubleOrNull()?.toLong() ?: 0)
+    return (total * 1_000).takeIf { it > 0 }
+}
+
+private val ISO_DURATION = Regex("""P(?:T)?(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?""")
+
 /** `"720x1280"` → `"720p"`: a quality is named for its short side, whichever way up it is. */
 internal fun String.qualityNameFromResolution(): String {
     val parts = split("x")
@@ -655,9 +674,6 @@ private val IMDB_STREAM_ID = Regex("""imdb-video\.media-imdb\.com/[^ ]*?/(vi\d+)
  */
 internal fun String.imdbVideoPageFromStream(): String? =
     IMDB_STREAM_ID.find(sniffable())?.groupValues?.get(1)?.let { "https://www.imdb.com/video/$it/" }
-
-internal fun String.isImdbVideoPage(): Boolean =
-    isSiteOf("imdb.com") && urlPath()?.startsWith("/video/") == true
 
 /** Nothing a page script or an image, font or style sheet could ever be the media. */
 internal fun String.isStaticAssetUrl(): Boolean {

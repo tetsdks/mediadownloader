@@ -58,6 +58,7 @@ class HostSuppliedScraperTest {
         instagram = SilentScraper(),
         tube = testTube(),
         linkedIn = SilentScraper(),
+        imdb = SilentScraper(),
         tikTok = SilentScraper(),
         twitter = SilentScraper(),
         dailymotion = SilentScraper(),

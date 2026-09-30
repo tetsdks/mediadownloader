@@ -605,6 +605,19 @@ its wiring in `MediaDownloaderComponent`.
   same video, at the same size, under the same name. A press also waits a moment
   (`PRESSED_STREAM_WAIT_MS`) for the player it was on to fetch, before what the page already loaded
   answers instead.
+- **IMDb's video pages are read, not listened to.** A press there used to be answered from
+  whatever the player had been heard asking for, which is nothing at all when the file is already
+  in the cache: the reader pressed, the disc spun and the sheet never opened - and when it was
+  heard, it was the one height the player had chosen (a sniffed "HD" of 29.7 MB where the page
+  offers 93.1 MB). `ImdbScraper` reads the page instead, where the player's own list names every
+  height, and the linked data beside it names the video, pictures it and says how long it runs.
+  Two things are worth knowing: the site answers a request carrying no session with `202` and an
+  empty page, so the browser's own cookies go with it - which makes this a reader for a page the
+  reader has been to, and a link pasted on a device that has never opened IMDb is still answered
+  with nothing; and the files themselves are signed cdn urls that ask for nothing, so a download
+  outlives the session it was read with. Reading the page also makes `isParserLink` true for those
+  pages, so a press anywhere - a listing's poster, the strip under a video, the trailer rails on
+  the home page - is answered by the parser rather than by what was overheard.
 - **Imdb plays a few seconds of a video in its listings** (`/mc/vi<id>/previews/...`), all of them
   the same length and size. Those are never offered: the press resolves the video's own page from
   the id, which holds the video itself.
@@ -665,7 +678,8 @@ its wiring in `MediaDownloaderComponent`.
 ## 7. Known gaps
 
 - Instagram and Facebook scrapers are verified by unit tests on sample pages, not yet live: they
-  need a signed-in session or real post links. LinkedIn has been read live, through a `lnkd.in`
+  need a signed-in session or real post links. IMDb was read live on the device in September 2026,
+  from a video page, the trailers feed and the home page's rails. LinkedIn has been read live, through a `lnkd.in`
   link, since the shortener was added.
 - **A `lnkd.in` link is read by following it, not by resolving it.** The address says nothing about
   what is behind it, so `isLinkedInPostLink` claims the whole host and the request (which follows

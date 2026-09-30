@@ -41,6 +41,7 @@ import com.markhoor.mediadownloader.data.scraper.instagram.InstagramGraphQlScrap
 import com.markhoor.mediadownloader.data.scraper.instagram.InstagramPreviewScraper
 import com.markhoor.mediadownloader.data.scraper.instagram.InstagramScraper
 import com.markhoor.mediadownloader.data.scraper.instagram.InstagramSignedInScraper
+import com.markhoor.mediadownloader.data.scraper.imdb.ImdbScraper
 import com.markhoor.mediadownloader.data.scraper.linkedin.LinkedInScraper
 import com.markhoor.mediadownloader.data.scraper.pinterest.PinterestScraper
 import com.markhoor.mediadownloader.data.scraper.tube.TubeScraper
@@ -309,6 +310,7 @@ internal class MediaDownloaderComponent(
             facebookShare = FacebookShareScraper(httpFetcher, instagram),
             instagram = instagram,
             linkedIn = LinkedInScraper(httpFetcher),
+            imdb = ImdbScraper(httpFetcher, WebViewCookieSource),
             tikTok = TikTokScraper(httpFetcher),
             twitter = config.twitterApiKey?.takeIf { it.isNotBlank() }
                 ?.let { TwitterScraper(httpFetcher, it) },

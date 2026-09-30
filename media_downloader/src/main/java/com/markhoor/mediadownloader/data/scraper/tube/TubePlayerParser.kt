@@ -6,6 +6,7 @@ import com.markhoor.mediadownloader.core.decodeJsonEscapes
 import com.markhoor.mediadownloader.core.isAdvertMediaUrl
 import com.markhoor.mediadownloader.core.isHlsPlaylistUrl
 import com.markhoor.mediadownloader.core.isVideoFileUrl
+import com.markhoor.mediadownloader.core.iso8601DurationMillis
 import com.markhoor.mediadownloader.core.looksLikeImageUrl
 import com.markhoor.mediadownloader.core.metaProperty
 import com.markhoor.mediadownloader.core.normalizedHost
@@ -45,7 +46,6 @@ internal object TubePlayerParser {
         setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
     // A field is a string, or a list of them: linked data writes one thumbnail as ["…"].
     private val LD_FIELD = { name: String -> Regex(""""$name"\s*:\s*\[?\s*"([^"]+)"""") }
-    private val ISO_DURATION = Regex("""P(?:T)?(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?""")
     private val HEIGHT_IN_URL = Regex("""(\d{3,4})p""")
     private val KVS_FIELD = Regex("""(\w+):\s*'([^']*)'""")
 
@@ -116,7 +116,7 @@ internal object TubePlayerParser {
                 qualities = listOf(quality(contentUrl, labelOf(contentUrl, QualityLabels.HD))),
                 title = field(block, "name")?.decodeHtmlEntities()?.trim()?.ifBlank { null },
                 thumbnailUrl = field(block, "thumbnailUrl")?.ifBlank { null },
-                durationMillis = field(block, "duration")?.let(::millisOf),
+                durationMillis = field(block, "duration")?.iso8601DurationMillis(),
             )
         }
         return null
@@ -204,15 +204,6 @@ internal object TubePlayerParser {
     }
 
     /** `PT1H2M3S`, as the linked data writes a running time, in milliseconds. */
-    fun millisOf(isoDuration: String): Long? {
-        val match = ISO_DURATION.matchEntire(isoDuration.trim()) ?: return null
-        val (hours, minutes, seconds) = match.destructured
-        val total = (hours.toLongOrNull() ?: 0) * 3_600 +
-            (minutes.toLongOrNull() ?: 0) * 60 +
-            (seconds.toDoubleOrNull()?.toLong() ?: 0)
-        return (total * 1_000).takeIf { it > 0 }
-    }
-
     /** The height the url names, when it names one: `…/video_720p.mp4`. */
     fun labelOf(url: String, fallback: String): String =
         HEIGHT_IN_URL.find(url.substringBefore('?'))?.value ?: fallback

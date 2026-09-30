@@ -30,6 +30,7 @@ internal fun testResolver() = ScraperResolver(
     facebookShare = SilentScraper(),
     instagram = SilentScraper(),
     linkedIn = SilentScraper(),
+    imdb = SilentScraper(),
     tikTok = SilentScraper(),
     tube = testTube(),
     twitter = SilentScraper(),
