@@ -25,15 +25,19 @@ fi
 cd "$(dirname "$0")/.."
 
 readonly HOME_REMOTE=dev-husnain
+readonly HOME_OWNER=Dev-Husnain
 readonly HOME_REPO=Dev-Husnain/MediaDownloaderLibrary
 readonly HOME_COORDINATE=com.github.Dev-Husnain:MediaDownloaderLibrary
+readonly HOME_LOCAL_GROUP=com.github.Dev-Husnain.MediaDownloaderLibrary
 readonly HOME_AUTHOR="Hussnain Mehdi"
 readonly HOME_EMAIL=hussnain.personal@gmail.com
 
 readonly MIRROR_BRANCH=tetsdks-main
 readonly MIRROR_REMOTE=origin
+readonly MIRROR_OWNER=tetsdks
 readonly MIRROR_REPO=tetsdks/mediadownloader
 readonly MIRROR_COORDINATE=com.github.tetsdks:mediadownloader
+readonly MIRROR_LOCAL_GROUP=com.github.tetsdks.mediadownloader
 readonly MIRROR_AUTHOR=tetsdks
 readonly MIRROR_EMAIL=topedgetech111@gmail.com
 
@@ -105,10 +109,19 @@ git update-ref -d "refs/original/refs/heads/$MIRROR_BRANCH" 2>/dev/null || true
 sed -i "s|$HOME_COORDINATE|$MIRROR_COORDINATE|g;
         s|jitpack.io/v/$HOME_REPO|jitpack.io/v/$MIRROR_REPO|g;
         s|jitpack.io/#$HOME_REPO|jitpack.io/#$MIRROR_REPO|g" README.md
+# The published pom says where the artifact came from and who wrote it, and those have to be this
+# repository and its owner: a consumer of one coordinate should never be pointed at the other
+# repository, which may not even be theirs to open. JitPack rewrites the coordinate in the pom
+# itself but nothing else in it, so the rest is written here.
+sed -i "s|https://github.com/$HOME_REPO|https://github.com/$MIRROR_REPO|g;
+        s|$HOME_COORDINATE|$MIRROR_COORDINATE|g;
+        s|$HOME_LOCAL_GROUP|$MIRROR_LOCAL_GROUP|g;
+        s|id.set(\"$HOME_OWNER\")|id.set(\"$MIRROR_OWNER\")|g;
+        s|name.set(\"$HOME_AUTHOR\")|name.set(\"$MIRROR_AUTHOR\")|g" media_downloader/build.gradle.kts
 if ! git diff --quiet; then
     GIT_AUTHOR_NAME="$MIRROR_AUTHOR" GIT_AUTHOR_EMAIL="$MIRROR_EMAIL" \
     GIT_COMMITTER_NAME="$MIRROR_AUTHOR" GIT_COMMITTER_EMAIL="$MIRROR_EMAIL" \
-        git commit -aqm "Name this repository's own coordinate in the README"
+        git commit -aqm "Name this repository, its owner and its coordinate"
 fi
 # The tag is called $version in that repository too; here it needs a name of its own, because a
 # tag can point at only one commit in one clone.
