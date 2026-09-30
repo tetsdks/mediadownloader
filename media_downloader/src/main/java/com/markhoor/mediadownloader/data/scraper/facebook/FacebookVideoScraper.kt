@@ -16,11 +16,14 @@ import kotlinx.coroutines.coroutineScope
  * owner and the id; the owner's video page and the reel page are then read side by side, and the
  * owner's page wins when both answer. Any other link carries the id itself.
  *
- * Every page is asked for with the browser's own cookies where there are any, so a video shared
- * with friends, or posted in a group the reader belongs to, is read as that reader sees it. Signed
- * out there are none and the requests go exactly as they always did: a public video needs no
- * session, and Facebook's own anonymous cookie is what keeps the owner's page from being a login
- * wall.
+ * Read as a stranger first, and only then as the reader. A public video is served to a stranger in
+ * the shape this reads - `browser_native_hd_url` and its SD twin - while the same page fetched with
+ * a session comes back as the signed-in app, which names neither: measured on the device, the same
+ * reel gave HD 10.0 MB and SD 2.3 MB read as a stranger and nothing at all read as the reader, so
+ * the press fell back to the one stream the player had been heard fetching. The session is
+ * therefore the second question, not the first, and it is only asked when there is one and the
+ * stranger's read came back empty - which is what a video shared with friends, or posted in a group
+ * the reader belongs to, looks like from outside.
  */
 internal class FacebookVideoScraper(
     private val fetcher: HttpFetcher,
@@ -34,26 +37,31 @@ internal class FacebookVideoScraper(
      * @param asDesktop the owner's page is only served whole to a desktop browser carrying a
      *   session; Facebook's own anonymous cookie stands in when the reader has none of their own.
      */
-    private fun headersFor(url: String, asDesktop: Boolean = false): Map<String, String> = buildMap {
+    private fun headersFor(session: String?, asDesktop: Boolean = false): Map<String, String> = buildMap {
         put("Accept", Network.ACCEPT_HTML)
         if (asDesktop) put("User-Agent", Facebook.DESKTOP_USER_AGENT)
-        val held = cookies.cookiesFor(url)?.takeIf { it.isNotBlank() }
         when {
-            held != null -> put("Cookie", held)
+            session != null -> put("Cookie", session)
             asDesktop -> put("Cookie", Facebook.SESSION_COOKIE)
         }
     }
 
     override suspend fun scrapeOrNull(url: String): ScrapedMediaDto? =
+        read(url, session = null) ?: sessionFor(url)?.let { read(url, session = it) }
+
+    /** The browser's cookies for this site, or `null` when the reader has never signed in. */
+    private fun sessionFor(url: String): String? = cookies.cookiesFor(url)?.takeIf { it.isNotBlank() }
+
+    private suspend fun read(url: String, session: String?): ScrapedMediaDto? =
         if (url.contains("share")) {
-            scrapeShareLink(url)
+            scrapeShareLink(url, session)
         } else {
             val videoId = longNumber.findAll(url).joinToString("") { it.value }
-            videoPage(reelUrl(videoId), headersFor(Facebook.REEL_URL))
+            videoPage(reelUrl(videoId), headersFor(session))
         }
 
-    private suspend fun scrapeShareLink(url: String): ScrapedMediaDto? = coroutineScope {
-        val page = fetcher.getText(url, headersFor(url)).getOrThrow()
+    private suspend fun scrapeShareLink(url: String, session: String?): ScrapedMediaDto? = coroutineScope {
+        val page = fetcher.getText(url, headersFor(session)).getOrThrow()
         val canonical = page.substringAfter("<link rel=\"canonical\"", "")
             .substringAfter("href=\"", "")
             .substringBefore("\"", "")
@@ -62,8 +70,8 @@ internal class FacebookVideoScraper(
         val videoId = videoIdInPath.find(canonical.replace(owner, ""))?.groupValues?.get(1).orEmpty()
 
         val ownerUrl = "${Facebook.PAGE_URL}$owner/videos/$videoId/?=null"
-        val fromOwnerPage = async { videoPage(ownerUrl, headersFor(ownerUrl, asDesktop = true)) }
-        val fromReel = async { videoPage(reelUrl(videoId), headersFor(Facebook.REEL_URL)) }
+        val fromOwnerPage = async { videoPage(ownerUrl, headersFor(session, asDesktop = true)) }
+        val fromReel = async { videoPage(reelUrl(videoId), headersFor(session)) }
         fromOwnerPage.await() ?: fromReel.await()
     }
 
