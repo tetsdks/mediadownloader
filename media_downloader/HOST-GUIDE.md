@@ -629,7 +629,7 @@ data class MediaModel(
 | Field | Meaning |
 |---|---|
 | `title` | The post's own name, already cleaned: entities decoded, site suffixes (" \| Facebook") and page decoration removed. May be empty when the site gives none; show your own fallback. |
-| `thumbnailUrl` | Artwork to show, when the site has any: an `https` image or a small `data:image/` url. Load it with Glide/Coil as usual. |
+| `thumbnailUrl` | Artwork to show, when the site has any: an `https` image or a small `data:image/` url. Load it with Glide/Coil as usual - but **send a browser `User-Agent` with it**. Some sites refuse a picture to a request carrying an http library's own name: Wikimedia answers `okhttp/4.x`, which Coil sends by default, with `403`, so the artwork came back as an empty square while the download of the very same file worked. The demo does this in `MediaThumbnail`. |
 | `qualities` | Every downloadable version, **in the order to list them** (best first for streams). |
 | `sourceUrl` | The page or link it was found on. |
 | `durationMillis` | Running time, in milliseconds, for a video. Taken from whatever knows it: the site's own answer, else the stream's playlist, else the player the reader pressed. `null` for a picture, a live stream, and a video nothing could say a length for. |

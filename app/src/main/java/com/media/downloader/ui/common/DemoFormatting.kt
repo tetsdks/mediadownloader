@@ -14,7 +14,11 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
 import coil3.compose.AsyncImage
+import coil3.network.NetworkHeaders
+import coil3.network.httpHeaders
+import coil3.request.ImageRequest
 import com.markhoor.mediadownloader.domain.models.DownloadException
 import com.markhoor.mediadownloader.domain.models.MediaParseException
 import com.markhoor.mediadownloader.domain.models.MediaQualityModel
@@ -47,7 +51,10 @@ fun MediaThumbnail(url: String?, modifier: Modifier = Modifier, size: Dp = 64.dp
         )
 
         !url.isNullOrBlank() && !url.startsWith("data:") -> AsyncImage(
-            model = url,
+            model = ImageRequest.Builder(LocalContext.current)
+                .data(url)
+                .httpHeaders(thumbnailHeaders)
+                .build(),
             contentDescription = null,
             modifier = box,
             contentScale = ContentScale.Crop,
@@ -56,6 +63,21 @@ fun MediaThumbnail(url: String?, modifier: Modifier = Modifier, size: Dp = 64.dp
         else -> Box(box)
     }
 }
+
+/**
+ * Who is asking for the picture. Wikimedia refuses an image to a request carrying an http library's
+ * own name - `okhttp/4.x` is answered with 403, and Coil sends that by default - so a thumbnail from
+ * a wikipedia page came back as an empty grey square while its download worked perfectly well. The
+ * module's own requests say something else and were never refused; this is the host's side of it,
+ * and any app showing these thumbnails needs the same.
+ */
+private val thumbnailHeaders = NetworkHeaders.Builder()
+    .set(
+        "User-Agent",
+        "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 " +
+            "(KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36",
+    )
+    .build()
 
 /** KB/MB/GB. The module reports bytes and leaves the wording to the host. */
 fun formatBytes(bytes: Long): String {
