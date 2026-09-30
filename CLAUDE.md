@@ -48,7 +48,9 @@ the commits, because each repository's contributor list should show its own owne
 
 Work happens on `main` only, authored by Hussnain. `tetsdks-main` is **never developed on and never
 merged back**: `tools/release.sh` rebuilds it from `main` each release, rewriting every commit to
-the other name and adding one commit for its README. The rewrite keeps the original dates, so a
+the other name and adding one commit that names that repository instead of this one - its README,
+and the pom metadata in `media_downloader/build.gradle.kts`, so a consumer of one coordinate is
+never pointed at the other repository. The rewrite keeps the original dates, so a
 commit comes out with the same hash every time and the branch grows by exactly what `main` grew by;
 its push is forced because the README commit is made afresh, and the tags keep every published
 commit reachable. A fresh clone must be given its identity

@@ -6,12 +6,11 @@ The library lives in two repositories and a release goes to both at once:
 
 | repository | coordinate | branch pushed |
 |---|---|---|
-| `tetsdks/mediadownloader` | `com.github.tetsdks:mediadownloader` | `tetsdks-main` (main, re-authored, + its own README) |
+| `tetsdks/mediadownloader` | `com.github.tetsdks:mediadownloader` | `tetsdks-main` (main, re-authored, + its own naming) |
 | `Dev-Husnain/MediaDownloaderLibrary` | `com.github.Dev-Husnain:MediaDownloaderLibrary` | `main` |
 
-They carry the same work and the same tag. Two things differ: the README, since each front page
-names its own coordinate, and the name on the commits, since each repository's contributor list
-should be its own owner alone. `tools/release.sh` does both itself - see CLAUDE.md, *Two homes*.
+They carry the same work and the same tag. Two things differ: whose name is on it - the commits,
+the README's coordinate and the pom's project page and owner - and nothing else. `tools/release.sh` does both itself - see CLAUDE.md, *Two homes*.
 
 JitPack builds the tag and passes `-Pversion=<tag>` into the build, so the tag decides what gets
 published. `media_downloader/build.gradle.kts` only falls back to `git describe` for local
@@ -45,7 +44,7 @@ git push dev-husnain 0.2.0
 Then, once JitPack has built it (a minute or two), update the version in `README.md`,
 `media_downloader/HOST-GUIDE.md` and `CLAUDE.md` so the install snippets show the newest release,
 and commit that - and rebuild `tetsdks-main` from `main` with the other owner's name on every
-commit, write its own README, and push the same tag there. The badge at the top of each README
+commit, write its own README and pom metadata, and push the same tag there. The badge at the top of each README
 needs no edit; it reads the newest tag itself. All of this is what the script exists to save you
 from; the rebuild in particular is fiddly enough that doing it by hand is how a stray name ends up
 on a contributor list.
