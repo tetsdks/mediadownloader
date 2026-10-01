@@ -40,6 +40,7 @@ internal class FacebookShareScraper(
     private val storyId = Regex(""""storyID":$jsonString""")
     private val authorIdBesideStory =
         Regex(""""story_fbid":"[^"]*".*?"id":"(\d+)"""", RegexOption.DOT_MATCHES_ALL)
+    private val groupId = Regex("""/groups/(\d+)""")
     private val crossPostedReel = Regex("""https:\\/\\/www\.instagram\.com\\/reel\\/([A-Za-z0-9_-]{1,20})\\/""")
 
     private fun headersFor(session: String?): Map<String, String> = buildMap {
@@ -59,7 +60,7 @@ internal class FacebookShareScraper(
         // a group's post lives at /groups/<group>/posts/<story>/, which is not the address built
         // below, so rebuilding it asked Facebook for a page that does not exist and the reader was
         // told the media could not be found. Whatever is in front of us is read first.
-        readMedia(sharePage)?.let { return it }
+        readMedia(sharePage, session)?.let { return it }
         // Both spellings appear, and the first may not be a number while a later one is.
         val story = storyFbId.findAll(sharePage).firstNotNullOfOrNull { it.groupValues[1].toLongOrNull() } ?: return null
         val author = authorIdOf(sharePage) ?: return null
@@ -67,15 +68,15 @@ internal class FacebookShareScraper(
         val postUrl = "${Facebook.PAGE_URL}$author/posts/$story"
         val postPage = fetcher.getText(postUrl, headersFor(session)).getOrThrow()
 
-        return readMedia(postPage)
+        return readMedia(postPage, session)
     }
 
     /** A page that holds the post: a cross-posted reel, a native video, or a picture. */
-    private suspend fun readMedia(page: String): ScrapedMediaDto? {
+    private suspend fun readMedia(page: String, session: String?): ScrapedMediaDto? {
         crossPostedReel.find(page)?.groupValues?.get(1)?.let { reelId ->
             return instagram.scrape("${Instagram.REEL_URL}$reelId/").getOrThrow()
         }
-        return FacebookPageParser.parse(page) ?: photoPost(page)
+        return FacebookPageParser.parse(page) ?: photoPost(page, session)
     }
 
     /** The author's id: from the base64 story id (`S:_I<author>:...`), or the id beside the story. */
@@ -87,12 +88,33 @@ internal class FacebookShareScraper(
         return fromStoryId ?: authorIdBesideStory.find(sharePage)?.groupValues?.get(1)?.toLongOrNull()
     }
 
-    private fun photoPost(postPage: String): ScrapedMediaDto? {
+    private suspend fun photoPost(postPage: String, session: String?): ScrapedMediaDto? {
         val picture = postPage.metaProperty("og:image")?.takeIf { it.startsWith("http") } ?: return null
+        if (isTheGroupsOwnCover(postPage, picture, session)) return null
         return ScrapedMediaDto(
             qualities = listOf(ScrapedQualityDto(picture, MediaType.Image, QualityLabels.HD)),
             title = postPage.metaProperty("og:title") ?: postPage.metaProperty("og:image:alt"),
             thumbnailUrl = picture,
         )
     }
+
+    /**
+     * A group's post is shown to nobody outside the group, and the page Facebook serves instead
+     * carries the **group's own cover photo** as its `og:image`: measured on a share link to a
+     * group post, the picture offered was the very file the group's front page carries, while the
+     * post itself held a quite different photograph - so the reader was handed a picture they had
+     * never seen, and the download looked like the wrong media rather than a refusal. Where the
+     * page belongs to a group, the group's front page is asked what its cover is and a match is
+     * refused; a group post that does name its own picture is unaffected, and a post outside a
+     * group is not asked at all.
+     */
+    private suspend fun isTheGroupsOwnCover(page: String, picture: String, session: String?): Boolean {
+        val group = groupId.find(page.metaProperty("og:url").orEmpty())?.groupValues?.get(1) ?: return false
+        val front = fetcher.getText("${Facebook.PAGE_URL}groups/$group/", headersFor(session)).getOrNull()
+            ?: return false
+        return front.metaProperty("og:image")?.let { sameFile(it, picture) } == true
+    }
+
+    /** Facebook signs a picture's url, so two addresses of one file differ only after the `?`. */
+    private fun sameFile(one: String, other: String) = one.substringBefore('?') == other.substringBefore('?')
 }
