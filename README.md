@@ -61,7 +61,7 @@ dependencyResolutionManagement {
 ```kotlin
 // app/build.gradle.kts
 dependencies {
-    implementation("com.github.tetsdks:mediadownloader:0.1.4")
+    implementation("com.github.tetsdks:mediadownloader:1.0.0")
 }
 ```
 
