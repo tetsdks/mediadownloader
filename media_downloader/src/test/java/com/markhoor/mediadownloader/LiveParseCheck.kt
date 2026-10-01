@@ -79,6 +79,7 @@ class LiveParseCheck {
         val sizeProbe = MediaSizeProbe(client)
         val getInDevice = GetInDeviceScraper(fetcher)
         val instagram = InstagramScraper(
+            fetcher = fetcher,
             signedIn = InstagramSignedInScraper(fetcher) { null },
             preview = InstagramPreviewScraper(fetcher),
             embed = InstagramEmbedScraper(fetcher),

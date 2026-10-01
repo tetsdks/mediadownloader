@@ -46,6 +46,8 @@ class ScraperResolverTest {
             "https://www.instagram.com/reel/abc/" to listOf("instagram"),
             "https://www.instagram.com/p/abc/" to listOf("instagram"),
             "https://www.threads.com/@someone/post/abc" to listOf("instagram"),
+            // The link Threads' own share sheet hands out; the post is read out of its page.
+            "https://www.threads.com/share/BATDAqdzRY/" to listOf("instagram"),
             "https://www.linkedin.com/posts/someone_activity-1" to listOf("linkedIn"),
             // The shortener LinkedIn hands out when a post is shared from its app.
             "https://lnkd.in/p/ekARMhxS" to listOf("linkedIn"),

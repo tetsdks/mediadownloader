@@ -385,6 +385,20 @@ its wiring in `MediaDownloaderComponent`.
   its own picture is read as before. There is nothing better to be had from a link alone: signed in,
   the same page comes back as the app shell naming no file, and mbasic - the one html face that used
   to answer - now replies "Facebook is not available on this browser".
+- **A Threads share link names no post, so the post is read out of the page it serves.** Threads'
+  own share sheet hands out `threads.com/share/<code>`, where the code is the share's and not the
+  post's. Every Instagram-and-Threads reader builds its request from the post's address, so a shared
+  link matched no rule at all and was turned away as a link that does not point at media - on a site
+  the library lists as supported, which is how it was reported. The share page is a redirect to the
+  post and names it in `og:url`, so that one request is made first and every reader is given the
+  address it needs. A post's own link costs nothing extra: it is passed straight on.
+- **A Threads post may be a photograph, and nothing read one.** The preview reader wanted
+  `video_versions` and gave up without it, while the page says plainly what it is -
+  `"video_versions":null,"media_type":1` - and carries the picture as the first `image_versions2`
+  candidate, the same file its og:image points at. A photograph was therefore "no media found".
+  It now falls back to the signed-in page reader, which already reads a picture, **only for a
+  Threads post**: on an Instagram reel those candidates are the video's cover, and a cover offered
+  as the media would be a worse answer than none.
 - **A picture is its own artwork.** Only the generic script hands a thumbnail over beside the media;
   the site scripts send the file alone, so a photograph pressed on Facebook opened the sheet with an
   empty grey square over a picture whose address it already had. An image arriving with no artwork
