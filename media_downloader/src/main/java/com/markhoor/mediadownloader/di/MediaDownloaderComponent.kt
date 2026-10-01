@@ -300,6 +300,7 @@ internal class MediaDownloaderComponent(
     private val scraperResolver: ScraperResolver by lazy {
         val getInDevice = GetInDeviceScraper(httpFetcher)
         val instagram = InstagramScraper(
+            fetcher = httpFetcher,
             signedIn = InstagramSignedInScraper(httpFetcher, WebViewCookieSource),
             preview = InstagramPreviewScraper(httpFetcher),
             embed = InstagramEmbedScraper(httpFetcher),

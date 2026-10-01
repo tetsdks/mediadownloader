@@ -182,9 +182,17 @@ internal fun String.isInstagramPostLink(): Boolean =
     (isSiteOf("instagram.com") && listOf("/p/", "/reel/", "/reels/").any { contains(it) }) ||
             isThreadsVideoFileUrl()
 
-/** A post's own page; the site root and the feed name no post. */
+/** A post's own page, or a share of one; the site root and the feed name no post. */
 internal fun String.isThreadsPostLink(): Boolean =
-    (isSiteOf("threads.net", "threads.com") && contains("/post/")) || isThreadsVideoFileUrl()
+    (isSiteOf("threads.net", "threads.com") && contains("/post/")) ||
+            isThreadsShareLink() || isThreadsVideoFileUrl()
+
+/**
+ * The address Threads' own share sheet hands out. It names no post - the code in it is the share's,
+ * not the post's - so which post it leads to is only known from the page it serves.
+ */
+internal fun String.isThreadsShareLink(): Boolean =
+    isSiteOf("threads.net", "threads.com") && contains("/share/")
 
 /** A Threads video served straight from Instagram's CDN. */
 internal fun String.isThreadsVideoFileUrl(): Boolean =
