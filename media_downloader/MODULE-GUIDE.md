@@ -713,6 +713,17 @@ its wiring in `MediaDownloaderComponent`.
   `visibility: hidden`) gives its button up, so the poster can take it; a poster only stands aside
   for a video that has a button of its own. Imdb's few-second autoplay preview
   (`hls-preview-….m3u8`) is not offered as the film.
+- **A card link with no box of its own stands where its container does.** On a site the parser
+  reads, a picture only gets a button when the link beside it is that picture's own - it either
+  contains the picture or is laid over it, which is how imdb hangs a video's page on its slate, and
+  the overlap is measured. TikTok's grids (discover, search, a profile) keep each cover's
+  `<a href="/@who/video/<id>">` inside the card as an **empty** element: no children, `display:
+  inline`, measured 0 by 0. Nothing can overlap a box of no size, so every card on those pages lost
+  its button even though the link names exactly the one video. The nearest thing above such a link
+  that has a box now answers for it, which on TikTok is the cover itself; a link belonging to the
+  section around a picture still fails the height test that follows, so imdb's home is unaffected.
+  Measured after: discover draws a button per cover again and a press opens the pressed video - SD
+  5.6 MB, HD 6.7 MB, watermarked 10.2 MB for the first card - and a profile grid draws thirteen.
 - **"display" is not "play".** A picture is judged a video's cover partly by what is drawn over it:
   a play badge or a running time, found by class name. That was a substring test, and Pexels hangs
   an "Edit in Canva" button over every photograph carrying `DisplayNone_mobile-tablet` - which

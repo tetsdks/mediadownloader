@@ -2140,6 +2140,22 @@ function scan(){
                        slate: the same box as the picture rather than an ancestor of it. A link
                        far taller is the section around it, not this picture's. */
                     var mksCr = card.getBoundingClientRect();
+                    /* A link with no box of its own stands where its container does. Tiktok's
+                       grids - discover, search, a profile - hang each cover's
+                       <a href="/@who/video/<id>"> inside the card as an empty element: no
+                       children, display inline, 0 by 0. The overlap below could then only ever
+                       be false, so every card on those pages went without a button, while the
+                       link names exactly the one video. The nearest thing above it that has a
+                       box answers for it - on tiktok that is the cover itself - and a link
+                       belonging to the section around a picture still fails the height test. */
+                    if(mksCr.width < 1 || mksCr.height < 1){
+                        var mksBoxed = card.parentElement;
+                        for(var mksB = 0; mksB < 4 && mksBoxed; mksB++){
+                            var mksBr = mksBoxed.getBoundingClientRect();
+                            if(mksBr.width >= 1 && mksBr.height >= 1){ mksCr = mksBr; break; }
+                            mksBoxed = mksBoxed.parentElement;
+                        }
+                    }
                     var mksOw = Math.min(ir.right, mksCr.right) - Math.max(ir.left, mksCr.left);
                     var mksOh = Math.min(ir.bottom, mksCr.bottom) - Math.max(ir.top, mksCr.top);
                     mksOwnCard = mksOw > 0 && mksOh > 0 && mksCr.height <= ir.height + 200 &&
