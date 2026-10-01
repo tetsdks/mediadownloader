@@ -350,15 +350,51 @@ its wiring in `MediaDownloaderComponent`.
   (`tweeload.apiKey`, gitignored) into `BuildConfig.TWEELOAD_API_KEY`; the value is the one the
   old url-parser had hard-coded, so a build machine needs that line to parse X links. Instagram's and Pinterest's anonymous
   browser-session cookies stay in `Constants.kt`: they identify no account.
-- **A post is read as the reader sees it.** Instagram has always been read with the browser's own
-  cookies; Facebook, TikTok and IMDb are too. A Facebook post shared with friends, or one inside a
-  group the reader belongs to, and a TikTok video a private account left up for its followers, are
-  invisible to a request carrying no session - which is what those scrapers used to send, so the
-  press came back with nothing and the reader was told the media could not be found. Signed out
-  there are no cookies to send and every request goes exactly as it did before, so a public post is
-  unaffected either way. Two things this does not fix: a post Facebook itself will not show ("this
-  content isn't available at the moment") has nothing behind it whatever session asks, and a link
-  pasted into an app that has never browsed the site has no session to borrow.
+- **A post is read as a stranger first and as the reader second.** Instagram has always been read
+  with the browser's own cookies; Facebook, TikTok and IMDb can be too. A Facebook post shared with
+  friends, or one inside a group the reader belongs to, and a TikTok video a private account left up
+  for its followers, are invisible to a request carrying no session - which is what those scrapers
+  used to send, so the press came back with nothing and the reader was told the media could not be
+  found. Signed out there are no cookies to send and every request goes exactly as it did before.
+  **The order matters and was measured.** Facebook serves a public page to a stranger in the shape
+  these parsers know (`browser_native_hd_url` and its SD twin) and serves the same page to a session
+  as the signed-in app, which names no file at all: asking as the reader first cost a signed-in
+  reader the parse outright - the same reel gave HD 10.0 MB and SD 2.3 MB read as a stranger and
+  nothing read as the reader, so the press fell back to the one stream the player had been heard
+  fetching. The session is therefore the second question, asked only where there is one and the
+  first came back empty - and TikTok ends up the same shape for its own reason, below.
+  Two things this does not fix: a post Facebook itself will not show ("this content isn't available
+  at the moment") has nothing behind it whatever session asks, and a link pasted into an app that
+  has never browsed the site has no session to borrow.
+- **A share link is read from the page it lands on**, before its ids are taken apart. A group's post
+  lives at `/groups/<group>/posts/<story>/`, which is not the `/<author>/posts/<story>` the ids
+  build, so rebuilding the address asked Facebook for a page that does not exist - signed in, with
+  the post open and readable in the browser beside it, the link still came back as "couldn't find
+  any media behind that link". The share link simply leads to the post, so whatever the fetch lands
+  on is read first and the rebuilt address is the fallback.
+- **A group's cover photo is not the group post's picture.** Facebook shows a group's post to nobody
+  outside the group and serves the group's own card instead - and that card's `og:image` is the
+  group's cover, which the photo reader took for the post's picture. Measured on a share link: the
+  address resolved to `/groups/2943938342600974/posts/4463780570616736/` and offered
+  `278395917_518487713186254_n.jpg`, byte for byte the file the group's front page carries, while
+  the post on screen in the browser held `780981845_122124632054918752_n.jpg`. The reader was handed
+  a photograph that was nowhere in the post, which is worse than being told nothing was found. Where
+  a page belongs to a group, the group's front page is now asked what its cover is and a match is
+  refused; the link fails honestly and the browser, which reads the post as it is drawn, still gets
+  the right picture. A post outside a group costs no extra request, and a group post that does name
+  its own picture is read as before. There is nothing better to be had from a link alone: signed in,
+  the same page comes back as the app shell naming no file, and mbasic - the one html face that used
+  to answer - now replies "Facebook is not available on this browser".
+- **A picture is its own artwork.** Only the generic script hands a thumbnail over beside the media;
+  the site scripts send the file alone, so a photograph pressed on Facebook opened the sheet with an
+  empty grey square over a picture whose address it already had. An image arriving with no artwork
+  of its own is now shown as itself.
+- **A picture with no words is named after who posted it.** Facebook's photo viewer keeps the post's
+  text out of reach of the image - every box around it is exactly the picture's height - and a group
+  photo may carry no text at all, so the sheet opened as "Facebook", the page's own title, which is
+  also what the file was saved under. The first line or two of the first box above it that says
+  anything is taken instead, never the reaction and comment counts, which is all that sits beside a
+  viewer.
 - **TikTok is asked of the api first and of its own page second.** tikwm answers a public video
   best - several files, each with its size, fetchable by anyone - but it is a stranger to the
   reader's account, so `TikTokPageScraper` reads the site itself when the api has nothing. The page
@@ -734,8 +770,11 @@ its wiring in `MediaDownloaderComponent`.
   `/watch/?v=<id>`) the address carries an id, so the permalink rule drew at a third of the card's
   height over the MVideo rule's button at 0.6 of it - the two red discs a reader sees stacked. It
   looked only at the video's own parent, which is below the container the earlier rules hang their
-  button on. Both that rule and the `[role="article"]` one now ask the card that owns the video -
-  its `MVideo`/`ServerMVideo`/`inlineVideo` container - and stand aside if it already carries one.
+  button on. All three rules that can draw on a video - the permalink one, the `[role="article"]`
+  one and the plain `<video>` one - now ask the card that owns it, its
+  `MVideo`/`ServerMVideo`/`inlineVideo` container, and stand aside if that card already carries a
+  button. The third was found signed in, where the page keeps its player somewhere else again and
+  two discs came back over the one video.
   The card is asked rather than the whole post, so a post holding a picture beside its video keeps
   the picture's own button.
 - **The reels tray is a strip of covers, and its button opens what a cover stands for.** On
