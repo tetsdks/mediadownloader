@@ -187,7 +187,12 @@ All of them build from a clean checkout. After switching branches in Android Stu
   **Hussnain Mehdi** on `Dev-Husnain/MediaDownloaderLibrary` - and the script puts it there, so
   what this clone commits as is its own business. Dev-Husnain is pushed over SSH remote
   `github-dev-husnain`, tetsdks over HTTPS.
-  No AI/assistant attribution or co-author lines in commit messages.
+  **No AI/assistant attribution or co-author lines in commit messages.** GitHub reads a
+  `Co-authored-by` trailer and credits whoever it names in the repository's contributor list, so
+  one such line puts a second name on a repository meant to carry one. `tools/homes.sh` strips
+  those trailers from every commit it generates, which is a guard, not a licence to write them.
+  A repository's **tags** count the same way, so each home's tags point at its own commits: a tag
+  made on one home's branch is never pushed to the other.
 - Releases are cut by tag in both repos; JitPack caches a tag, so a bad publish needs a *new* tag.
 - The `newdownloader` app still carries its own copy of the module and is bumped to the published
   library by its owner — **do not change it from here**.
