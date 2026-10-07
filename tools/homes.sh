@@ -57,6 +57,11 @@ require_ready() {
 # hash it came out with last time: the branch grows by exactly what `main` grew by. Only its own
 # last commit is made afresh, which is why these pushes are forced - and each repository's tags pin
 # every commit JitPack has ever been served, so a forced push cannot lose one.
+#
+# The message is rewritten too, and only to take trailers out. GitHub reads `Co-authored-by` and
+# credits whoever it names in the repository's contributor list, so one such line left on one
+# commit puts a second name on a repository that is meant to carry one - which is exactly what
+# happened, and is what this strips. Nothing else in a message is touched.
 generated_branch_for() {
     local branch=$1 author=$2 email=$3
     git checkout -q -B "$branch" "$WORK_BRANCH"
@@ -64,7 +69,7 @@ generated_branch_for() {
         export GIT_AUTHOR_NAME='$author'
         export GIT_AUTHOR_EMAIL='$email'
         export GIT_COMMITTER_NAME='$author'
-        export GIT_COMMITTER_EMAIL='$email'" -- "$branch" >/dev/null
+        export GIT_COMMITTER_EMAIL='$email'"         --msg-filter 'sed -E "/^(Co-authored-by|Co-Authored-By|Signed-off-by|Claude-Session):/d"'         -- "$branch" >/dev/null
     git update-ref -d "refs/original/refs/heads/$branch" 2>/dev/null || true
 }
 
