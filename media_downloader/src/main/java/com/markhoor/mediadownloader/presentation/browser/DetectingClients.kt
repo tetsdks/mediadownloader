@@ -70,6 +70,15 @@ internal class DetectingWebViewClient(
     }
 
     /**
+     * The first frame of the page is on screen. Before it the WebView draws nothing at all, which
+     * is the blank a new tab opens on; a host covers that with a page of its own until here.
+     */
+    override fun onPageCommitVisible(view: WebView, url: String?) {
+        delegate?.onPageCommitVisible(view, url)
+        detector?.onSignal(PageSignal.PageVisible)
+    }
+
+    /**
      * Every request the page makes. Style sheets, fonts, scripts and anything longer than a real
      * link are dropped here, before a signal is made: a page makes hundreds of these.
      */
@@ -109,10 +118,15 @@ internal class DetectingWebViewClient(
     private fun bounded(url: String?): String = url.orEmpty().take(Browser.MAX_SNIFFED_URL_LENGTH)
 }
 
-/** Reports loading progress and titles, and passes the rest - full screen video, file pickers - to [delegate]. */
+/**
+ * Reports loading progress and titles, and passes the rest - full screen video, file pickers - to
+ * [delegate]. With a [tab] it also answers for the windows a page opens and closes, which is how a
+ * link that asks for one becomes a tab.
+ */
 internal class DetectingChromeClient(
     private val detector: MediaDetector,
     private val delegate: WebChromeClient?,
+    private val tab: BrowserTabHost? = null,
 ) : WebChromeClient() {
 
     override fun onProgressChanged(view: WebView, newProgress: Int) {
@@ -127,6 +141,7 @@ internal class DetectingChromeClient(
 
     override fun onReceivedIcon(view: WebView, icon: Bitmap?) {
         delegate?.onReceivedIcon(view, icon)
+        tab?.onIcon(icon)
     }
 
     override fun onShowCustomView(view: View?, callback: CustomViewCallback?) {
@@ -148,11 +163,28 @@ internal class DetectingChromeClient(
         delegate?.onPermissionRequest(request) ?: super.onPermissionRequest(request)
     }
 
-    override fun onCreateWindow(view: WebView?, isDialog: Boolean, isUserGesture: Boolean, resultMsg: Message?): Boolean =
-        delegate?.onCreateWindow(view, isDialog, isUserGesture, resultMsg)
+    /**
+     * The page wants a window of its own - a link with a target, or `window.open`. In a tab it
+     * becomes another tab, and the WebView it is given is that tab's; the host's own client is not
+     * asked, since the window has been dealt with. Only on a tap: a page that opens one by itself
+     * is a popup, and is refused with everything else that cannot be given a window.
+     */
+    override fun onCreateWindow(view: WebView?, isDialog: Boolean, isUserGesture: Boolean, resultMsg: Message?): Boolean {
+        val handedOver = resultMsg?.takeIf { isUserGesture }?.let { message ->
+            (message.obj as? WebView.WebViewTransport)?.let { transport ->
+                tab?.openWindow()?.also {
+                    transport.webView = it
+                    message.sendToTarget()
+                }
+            }
+        }
+        if (handedOver != null) return true
+        return delegate?.onCreateWindow(view, isDialog, isUserGesture, resultMsg)
             ?: super.onCreateWindow(view, isDialog, isUserGesture, resultMsg)
+    }
 
     override fun onCloseWindow(window: WebView?) {
         delegate?.onCloseWindow(window) ?: super.onCloseWindow(window)
+        tab?.closeWindow()
     }
 }

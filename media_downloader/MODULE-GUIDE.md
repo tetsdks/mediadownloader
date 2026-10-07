@@ -148,6 +148,30 @@ override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
 // From the sheet: MediaDownloader.download(found.media, chosenQuality)
 ```
 
+Several pages at once - tabs - come from the same ViewModel. The module builds every tab's
+WebView, so this is the `createBrowser` way of working rather than the `attach` one, and
+`uiState`/`events` always describe the tab on screen:
+
+```kotlin
+// Once per screen; the tabs themselves live as long as the ViewModel.
+val tabs = browserViewModel.tabs(requireContext(), viewLifecycleOwner)
+
+tabs.open("https://www.dailymotion.com/")           // a tab, shown
+tabs.openInBackground(link)                          // "open in a new tab"
+binding.back.setOnClickListener { if (!tabs.goBack()) finish() }
+
+viewLifecycleOwner.lifecycleScope.launch {
+    launch {
+        // The WebView on screen: add it to the container, and swap it when this changes.
+        tabs.activeBrowser.collect { browser -> container.show(browser?.webView) }
+    }
+    launch {
+        tabs.state.collect { strip.render(it.tabs, it.activeId) }   // label, progress, favicon
+    }
+}
+// strip: tabs.select(id), tabs.close(id), tabs.open(), tabs.restoreLastClosed()
+```
+
 The module finds the page's media three ways, and the host only renders the result:
 - **the page's address**, when a parser reads it (a Dailymotion video, a pin, a TikTok): found with
   no tap at all;
@@ -217,7 +241,8 @@ com.markhoor.mediadownloader
 └── presentation/
     ├── linkparse/              LinkParseViewModel, LinkParseUiState
     ├── downloads/              DownloadsViewModel, DownloadsUiState, DownloadsEvent
-    └── browser/                BrowserViewModel, BrowserUiState, BrowserEvent, MediaBrowser,
+    └── browser/                BrowserViewModel (+ PageSession), BrowserUiState, BrowserEvent,
+                                MediaBrowser, BrowserTabs (+ TabRoster), BrowserTabsUiState,
                                 DetectingWebViewClient/ChromeClient, PageScriptBridge
 ```
 
@@ -277,6 +302,10 @@ its wiring in `MediaDownloaderComponent`.
       app's own download layer are removed *(device-verified on SM-A266B, upgrading a real install)*
 - [x] **6. Clean-up** — conventions self-check (no `lateinit`/`!!`, every constant and extension
       in its one file), the app's leftover download helpers removed, guide final
+- [x] **7. Tabs** — several pages at once, a detection session per tab, a budget of live WebViews,
+      a link's window opened as a tab *(device-verified on SM-A266B: two sites side by side, a
+      `target="_blank"` tab beside its opener, back closing it, a download from a tab, undo close
+      and a rotation)*
 
 ## 6. Decisions & assumptions
 
@@ -300,6 +329,84 @@ its wiring in `MediaDownloaderComponent`.
   lays its player out in `vh`: the video played, at the right resolution, inside a box zero pixels
   high, and the page read as broken while the button detection produced worked. Anything that
   renders blank in the browser is worth measuring a `100vh` element in before blaming detection.
+- **A tab is a detection session; the screen hears only the one it is showing.** Tabs could have
+  been one session told which WebView to listen to, and every rule in it - the page's memory, the
+  press that is waiting, the script injected a moment ago - would then have had to carry a tab with
+  it. A session per tab instead: `BrowserViewModel.newSession` makes one in a scope of its own, a
+  child of the ViewModel's, so closing a tab cancels everything that tab had running and leaves the
+  others alone. The screen's `uiState` and `events` are filled from whichever session is shown,
+  and the sessions that are not shown are **still collected and thrown away** rather than left
+  buffered: a tab that found media while it was in the background must not pop the host's sheet
+  minutes later, over a page the user is reading, the moment it is selected. What it found is in
+  its state all along, which is why selecting a tab shows its media at once.
+- **A tab does not always keep its WebView.** A renderer is tens of megabytes and the roster holds
+  up to `Browser.MAX_TABS` (16), so past `Browser.LIVE_TABS` (4, or 2 on a low-end device) the
+  least recently shown tab saves its page with `WebView.saveState` and gives its WebView up;
+  selecting it builds one again and restores it, and the strip says `hasLivePage = false` in the
+  meantime. A tab in the background is otherwise left alone and keeps loading: the budget is about
+  memory, not about stopping work the user asked for. The tab on screen is never the one given up,
+  and neither is a tab in the middle of a callback of its own - destroying a WebView from inside
+  its own `onCreateWindow` takes the app with it, which is what `TabRoster.overBudget(keep = …)` is
+  for.
+- **Closing the last tab leaves one on the home page, not nothing and not a blank.** A browser with
+  no tab is a screen with nothing on it and nothing to do, and every host would have had to invent
+  the same answer, so the roster never empties once it has been filled. Leaving a *blank* tab there
+  was the first answer and it was the wrong one - a tab in the strip with no page in the browser
+  reads as a bug, which is how it was reported - so the host names a `homeUrl` when it hosts the
+  tabs and that is what the replacement opens on, the same page `open()` with no address opens.
+  The closed tab still goes on the undo list, so the one that was there is a press away. Before the
+  first `open` there are no tabs at all, deliberately: that is what lets the host decide when the
+  browser starts rather than the module loading a page nobody asked for.
+- **A WebView says when it has painted, because until it has it is a white rectangle.** A tab just
+  opened has a WebView with nothing in it, and a page takes a second or two to arrive: that is the
+  white screen a new tab was reported as opening on, and the same blank shows when a tab whose page
+  was put away is selected again. `onPageCommitVisible` - the first frame of a page being on screen
+  - is reported as `PageSignal.PageVisible` and kept in `DetectionState.isPageVisible`, so a host
+  can draw its own new-tab screen over the WebView and take it away at exactly the right moment.
+  It is set false when a WebView is attached and when a renderer dies, and deliberately **not** when
+  the next page starts loading: a browser goes on showing the page it is leaving until the new one
+  has something to put there, and a host that hid it then would blank a page that is perfectly
+  visible.
+- **A tab's card carries a picture of its page, taken while it still has one.** A switcher is a
+  grid of pages, so a favicon is not enough; the picture is taken at the two moments the page is on
+  screen and about to stop being it - as another tab is selected, and before a tab's WebView is
+  given up - with `capturePreview` for the host to refresh the shown one as the switcher opens.
+  The page is drawn by hand onto a software canvas, scaled to `Browser.PREVIEW_WIDTH` in `RGB_565`,
+  which is about a third of a megabyte a tab rather than a megabyte and a half: a full-sized
+  `ARGB_8888` picture of sixteen tabs is more memory than the renderers they are pictures of.
+  Playing video comes out grey, because what a hardware surface is showing is not in the view's own
+  drawing - the same gap every browser's switcher has. Drawing a page again in software is slow
+  enough to be felt, so it is only done where a wait is expected: `capturePreview` takes every live
+  tab's picture as the switcher opens, and a tab's last picture is taken as its page is given up.
+  Taking one on the way past - on every switch - put a visible stutter on a tab switch and bought
+  nothing: the pictures are only ever looked at in the switcher.
+- **Every tab's WebView is laid out, on screen or not.** Only the shown tab is in the host's
+  layout, so nothing measures the others, and a WebView of no size makes Chromium resolve `vh` to
+  zero - the bug already recorded for a wrap-content WebView, arriving by another door. Each is
+  measured and laid out to the size the page on screen last had (the display's size until a tab has
+  been shown), which also gives a tab opened in the background a sensible page and a picture for its
+  card before it has ever been looked at.
+- **The rules about tabs are a class with no WebView in it.** `TabRoster` holds the order, the
+  selection, who opened whom and whose page goes next; `BrowserTabs` holds the Android half and
+  asks it. That is the only way any of it is tested on the JVM, and the rules are the part worth
+  testing: a tab opened by a link sits beside its opener and closing it goes back to the opener,
+  not to a neighbour the user never chose; a tab opened in the background counts as just used,
+  because it is loading and is the last page worth throwing away.
+- **A link that asks for a window becomes a tab, and only on a tap.** A tab's WebView is the only
+  one given `setSupportMultipleWindows(true)`: without it `target="_blank"` quietly loads in the
+  same page, with it `onCreateWindow` is called and a tab is opened for it. The WebView has to be
+  handed over before anything is loaded in it, so the tab is opened with no address at all and the
+  page puts one there a moment later - which is why a new tab's strip entry is nameless for an
+  instant. `javaScriptCanOpenWindowsAutomatically` is deliberately left off and the gesture is
+  checked: a page opening windows by itself is a popup, and on these sites there are many.
+- **A dead renderer rebuilds only the tab on screen.** Every WebView in the app shares one
+  renderer, so when the system kills it each live tab hears `RendererGone` at once; rebuilding them
+  all would be the worst answer on a device that has just run out of memory. The shown tab is given
+  a new WebView and the address it was on, and the others keep theirs and come back when they are
+  selected. The host still gets `BrowserCrashed` to say so, but with tabs it has nothing to do
+  about it. The crash is answered once per tab: the state says `isRendererGone` until a page lands,
+  so without that latch a rebuild would be answered by the state of the browser it just replaced,
+  for ever.
 - **One generic reader for the tube sites, reachable only by consent.** The old url-parser carried
   six adult scrapers, unreachable behind the block list, and they were not brought over. There is
   one now (`data/scraper/tube/`), and one is the point: the sites are too many to write a scraper
@@ -775,6 +882,17 @@ its wiring in `MediaDownloaderComponent`.
   media. A short link that leads to a site the module could read on its own - a YouTube video, say
   - still fails, since nothing re-enters the pipeline with the resolved address; that would have to
   re-run the site check too.
+- **At sixteen tabs a link that asks for a window does nothing.** `open` answers `null` and the
+  strip can say so in advance (`canOpenMore`), but a page's own `target="_blank"` has nowhere to go
+  and is simply refused - it does not fall back to loading in the tab it was tapped in, which would
+  mean handing the page a throwaway WebView only to read the address out of it.
+- **A restored tab is its history, not its scroll.** `WebView.saveState` carries the back/forward
+  list and nothing else: a tab that gave its WebView up and is selected again loads its page afresh,
+  so a feed scrolled a long way comes back at the top, and a form half filled in comes back empty.
+  Only tabs past the live budget are restored this way; the tabs in use are never touched.
+- **Tabs do not outlive the process.** They belong to the ViewModel: a configuration change keeps
+  them (each page saved and put back), and the app being killed loses them. Nothing is written to
+  disk, so a host that wants its tabs back after a cold start would have to keep the addresses.
 - The module logs only failures it cannot report any other way (a job started before
   `initialize`, background upkeep errors), under the tag `MediaDownloader`.
 - Pinterest downloads are filed under `Website`, as in the old app; `Constants.Storage.SITE_FOLDERS`

@@ -7,6 +7,8 @@ package com.markhoor.mediadownloader.domain.models
  * @param isDescribingMedia [media] is shown and its qualities, sizes or name are still being read.
  * @param isSearching the user asked for the page's media and it has not been found yet.
  * @param showDownloadButton the host's own floating button belongs on this page now.
+ * @param isPageVisible the browser has painted a page. A WebView that has not draws nothing, so
+ *   until then there is a blank rectangle where the page will be.
  */
 internal data class DetectionState(
     val pageUrl: String = "",
@@ -21,6 +23,7 @@ internal data class DetectionState(
     val hasScriptButtons: Boolean = false,
     val scriptAnswered: Boolean = false,
     val showDownloadButton: Boolean = false,
+    val isPageVisible: Boolean = false,
     val isRendererGone: Boolean = false,
 )
 

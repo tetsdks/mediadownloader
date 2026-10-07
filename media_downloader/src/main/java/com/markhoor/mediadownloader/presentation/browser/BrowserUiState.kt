@@ -10,6 +10,9 @@ import com.markhoor.mediadownloader.domain.models.SiteAccess
  * @param media what the page offers to download.
  * @param showDownloadButton the host's own floating download button belongs on the page now: there
  *   is media, the site allows it, and no page script is showing its own button on the media.
+ * @param isPageVisible the browser has painted a page. A WebView that has not - a tab just opened,
+ *   or one whose page is being put back - draws a blank rectangle, so this is what a host's own
+ *   new-tab screen is shown over and taken away by.
  */
 data class BrowserUiState(
     val url: String = "",
@@ -20,6 +23,7 @@ data class BrowserUiState(
     val siteAccess: SiteAccess = SiteAccess.Unsupported,
     val media: PageMediaState = PageMediaState.None,
     val showDownloadButton: Boolean = false,
+    val isPageVisible: Boolean = false,
 ) {
     val isLoading: Boolean get() = progress in 1..99
 }

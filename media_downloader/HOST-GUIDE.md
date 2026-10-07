@@ -30,7 +30,8 @@ covers only what a host can see and use.
 | Area | What the module does | What stays with the host |
 |---|---|---|
 | **Link parsing** | Turns a pasted or shared link into media: title, thumbnail, every quality with a label and size | The screen that shows it |
-| **Browser detection** | Finds media on the pages a WebView shows: page scripts, request sniffing, parser pages, its own in-page buttons | The WebView's layout, address bar, tabs, history |
+| **Browser detection** | Finds media on the pages a WebView shows: page scripts, request sniffing, parser pages, its own in-page buttons | The WebView's layout, address bar, history |
+| **Tabs** | Several pages open at once, each finding its own media, with the memory they cost kept in hand | The tab strip |
 | **Downloads** | Background download with a notification, pause/resume/retry/delete, resume after the app is killed or the phone restarts, HLS streams (incl. AES-128) remuxed to MP4 | The downloads screen |
 | **Progress** | Every download's state and progress as a `Flow` | Rendering it |
 | **Site policy** | A block list (adult sites, YouTube) that always applies, plus an optional supported-sites list | Choosing strict or open mode |
@@ -981,6 +982,8 @@ class BrowserViewModel : ViewModel {
                            webViewClient: WebViewClient? = null, webChromeClient: WebChromeClient? = null): MediaBrowser
     @MainThread fun createBrowser(context: Context, lifecycleOwner: LifecycleOwner,
                                   webViewClient: WebViewClient? = null, webChromeClient: WebChromeClient? = null): MediaBrowser
+    @MainThread fun tabs(context: Context, lifecycleOwner: LifecycleOwner, homeUrl: String? = null,
+                         webViewClient: WebViewClient? = null, webChromeClient: WebChromeClient? = null): BrowserTabs
     fun onDownloadButtonClick()
     companion object { val Factory: ViewModelProvider.Factory }
 }
@@ -990,6 +993,7 @@ class BrowserViewModel : ViewModel {
 |---|---|
 | `attach(webView, …)` | Drives **your own** WebView (from your layout). The module installs its own `WebViewClient`/`WebChromeClient`, forwards **every** callback to the ones you pass, and turns on JavaScript and DOM storage. **Don't call `webView.webViewClient = …` yourself afterwards**; pass your clients here instead. A browser attached before is detached first. |
 | `createBrowser(context, …)` | The module creates the WebView; add `MediaBrowser.webView` to your layout. It's destroyed when `lifecycleOwner` is. |
+| `tabs(context, …, homeUrl)` | Several pages at once - §7.4. The module creates every tab's WebView, so this is the `createBrowser` way of working, not `attach`. Call it **once per screen**; the tabs come back with it. `homeUrl` is the page a tab opens on when nothing else says what it should show. |
 
 A WebView the module creates is also allowed to start media **without a tap**, and is given a wide
 viewport. Detection has nothing to find until a player asks for its file, and many only do that on
@@ -1013,6 +1017,10 @@ What was found survives a configuration change; the WebView doesn't belong to th
 With `attach`, the browser detaches when `lifecycleOwner` is destroyed. For a fragment, pass
 `viewLifecycleOwner`.
 
+`uiState` and `events` always describe **the page being shown**: the one browser's, or the selected
+tab's. Use `attach`/`createBrowser` **or** `tabs`, not both - two browsers claiming one screen's
+state would each overwrite the other.
+
 **`MediaBrowser`**: the handle `attach`/`createBrowser` return. Every method is main-thread only,
 and after `detach()` the actions do nothing and return `false`.
 
@@ -1035,6 +1043,7 @@ data class BrowserUiState(
     val siteAccess: SiteAccess,
     val media: PageMediaState,
     val showDownloadButton: Boolean,
+    val isPageVisible: Boolean,
 ) { val isLoading: Boolean }   // progress in 1..99
 
 sealed interface PageMediaState {
@@ -1051,6 +1060,13 @@ sealed interface PageMediaState {
   player the script cannot reach - a dailymotion video, whose player is in an iframe - show yours.
 - `Found.isDescribing`: name, qualities or sizes are still arriving. What's shown can already be
   downloaded; update the sheet as the state changes.
+- `isPageVisible`: the browser has **painted a page**. A WebView that hasn't draws a blank white
+  rectangle - which is what a tab just opened, or a tab whose page is being put back, shows for as
+  long as the page takes to arrive. Draw your own new-tab screen over the WebView while this is
+  `false` and take it away when it turns `true`; otherwise your users see a white screen for a
+  second or two and read it as a bug. It is **not** unset when the next page starts loading: the
+  browser goes on showing the page it is leaving until the new one has something to put there, so
+  it never hides a page that is perfectly visible.
 
 **`BrowserEvent`**:
 
@@ -1063,6 +1079,130 @@ sealed interface PageMediaState {
 
 Buttons on the page: on most sites the module draws its own small download button on each video
 or picture. Those taps arrive as `ShowMedia` too, so the host handles every tap the same way.
+
+---
+
+### 7.4 `BrowserTabs` — several pages at once
+
+```kotlin
+class BrowserTabs {
+    val state: StateFlow<BrowserTabsUiState>       // the strip: every tab, and which is shown
+    val activeBrowser: StateFlow<MediaBrowser?>    // the page on screen
+
+    @MainThread fun open(url: String = ""): String?          // opens and shows it; null when full
+    @MainThread fun openInBackground(url: String): String?   // "open in a new tab"
+    @MainThread fun select(id: String): Boolean
+    @MainThread fun close(id: String): Boolean
+    @MainThread fun closeOthers(id: String)
+    @MainThread fun closeAll()
+    @MainThread fun restoreLastClosed(): String?             // undo close, with the page it was on
+    @MainThread fun goBack(): Boolean
+    @MainThread fun capturePreview(): Boolean                // a fresh picture of the page on screen
+}
+```
+
+Get it from `browserViewModel.tabs(context, lifecycleOwner, homeUrl)`, once per screen. The **tabs**
+live as long as the ViewModel; their **WebViews** are built with that context, belong to that
+lifecycle owner and are given up when it is destroyed, each tab saving its page so the next screen
+puts it back. Every method is main-thread only.
+
+`homeUrl` is the page a tab opens on when nothing else says what it should show: `open()` with no
+address, and the tab left behind when the last one is closed. Give it one - a tab with nothing in it
+is no better than no tab at all. Without it those tabs are empty and your own new-tab screen is what
+fills them.
+
+| Member | Description |
+|---|---|
+| `activeBrowser` | The `MediaBrowser` of the tab on screen, `null` only before your first `open`. Add its `webView` to your container and **swap it whenever this changes** - that is the whole of showing a tab. It is a full `MediaBrowser`: `load`, `reload`, `goForward`, `canGoBack` all work on the selected tab. |
+| `state` | What a tab strip draws, below. |
+| `open(url)` | A new tab, shown. With no address it opens `homeUrl`, or an empty tab when you named none. Returns its id, or `null` when 16 are already open (`state.canOpenMore` says so in advance). |
+| `openInBackground(url)` | A new tab beside the one on screen, without leaving it. It loads straight away. |
+| `select(id)` / `close(id)` | Closing the shown tab shows the tab that opened it, else a neighbour. Closing the **last** tab leaves one on `homeUrl` in its place - a browser in use always has a tab. |
+| `closeOthers(id)`, `closeAll()` | `closeAll` leaves one tab on `homeUrl`, as closing the last one always does. |
+| `restoreLastClosed()` | Brings the last closed tab back with its page. The last five closes are kept. |
+| `goBack()` | Back a page in the shown tab. A tab that a link opened and that has nowhere left to go **closes itself** and puts the page that opened it back - as a phone browser does - and still returns `true`. `false` means what it means for one browser: nothing left to go back to, so close the browser. |
+| `capturePreview()` | Takes a fresh picture of the page on screen for its card. Call it **as your tab switcher opens**; otherwise a tab's picture is the one from when it was last left. |
+
+**`BrowserTabsUiState`**:
+
+```kotlin
+data class BrowserTabsUiState(
+    val tabs: List<BrowserTabUiState>, val activeId: String?,
+    val canOpenMore: Boolean, val canRestoreClosed: Boolean,
+) { val count: Int; val active: BrowserTabUiState? }
+
+data class BrowserTabUiState(
+    val id: String, val url: String, val title: String, val progress: Int,
+    val favicon: Bitmap?, val preview: Bitmap?, val isActive: Boolean, val hasLivePage: Boolean,
+) { val isLoading: Boolean; val label: String }   // label = title, or the address until it has one
+```
+
+**Cards for a tab switcher** (the grid a browser shows when you tap the tab count): `favicon` is
+the site's own icon and `preview` is a **picture of the page**, so a card is `preview` under
+`favicon` + `label` + a close cross - everything in `BrowserTabUiState`, nothing to capture
+yourself.
+
+```kotlin
+tab.preview?.let { shot ->
+    Image(shot.asImageBitmap(), null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+}                                   // ImageView: imageView.setImageBitmap(tab.preview)
+```
+
+- The picture is taken as a tab **leaves the screen** and before its page is **put away**, so every
+  tab that has been drawn once has one. It is `null` until then - draw a placeholder.
+- `capturePreview()` refreshes the one on screen; call it as the switcher opens.
+- It is scaled to **320 px wide** (200 on a low-end device) in `RGB_565`, about a third of a
+  megabyte a tab, and drawn into a software canvas. **Playing video comes out grey or black** -
+  what a hardware surface is showing cannot be drawn this way, which is why every browser's own
+  switcher has the same gap.
+- The bitmaps belong to the module and are freed with the tab. Draw them; don't recycle them.
+
+**What the module does for you, and what it costs:**
+
+- **Each tab finds its own media.** A tab left loading keeps looking and is ready the moment you
+  select it. Only the tab on screen reaches `uiState` and `events`, so a background tab never opens
+  your download sheet over the page being read - and never pops it later either: what it found is
+  simply in its state when you switch to it.
+- **A tab does not always keep its WebView.** A renderer is tens of megabytes. Past **4 live pages**
+  (2 on a low-end device, of 16 tabs in all) the least recently shown tab saves its page and gives
+  its WebView up; selecting it builds one again and restores it. `hasLivePage` is `false` in the
+  meantime, if you want to say so. `saveState` carries the history, not the scroll position, so a
+  restored page comes back at the top.
+- **A link that asks for a new window becomes a tab**, beside the one that opened it - `onCreateWindow`
+  is answered by the module, and your own chrome client is not asked. A page that opens a window
+  **without a tap** is refused: that is the popup blocker, and these sites need one.
+- **A dead renderer rebuilds the tab on screen itself.** You still get `BrowserCrashed` so you can
+  say what happened, but with tabs there is nothing to recreate.
+- **There is always a tab once there has been one.** Closing the last leaves one on `homeUrl` -
+  `activeBrowser` is `null` only before your first `open`, so the browser screen never has to draw
+  a state with no page in it. A tab with no page to open has no address and nothing painted
+  (`isPageVisible` is `false`), which is where your own new-tab screen goes.
+- Tabs **do not survive the process**: they belong to the ViewModel. A rotation keeps them; a cold
+  start does not.
+
+> **Put the page in one container and swap the WebView inside it.** Keep a single view that lives
+> as long as the screen and move the selected tab's `webView` into it; do **not** give each tab a
+> view of its own. In Compose that means one `AndroidView { FrameLayout(it) }` with the swap in
+> `update`, never `key(browser) { AndroidView(factory = { browser.webView }) }` - keyed on the
+> browser, the whole node is torn down and built again on every switch, and the frame in between
+> is the app's own toolbars drawn as white. Measured on a device: with the keyed version the
+> address bar and tab strip went blank for about half a second on each new tab; with one container
+> they never flicker at all.
+>
+> ```kotlin
+> AndroidView(
+>     modifier = Modifier.fillMaxSize(),
+>     factory = { context -> FrameLayout(context) },
+>     update = { container ->
+>         val web = browser.webView
+>         if (web.parent !== container) {
+>             container.removeAllViews()
+>             (web.parent as? ViewGroup)?.removeView(web)
+>             container.addView(web, MATCH_PARENT, MATCH_PARENT)
+>         }
+>     },
+> )
+> ```
 
 ---
 
@@ -1144,6 +1284,37 @@ class BrowserFragment : Fragment(R.layout.fragment_browser) {
 
 Typed text is not a url. Build a search url with the text **URL-encoded**
 (`URLEncoder.encode(text, "UTF-8")`); `load` refuses anything with spaces.
+
+The same screen with tabs - the module builds the WebViews, so the container is emptied and filled
+as the selection changes, and everything else stays exactly as it is above:
+
+```kotlin
+private val tabs by lazy { browserViewModel.tabs(requireContext(), viewLifecycleOwner) }
+
+override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+    if (tabs.state.value.count == 0) tabs.open("https://www.dailymotion.com")
+
+    viewLifecycleOwner.lifecycleScope.launch {
+        repeatOnLifecycle(Lifecycle.State.STARTED) {
+            launch {
+                tabs.activeBrowser.collect { browser ->
+                    binding.pageContainer.removeAllViews()
+                    browser?.webView?.let { web ->
+                        (web.parent as? ViewGroup)?.removeView(web)
+                        binding.pageContainer.addView(web)
+                    }
+                }
+            }
+            launch { tabs.state.collect { strip.submitList(it.tabs) } }
+        }
+    }
+    strip.onTabClick = tabs::select
+    strip.onCloseClick = { tabs.close(it) }
+    binding.newTab.setOnClickListener { tabs.open() }
+}
+
+fun onBackPressed() { if (!tabs.goBack()) closeBrowser() }
+```
 
 ### 8.3 A progress list
 
@@ -1370,6 +1541,10 @@ every class name breaks downloads.
 - Page and api responses are streamed and capped. Titles, urls and headers coming from pages are
   length-limited. On memory pressure (`onTrimMemory`) cached page scripts are released.
 - A killed WebView renderer is reported as `BrowserEvent.BrowserCrashed` instead of crashing the app.
+  With tabs the module also builds the shown tab a new WebView and reopens the page it was on; the
+  tabs in the background keep their address and come back when they are selected.
+- Tabs keep at most four live WebViews (two on a low-end device) however many are open, so a strip
+  of sixteen costs four renderers, not sixteen.
 
 ---
 
@@ -1443,10 +1618,14 @@ Everything a host can reference. Anything not listed here is `internal` to the m
 - `sealed DownloadsEvent`: `Started`, `NotStarted`, `ActionFailed`
 
 **`com.markhoor.mediadownloader.presentation.browser`**
-- `BrowserViewModel` (`Factory`, `uiState`, `events`, `attach`, `createBrowser`, `onDownloadButtonClick`)
+- `BrowserViewModel` (`Factory`, `uiState`, `events`, `attach`, `createBrowser`, `tabs`,
+  `onDownloadButtonClick`)
 - `MediaBrowser` (`webView`, `isAttached`, `canGoBack`, `canGoForward`, `load`, `reload`,
   `stopLoading`, `goBack`, `goForward`, `onDownloadButtonClick`, `detach`)
+- `BrowserTabs` (`state`, `activeBrowser`, `open`, `openInBackground`, `select`, `close`,
+  `closeOthers`, `closeAll`, `restoreLastClosed`, `goBack`, `capturePreview`)
 - `BrowserUiState`, `sealed PageMediaState`: `None`, `Searching`, `Found`
+- `BrowserTabsUiState`, `BrowserTabUiState`
 - `sealed BrowserEvent`: `ShowMedia`, `HideMedia`, `NothingFound`, `BrowserCrashed`
 
 **Resources:** the `media_downloader_*` strings (§10).

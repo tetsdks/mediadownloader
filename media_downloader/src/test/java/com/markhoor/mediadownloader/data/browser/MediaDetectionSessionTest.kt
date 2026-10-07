@@ -614,4 +614,35 @@ class MediaDetectionSessionTest {
         assertTrue(harness.session.state.value.isRendererGone)
         assertEquals(DetectionEvent.RendererGone, harness.events.last())
     }
+
+    /**
+     * A WebView draws nothing until it has painted a page, which is the blank a new tab opens on.
+     * The next page does not take it away again: the browser goes on showing the page it is
+     * leaving until the new one has something to put there.
+     */
+    @Test
+    fun `the page is not visible until the browser has painted one`() = runTest {
+        val harness = harness()
+
+        harness.session.onSignal(PageSignal.Attached("ua"))
+        runCurrent()
+        assertFalse(harness.session.state.value.isPageVisible)
+
+        harness.session.onSignal(PageSignal.PageStarted(rumblePage))
+        runCurrent()
+        assertFalse("still blank while it loads", harness.session.state.value.isPageVisible)
+
+        harness.session.onSignal(PageSignal.PageVisible)
+        runCurrent()
+        assertTrue(harness.session.state.value.isPageVisible)
+
+        harness.session.onSignal(PageSignal.PageStarted("https://rumble.com/another.html"))
+        runCurrent()
+        assertTrue("the page it is leaving is still on screen", harness.session.state.value.isPageVisible)
+
+        // A dead renderer leaves nothing on screen, and the WebView built to replace it is blank.
+        harness.session.onSignal(PageSignal.RendererGone)
+        runCurrent()
+        assertFalse(harness.session.state.value.isPageVisible)
+    }
 }

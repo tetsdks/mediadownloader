@@ -20,6 +20,12 @@ internal sealed interface PageSignal {
 
     data class PageFinished(val url: String) : PageSignal
 
+    /**
+     * The browser has painted the first frame of a page. Until this a WebView shows nothing at
+     * all - the blank a new tab opens on.
+     */
+    data object PageVisible : PageSignal
+
     data class TitleChanged(val title: String) : PageSignal
 
     data class ProgressChanged(val progress: Int) : PageSignal

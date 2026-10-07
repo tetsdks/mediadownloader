@@ -26,6 +26,10 @@ that uses it.
 - **Browser detection.** Attach a WebView and the module finds the media the page is playing -
   page scripts, request sniffing, parser pages - and draws its own small download buttons in the
   page where it can.
+- **Tabs.** Several pages open at once, as a phone browser has them: each tab finds its own media,
+  a link that asks for a window becomes a tab beside the one that opened it, and the host gets each
+  tab's title, icon and a picture of its page for a switcher. The memory is kept in hand - sixteen
+  tabs, four live WebViews - and only the tab on screen reaches the host's download sheet.
 - **Downloads.** Background downloads through WorkManager with a progress notification, surviving
   the app being closed, killed or the phone restarting. Pause, resume, retry and delete. HLS
   (including AES-128) is remuxed into MP4, separate audio merged.

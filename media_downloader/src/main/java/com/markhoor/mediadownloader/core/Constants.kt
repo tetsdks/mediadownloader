@@ -286,6 +286,29 @@ internal object Constants {
         /** Page commands waiting for a WebView; older ones are dropped, a script is only good for its page. */
         const val COMMAND_BUFFER = 8
 
+        /** How many tabs the browser may hold at once. */
+        const val MAX_TABS = 16
+
+        /**
+         * How many tabs keep a WebView of their own. A WebView is tens of megabytes of renderer,
+         * so past this many the least recently used tab gives its own up and keeps its page as
+         * saved state instead; selecting it builds a WebView again and restores it.
+         */
+        const val LIVE_TABS = 4
+        const val LIVE_TABS_LOW_END = 2
+
+        /** Tabs kept after they are closed, so closing one can be undone. */
+        const val CLOSED_TABS_KEPT = 5
+
+        /**
+         * How wide a tab's preview picture is kept, in pixels; a page is scaled down to it and
+         * never up. A card in a grid is about half a screen wide, so this is a little under what
+         * it is drawn at - sharp enough to recognise a page by, and in `RGB_565` about a third of
+         * a megabyte per tab rather than a megabyte and a half.
+         */
+        const val PREVIEW_WIDTH = 320
+        const val PREVIEW_WIDTH_LOW_END = 200
+
         /** A card's slug at least this long is a real title; a heading longer than this is one too. */
         const val MIN_SLUG_TITLE_LENGTH = 12
         const val LONG_DOM_TITLE_LENGTH = 25

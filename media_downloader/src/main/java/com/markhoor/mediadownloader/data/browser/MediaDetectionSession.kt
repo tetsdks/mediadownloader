@@ -159,11 +159,18 @@ internal class MediaDetectionSession(
 
     private fun handle(signal: PageSignal) {
         when (signal) {
-            is PageSignal.Attached -> userAgent = signal.userAgent
+            is PageSignal.Attached -> {
+                userAgent = signal.userAgent
+                // Whatever was on screen was the WebView before this one: this one has drawn nothing.
+                publish { it.copy(isPageVisible = false) }
+            }
             is PageSignal.PageStarted ->
                 if (signal.url.isNotBlank() && signal.url != page.siteUrl) page.siteUrl = signal.url
             is PageSignal.PageCommitted -> onPageCommitted(signal)
             is PageSignal.PageFinished -> keepInstagramSignIn(signal.url)
+            // Deliberately not unset when the next page starts: the browser goes on showing the
+            // page it is leaving until the new one has something to put there.
+            PageSignal.PageVisible -> publish { it.copy(isPageVisible = true) }
             is PageSignal.TitleChanged -> {
                 if (!signal.title.startsWith("http")) page.title = signal.title.asMediaTitle()
                 publish { it.copy(pageTitle = signal.title) }
@@ -175,7 +182,7 @@ internal class MediaDetectionSession(
             PageSignal.DownloadButtonPressed -> if (_state.value.showDownloadButton) showMedia()
             PageSignal.RendererGone -> {
                 resetMedia()
-                publish { it.copy(isRendererGone = true) }
+                publish { it.copy(isRendererGone = true, isPageVisible = false) }
                 _events.trySend(DetectionEvent.RendererGone)
             }
         }

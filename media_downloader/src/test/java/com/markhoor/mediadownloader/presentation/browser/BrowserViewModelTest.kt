@@ -31,7 +31,7 @@ class BrowserViewModelTest {
 
     @Test
     fun `the detector's state becomes the screen's`() = runTest(dispatcher) {
-        val viewModel = BrowserViewModel { detector }
+        val viewModel = BrowserViewModel({ detector })
         val media = MediaModel("t", null, emptyList(), "s")
 
         detector.state.value = detector.state.value.copy(
@@ -49,7 +49,7 @@ class BrowserViewModelTest {
 
     @Test
     fun `the detector's moments become the screen's events`() = runTest(dispatcher) {
-        val viewModel = BrowserViewModel { detector }
+        val viewModel = BrowserViewModel({ detector })
         detector.eventChannel.send(DetectionEvent.RendererGone)
         assertEquals(BrowserEvent.BrowserCrashed, viewModel.events.first())
     }

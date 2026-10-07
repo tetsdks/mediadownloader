@@ -39,10 +39,10 @@ import com.markhoor.mediadownloader.domain.models.MediaQualityModel
 import com.markhoor.mediadownloader.domain.models.StorageRefusal
 import com.markhoor.mediadownloader.presentation.browser.BrowserEvent
 import com.markhoor.mediadownloader.presentation.browser.BrowserViewModel
-import com.markhoor.mediadownloader.presentation.browser.MediaBrowser
 import com.markhoor.mediadownloader.presentation.downloads.DownloadsEvent
 import com.markhoor.mediadownloader.presentation.downloads.DownloadsViewModel
 import com.markhoor.mediadownloader.presentation.linkparse.LinkParseViewModel
+import com.media.downloader.ui.browser.BrowserHome
 import com.media.downloader.ui.browser.BrowserScreen
 import com.media.downloader.ui.common.downloadFailureMessage
 import com.media.downloader.ui.common.storageRefusalMessage
@@ -56,9 +56,9 @@ private const val TAG = "MediaDownloaderDemo"
 enum class DemoTab(val label: String) { Link("Link"), Browser("Browser"), Downloads("Downloads") }
 
 /**
- * Holds everything the three screens share: the ViewModels, the browser, the one download gate, and
- * the two event streams. Both `events` flows are buffered single-consumer channels, so they are
- * collected here - once - rather than in a screen that comes and goes.
+ * Holds everything the three screens share: the ViewModels, the browser's tabs, the one download
+ * gate, and the two event streams. Both `events` flows are buffered single-consumer channels, so
+ * they are collected here - once - rather than in a screen that comes and goes.
  */
 @Composable
 fun DemoRoot(
@@ -77,18 +77,23 @@ fun DemoRoot(
     val downloadsVm: DownloadsViewModel = viewModel(factory = DownloadsViewModel.Factory)
     val browserVm: BrowserViewModel = viewModel(factory = BrowserViewModel.Factory)
 
-    // Made only when the browser tab is first opened, and kept across tab switches so the page,
-    // its history and the module's detection session survive.
-    var browser by remember { mutableStateOf<MediaBrowser?>(null) }
+    // The tabs live in the ViewModel; this only puts them on this screen, which is where their
+    // WebViews come from. Asked for once per screen: the same tabs come back, each with the page
+    // it saved when the last screen went away.
+    // The home page is the module's answer to a tab with nothing to show: the one left behind
+    // when the last tab is closed opens on it, rather than on nothing.
+    val browserTabs = remember(context, lifecycleOwner) {
+        browserVm.tabs(context, lifecycleOwner, homeUrl = BrowserHome)
+    }
     var browserSheetOpen by remember { mutableStateOf(false) }
 
     val gate = rememberDownloadGate(scope, snackbar, downloadsVm) { tab = DemoTab.Downloads }
 
+    // The first tab is opened when the browser is first looked at, not before: a WebView is
+    // tens of megabytes, and a host that never opens the browser should never pay for one.
     LaunchedEffect(tab) {
-        if (tab == DemoTab.Browser && browser == null) {
-            browser = browserVm.createBrowser(context, lifecycleOwner).also {
-                it.load("https://www.dailymotion.com")
-            }
+        if (tab == DemoTab.Browser && browserTabs.state.value.count == 0) {
+            browserTabs.open()
         }
     }
 
@@ -117,12 +122,11 @@ fun DemoRoot(
                     snackbar.showSnackbar("Nothing to download on this page")
                 }
 
-                // The WebView is dead and can never be used again. Dropping it here unparents it,
-                // and the effect above makes a fresh one.
-                BrowserEvent.BrowserCrashed -> {
-                    browser = null
+                // The tab's WebView is dead and can never be used again. With tabs the module
+                // builds the shown tab a new one itself and reopens the page it was on, so there
+                // is nothing to do here but say what happened.
+                BrowserEvent.BrowserCrashed ->
                     snackbar.showSnackbar("The browser ran out of memory and was restarted")
-                }
             }
         }
     }
@@ -141,8 +145,10 @@ fun DemoRoot(
         }
     }
 
+    // goBack() takes the tab back a page; a tab opened by a link with nowhere left to go closes
+    // itself and puts the page that opened it back, exactly as a phone browser does.
     BackHandler(enabled = tab != DemoTab.Link) {
-        val wentBack = tab == DemoTab.Browser && browser?.goBack() == true
+        val wentBack = tab == DemoTab.Browser && browserTabs.goBack()
         if (!wentBack) tab = DemoTab.Link
     }
 
@@ -176,24 +182,17 @@ fun DemoRoot(
                     onDownloadAll = gate::downloadAll,
                     onOpenInBrowser = { url ->
                         tab = DemoTab.Browser
-                        scope.launch { browser?.load(url) }
+                        scope.launch { browserTabs.open(url) }
                     },
                 )
 
-                DemoTab.Browser -> {
-                    val current = browser
-                    if (current == null) {
-                        Text("Starting the browser…", Modifier.padding(24.dp))
-                    } else {
-                        BrowserScreen(
-                            browser = current,
-                            vm = browserVm,
-                            sheetOpen = browserSheetOpen,
-                            onSheetDismiss = { browserSheetOpen = false },
-                            onDownload = gate::download,
-                        )
-                    }
-                }
+                DemoTab.Browser -> BrowserScreen(
+                    tabs = browserTabs,
+                    vm = browserVm,
+                    sheetOpen = browserSheetOpen,
+                    onSheetDismiss = { browserSheetOpen = false },
+                    onDownload = gate::download,
+                )
 
                 DemoTab.Downloads -> DownloadsScreen(downloadsVm)
             }
