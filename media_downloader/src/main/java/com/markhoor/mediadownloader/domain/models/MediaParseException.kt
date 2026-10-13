@@ -13,7 +13,18 @@ sealed class MediaParseException(val url: String, message: String, cause: Throwa
     /** An allowed site, but not a link any parser understands (a feed, a profile, a home page). */
     class LinkNotRecognised(url: String) : MediaParseException(url, "This link does not point at media")
 
-    /** The link was understood but no media could be read from it. */
-    class MediaNotFound(url: String, cause: Throwable?) :
-        MediaParseException(url, "No media found behind this link", cause)
+    /**
+     * The link was understood but no media could be read from it.
+     *
+     * @param needsSignIn the site only answers a signed-in request and the browser holds no
+     *   session for it, so there was nothing to read rather than nothing there. Offer the user the
+     *   browser and let them sign in; Instagram is like this for every post as of October 2026.
+     */
+    class MediaNotFound(url: String, cause: Throwable?, val needsSignIn: Boolean = false) :
+        MediaParseException(url, if (needsSignIn) SIGN_IN_MESSAGE else NOT_FOUND_MESSAGE, cause)
+
+    private companion object {
+        const val NOT_FOUND_MESSAGE = "No media found behind this link"
+        const val SIGN_IN_MESSAGE = "Sign in to this site in the browser, then try again"
+    }
 }

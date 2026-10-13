@@ -18,6 +18,7 @@ internal object HttpClientFactory {
     }
 
     fun create(): HttpClient = HttpClient(OkHttp) {
+        engine { config { proxySelector(SafeProxySelector()) } }
         install(HttpTimeout) {
             connectTimeoutMillis = Network.REQUEST_TIMEOUT_MS
             socketTimeoutMillis = Network.REQUEST_TIMEOUT_MS
@@ -30,6 +31,7 @@ internal object HttpClientFactory {
      * long as it takes - only on connecting and on a socket that goes quiet.
      */
     fun createForDownloads(): HttpClient = HttpClient(OkHttp) {
+        engine { config { proxySelector(SafeProxySelector()) } }
         install(HttpTimeout) {
             connectTimeoutMillis = Network.CONNECT_TIMEOUT_MS
             socketTimeoutMillis = Network.REQUEST_TIMEOUT_MS

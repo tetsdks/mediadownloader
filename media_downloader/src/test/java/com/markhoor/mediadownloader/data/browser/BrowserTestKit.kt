@@ -25,10 +25,10 @@ internal fun testTube(
     isRestrictedSite = isRestrictedSite,
 )
 
-internal fun testResolver() = ScraperResolver(
+internal fun testResolver(instagram: SiteScraper = SilentScraper()) = ScraperResolver(
     facebookVideo = SilentScraper(),
     facebookShare = SilentScraper(),
-    instagram = SilentScraper(),
+    instagram = instagram,
     linkedIn = SilentScraper(),
     imdb = SilentScraper(),
     tikTok = SilentScraper(),

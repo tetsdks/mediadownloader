@@ -14,6 +14,15 @@ import com.markhoor.mediadownloader.domain.policy.RestrictedCategory
  *   in every configuration - the allow switches below do not lift them.
  * @param twitterApiKey the tweeload api key used to read X/Twitter posts. Keep it out of source
  *   control (e.g. in `local.properties` → `BuildConfig`). Without it X links are not parsed.
+ * @param instagramCookie an Instagram `Cookie` header to read posts with when the user has not
+ *   signed in to Instagram in the browser. Instagram serves a signed-out request a page with no
+ *   media in it, so without a session no post can be read; the user's own session is always
+ *   preferred and this is only the fallback. **It is a session, not an api key**: it belongs to
+ *   whichever account made it, it is enough to act as that account, it stops working when that
+ *   account signs out or changes its password, and Instagram may lock an account it sees used from
+ *   many devices at once. Keep it out of source control, exactly like [twitterApiKey], and expect
+ *   to replace it. Sending one is the host app's decision and its responsibility under
+ *   Instagram's terms; the module ships none.
  * @param downloadFolderName the folder under the public Download folder that files are saved in.
  * @param notificationIcon the small icon of download notifications; a monochrome drawable.
  * @param performanceMode how hard the module may work the device; [PerformanceMode.Auto] detects it.
@@ -33,6 +42,7 @@ data class MediaDownloaderConfig(
     val strictSupportedSitesOnly: Boolean = true,
     val extraBlockedHosts: Set<String> = emptySet(),
     val twitterApiKey: String? = null,
+    val instagramCookie: String? = null,
     val downloadFolderName: String = Storage.DEFAULT_ROOT_FOLDER,
     @param:DrawableRes val notificationIcon: Int = android.R.drawable.stat_sys_download,
     val performanceMode: PerformanceMode = PerformanceMode.Auto,
@@ -51,6 +61,7 @@ data class MediaDownloaderConfig(
     override fun toString(): String =
         "MediaDownloaderConfig(strictSupportedSitesOnly=$strictSupportedSitesOnly, " +
             "extraBlockedHosts=$extraBlockedHosts, twitterApiKey=${if (twitterApiKey == null) "none" else "set"}, " +
+            "instagramCookie=${if (instagramCookie.isNullOrBlank()) "none" else "set"}, " +
             "downloadFolderName=$downloadFolderName, notificationIcon=$notificationIcon, performanceMode=$performanceMode, " +
             "notificationActivity=${notificationActivity?.simpleName}, allowYouTube=$allowYouTube, " +
             "allowAdultSites=$allowAdultSites, extraSources=${extraSources.size})"

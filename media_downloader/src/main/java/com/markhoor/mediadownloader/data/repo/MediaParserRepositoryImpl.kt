@@ -12,6 +12,7 @@ import com.markhoor.mediadownloader.data.network.MediaSizeProbe
 import com.markhoor.mediadownloader.data.scraper.ScrapedMediaDto
 import com.markhoor.mediadownloader.data.scraper.ScraperRacer
 import com.markhoor.mediadownloader.data.scraper.ScraperResolver
+import com.markhoor.mediadownloader.data.scraper.SignInRequiredException
 import com.markhoor.mediadownloader.domain.models.MediaModel
 import com.markhoor.mediadownloader.domain.models.MediaParseException
 import com.markhoor.mediadownloader.domain.models.MediaQualityModel
@@ -38,12 +39,30 @@ internal class MediaParserRepositoryImpl(
 
     override suspend fun parse(url: String): Result<MediaModel> = withContext(ioDispatcher) {
         val scrapers = resolver.scrapersFor(url)
-        if (scrapers.isEmpty()) return@withContext Result.failure(MediaParseException.LinkNotRecognised(url))
-        racer.firstSuccess(scrapers, url).fold(
+        // A site with no reader of ours may still have the third-party backup: an X link in an app
+        // that set no key had nothing at all before, and the backup reads one.
+        val backups = resolver.backupsFor(url)
+        if (scrapers.isEmpty() && backups.isEmpty()) {
+            return@withContext Result.failure(MediaParseException.LinkNotRecognised(url))
+        }
+        racer.firstSuccess(scrapers, url, backups).fold(
             onSuccess = { scraped -> Result.success(mediaModelOf(scraped, url)) },
-            onFailure = { error -> Result.failure(MediaParseException.MediaNotFound(url, error)) },
+            onFailure = { error ->
+                Result.failure(
+                    MediaParseException.MediaNotFound(
+                        url = url,
+                        cause = error,
+                        // A site that answers only a signed-in request is not an empty link: the
+                        // host can tell the user to sign in rather than that there is nothing here.
+                        needsSignIn = error.isSignInRequired(),
+                    ),
+                )
+            },
         )
     }
+
+    private fun Throwable.isSignInRequired(): Boolean =
+        this is SignInRequiredException || cause?.let { it is SignInRequiredException } == true
 
     private suspend fun mediaModelOf(scraped: ScrapedMediaDto, sourceUrl: String): MediaModel {
         val expanded = expandedQualities(scraped)

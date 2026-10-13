@@ -1,6 +1,7 @@
 package com.markhoor.mediadownloader.data.repo
 
 import com.markhoor.mediadownloader.core.Constants.Download
+import com.markhoor.mediadownloader.core.endingOnFailure
 import com.markhoor.mediadownloader.core.isHlsPlaylistUrl
 import com.markhoor.mediadownloader.core.isHttpUrl
 import com.markhoor.mediadownloader.core.isUnderAnyOf
@@ -49,9 +50,11 @@ internal class DownloadRepositoryImpl(
 
     override fun observeDownloads(): Flow<List<DownloadModel>> =
         dao.observeAll().map { rows -> rows.map(DownloadEntity::toModel) }.distinctUntilChanged()
+            .endingOnFailure("The downloads could not be read")
 
     override fun observeDownload(id: Long): Flow<DownloadModel?> =
         dao.observe(id).map { it?.toModel() }.distinctUntilChanged()
+            .endingOnFailure("A download could not be read")
 
     override suspend fun enqueue(request: DownloadRequest): Long = withContext(ioDispatcher) {
         // Refused here rather than downloaded and then lost: without a writable folder the file
@@ -184,5 +187,8 @@ internal class DownloadRepositoryImpl(
 
     override suspend fun restoreUnfinished() = withContext(ioDispatcher) {
         dao.getInStates(activeStates).forEach { scheduler.start(it.id, replace = false) }
+        // And the pieces of downloads that have no row any more - a schema change starts the
+        // table again, and what they were writing would otherwise sit there for ever.
+        storage.deleteWorkFilesExcept(dao.allIds().toSet())
     }
 }

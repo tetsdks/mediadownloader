@@ -10,6 +10,7 @@ import com.markhoor.mediadownloader.core.Constants.Device
 import com.markhoor.mediadownloader.core.Constants.Download
 import com.markhoor.mediadownloader.data.browser.MediaDescriber
 import com.markhoor.mediadownloader.data.browser.MediaDetectionSession
+import com.markhoor.mediadownloader.data.browser.TabFileStore
 import com.markhoor.mediadownloader.data.browser.ScriptLibrary
 import com.markhoor.mediadownloader.data.browser.SniffPolicy
 import com.markhoor.mediadownloader.data.browser.StreamLocator
@@ -23,6 +24,7 @@ import com.markhoor.mediadownloader.data.download.MediaMuxerRemuxer
 import com.markhoor.mediadownloader.data.hls.HlsQualityReader
 import com.markhoor.mediadownloader.data.local.DownloadDao
 import com.markhoor.mediadownloader.data.local.MediaDownloaderDatabase
+import com.markhoor.mediadownloader.data.network.FallbackCookieSource
 import com.markhoor.mediadownloader.data.network.HttpClientFactory
 import com.markhoor.mediadownloader.data.network.HttpFetcher
 import com.markhoor.mediadownloader.data.network.MediaSizeProbe
@@ -56,12 +58,14 @@ import com.markhoor.mediadownloader.domain.policy.RestrictedCategory
 import com.markhoor.mediadownloader.domain.policy.RestrictedSites
 import com.markhoor.mediadownloader.domain.repo.DownloadRepository
 import com.markhoor.mediadownloader.domain.repo.MediaDetector
+import com.markhoor.mediadownloader.domain.repo.TabStore
 import com.markhoor.mediadownloader.domain.usecase.CheckSiteAccessUseCase
 import com.markhoor.mediadownloader.domain.usecase.DownloadCollectionUseCase
 import com.markhoor.mediadownloader.domain.usecase.EnqueueDownloadUseCase
 import com.markhoor.mediadownloader.domain.usecase.ParseLinkUseCase
 import com.markhoor.mediadownloader.domain.usecase.ReadLinkUseCase
 import io.ktor.client.HttpClient
+import java.io.File
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
@@ -239,6 +243,15 @@ internal class MediaDownloaderComponent(
         )
     }
 
+    /** The browser's open tabs, kept between runs in a small file of the module's own. */
+    val tabStore: TabStore by lazy {
+        TabFileStore(
+            fileOf = { File(appContext.filesDir, Browser.TABS_FILE) },
+            scope = scope,
+            json = HttpClientFactory.json,
+        )
+    }
+
     /**
      * A detector for one browser screen, living as long as [scope] - its ViewModel's. Made on the
      * main thread, so it is handed its collaborators unbuilt; the session builds them off it.
@@ -272,6 +285,9 @@ internal class MediaDownloaderComponent(
         sniffPolicy
         streamLocator
         mediaDescriber
+        // The browser's tabs are read here so a screen that opens later finds them in memory: it
+        // asks for them on the main thread, before it can know whether to open a tab of its own.
+        tabStore.load()
     }
 
     /** The system is short of memory: let go of what can be read again. */
@@ -299,13 +315,16 @@ internal class MediaDownloaderComponent(
 
     private val scraperResolver: ScraperResolver by lazy {
         val getInDevice = GetInDeviceScraper(httpFetcher)
+        // Every Instagram reader asks with the same session: the browser's own, or the host's.
+        val instagramCookies = FallbackCookieSource(WebViewCookieSource, config.instagramCookie)
         val instagram = InstagramScraper(
             fetcher = httpFetcher,
-            signedIn = InstagramSignedInScraper(httpFetcher, WebViewCookieSource),
-            preview = InstagramPreviewScraper(httpFetcher),
-            embed = InstagramEmbedScraper(httpFetcher),
-            graphQl = InstagramGraphQlScraper(httpFetcher),
+            signedIn = InstagramSignedInScraper(httpFetcher, instagramCookies),
+            preview = InstagramPreviewScraper(httpFetcher, instagramCookies),
+            embed = InstagramEmbedScraper(httpFetcher, instagramCookies),
+            graphQl = InstagramGraphQlScraper(httpFetcher, instagramCookies),
             getInDevice = getInDevice,
+            cookies = instagramCookies,
         )
         ScraperResolver(
             facebookVideo = FacebookVideoScraper(httpFetcher, WebViewCookieSource),

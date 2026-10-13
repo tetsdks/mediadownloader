@@ -645,4 +645,23 @@ class MediaDetectionSessionTest {
         runCurrent()
         assertFalse(harness.session.state.value.isPageVisible)
     }
+
+    /**
+     * Asking Chromium for the capture devices is what kills an app whose phone answers badly for
+     * its cameras, so every page is told there is nothing to capture with - on any site, a blocked
+     * one included, because this is not about finding media.
+     */
+    @Test
+    fun `every page that starts is told there is no camera`() = runTest {
+        val harness = harness()
+
+        harness.session.onSignal(PageSignal.PageStarted("https://www.youtube.com/watch?v=blocked"))
+        runCurrent()
+
+        val scripts = harness.commands.filterIsInstance<PageCommand.RunScript>().map { it.script }
+        assertTrue(
+            "expected the guard to be put into the page, got $scripts",
+            scripts.any { PageScript.NoCapture.fileName in it },
+        )
+    }
 }

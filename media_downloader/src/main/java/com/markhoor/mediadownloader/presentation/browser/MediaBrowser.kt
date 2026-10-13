@@ -117,6 +117,10 @@ class MediaBrowser internal constructor(
         webView.webChromeClient = chromeDelegate
         if (ownsWebView) {
             runCatching { webView.stopLoading() }
+            // Out of the layout before it is destroyed, which is the order the platform asks for:
+            // a destroyed WebView still in a view tree is drawn and measured like any other child,
+            // and with tabs there is always a layout holding the one on screen.
+            (webView.parent as? ViewGroup)?.removeView(webView)
             webView.destroy()
         }
     }

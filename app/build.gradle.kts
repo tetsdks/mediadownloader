@@ -29,6 +29,13 @@ android {
             "TWEELOAD_API_KEY",
             "\"${localProperties.getProperty("tweeload.apiKey", "").replace("\"", "")}\"",
         )
+        // An Instagram session to read posts with when the user has not signed in. A credential,
+        // not a key: it stays in local.properties, and a build without it simply has none.
+        buildConfigField(
+            "String",
+            "INSTAGRAM_COOKIE",
+            "\"${localProperties.getProperty("instagram.cookie", "").replace("\"", "\\\"")}\"",
+        )
     }
 
     buildTypes {

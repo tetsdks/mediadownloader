@@ -3,8 +3,10 @@ package com.markhoor.mediadownloader.data.scraper.instagram
 import com.markhoor.mediadownloader.core.Constants.Instagram
 import com.markhoor.mediadownloader.core.Constants.QualityLabels
 import com.markhoor.mediadownloader.core.array
+import com.markhoor.mediadownloader.core.cookieValue
 import com.markhoor.mediadownloader.core.obj
 import com.markhoor.mediadownloader.core.text
+import com.markhoor.mediadownloader.data.network.CookieSource
 import com.markhoor.mediadownloader.data.network.HttpFetcher
 import com.markhoor.mediadownloader.data.scraper.ScrapedMediaDto
 import com.markhoor.mediadownloader.data.scraper.ScrapedQualityDto
@@ -15,24 +17,38 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
 /**
- * Instagram's public GraphQL query for one post. Answers for posts (`/p/`) as well as reels, and
- * lists every item of a carousel as its own quality.
+ * Instagram's GraphQL query for one post. Answers for posts (`/p/`) as well as reels, and lists
+ * every item of a carousel as its own quality. The only reader a `/p/` post has, so what it is
+ * given to ask with decides whether a photo post can be read at all.
+ *
+ * The request is made as Instagram's own web client makes it: the session the browser holds when
+ * there is one, the web client's app id, and the csrf token echoed back out of the cookie it came
+ * in. Without the app id the api answers `403` to an otherwise perfect request; signed out it
+ * answers `401 {"require_login":true}` whatever the request carries.
  */
-internal class InstagramGraphQlScraper(private val fetcher: HttpFetcher) : SiteScraper() {
+internal class InstagramGraphQlScraper(
+    private val fetcher: HttpFetcher,
+    private val cookies: CookieSource = CookieSource { null },
+) : SiteScraper() {
 
     override suspend fun scrapeOrNull(url: String): ScrapedMediaDto? {
         val postId = InstagramPageParser.postIdOf(url)
+        val cookie = cookies.cookiesFor(Instagram.ORIGIN) ?: Instagram.GRAPHQL_COOKIE
         val answer = fetcher.postForm(
             url = Instagram.GRAPHQL_URL,
             form = mapOf(
                 "doc_id" to Instagram.GRAPHQL_DOC_ID,
                 "variables" to buildJsonObject { put("shortcode", postId) }.toString(),
             ),
-            headers = mapOf(
-                "Cookie" to Instagram.GRAPHQL_COOKIE,
-                "Referer" to "${Instagram.POST_URL}$postId/",
-                "User-Agent" to Instagram.MOBILE_USER_AGENT,
-            ),
+            headers = buildMap {
+                put("Cookie", cookie)
+                put("Referer", "${Instagram.POST_URL}$postId/")
+                put("User-Agent", Instagram.MOBILE_USER_AGENT)
+                put("X-IG-App-ID", Instagram.WEB_APP_ID)
+                put("X-Requested-With", "XMLHttpRequest")
+                put("Origin", Instagram.ORIGIN)
+                cookie.cookieValue(Instagram.CSRF_COOKIE)?.let { put("X-CSRFToken", it) }
+            },
         ).getOrThrow()
         val media = fetcher.json.parseToJsonElement(answer).obj("data").obj("xdt_shortcode_media") ?: return null
 

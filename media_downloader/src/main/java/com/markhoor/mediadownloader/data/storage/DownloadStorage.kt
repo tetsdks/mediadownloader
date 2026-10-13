@@ -30,6 +30,22 @@ import java.io.IOException
  * Decides which [StorageRefusal] to report when the download folder cannot be written. Kept apart
  * from the probe so the reasoning can be tested without a file system or a permission.
  */
+/**
+ * Deletes the scratch files of downloads that no longer have a row. A download's pieces live in
+ * [temp] in a folder named after its id, so a folder named after an id that is gone belongs to
+ * nobody: the table was started again by a schema change, or a delete was interrupted. Left alone
+ * each is a video's worth of bytes, kept for ever and shown to no one.
+ *
+ * Only folders named after an id are touched. A finished file is not here at all - that one is the
+ * user's, published and out of the module's hands.
+ */
+internal fun deleteOrphanedWorkFiles(temp: File, keep: Set<Long>) {
+    temp.listFiles()?.forEach { entry ->
+        val id = entry.name.toLongOrNull()
+        if (id != null && id !in keep) entry.deleteRecursively()
+    }
+}
+
 internal fun storageRefusalFor(
     sdkInt: Int,
     writePermissionGranted: Boolean,
@@ -175,4 +191,8 @@ internal class DownloadStorage(
         workDirFor(entity.id).deleteRecursively()
         outputFor(entity).delete()
     }
+
+    /** The scratch files of downloads that have no row any more; see [deleteOrphanedWorkFiles]. */
+    fun deleteWorkFilesExcept(keep: Set<Long>) =
+        deleteOrphanedWorkFiles(File(appContext.filesDir, Storage.TEMP_FOLDER), keep)
 }

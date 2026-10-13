@@ -26,6 +26,10 @@ internal interface DownloadDao {
     @Query("SELECT * FROM downloads WHERE state IN (:states)")
     suspend fun getInStates(states: List<DownloadState>): List<DownloadEntity>
 
+    /** Every row there is, for finding the scratch files that belong to no row at all. */
+    @Query("SELECT id FROM downloads")
+    suspend fun allIds(): List<Long>
+
     @Insert
     suspend fun insert(entity: DownloadEntity): Long
 

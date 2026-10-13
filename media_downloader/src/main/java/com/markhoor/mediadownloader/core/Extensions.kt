@@ -1,9 +1,13 @@
 package com.markhoor.mediadownloader.core
 
+import android.util.Log
+import com.markhoor.mediadownloader.core.Constants.Download
 import com.markhoor.mediadownloader.core.Constants.MediaSize
 import com.markhoor.mediadownloader.core.Constants.Storage
 import com.markhoor.mediadownloader.core.Constants.Url
 import com.markhoor.mediadownloader.domain.models.MediaType
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
@@ -25,6 +29,7 @@ private val LEADING_HOST = Regex(
 )
 
 private val EMBEDDED_URL = Regex("""https?://\S+""", RegexOption.IGNORE_CASE)
+
 private val URL_START = Regex("""https?://""", RegexOption.IGNORE_CASE)
 
 /**
@@ -71,6 +76,21 @@ private fun String.hostOrNull(): String? {
 
 private fun String.withHttpsScheme(): String =
     if (SCHEME_AT_START.containsMatchIn(this)) this else "https://$this"
+
+/**
+ * Whether the http client will *try* this host rather than refuse it outright. OkHttp 5 will not
+ * look up a hostname it cannot make canonical: it throws `IllegalArgumentException: unexpected
+ * hostname`, which is not a failed request but an exception from its own thread, where no caller
+ * can catch it. Measured against OkHttp 5.5.0, what it refuses that way is a host with whitespace
+ * in it, or none at all; upper case, an underscore, a trailing dot or a name with no dot are all
+ * looked up and merely not found, which is an ordinary failed request.
+ *
+ * Only ever asked about a proxy. The hosts that arrive in that shape are not sites but the names
+ * some carriers write into an APN's proxy field - `Airtel `, `Jio 4G` - and hand to every http
+ * client in the app.
+ */
+internal fun String.isUsableHost(): Boolean =
+    isNotEmpty() && length <= Url.MAX_HOST_LENGTH && none { it.isWhitespace() }
 
 /**
  * Whether this host is one of [domains] or a subdomain of one. The host is walked one label at a
@@ -638,6 +658,18 @@ private val IMAGE_FILE_ENDING = Regex("""\.(jpg|jpeg|webp|png)$""")
 /** This url cut to the part the sniffing rules look at: WebView urls can be megabytes. */
 private fun String.sniffable(): String = take(Constants.Browser.MAX_SNIFFED_URL_LENGTH)
 
+/**
+ * One cookie's value out of a `Cookie` header, or `null` when the header does not set it. The last
+ * one named wins, as a browser's own store does: the WebView hands over the same name twice when
+ * two paths set it.
+ */
+internal fun String.cookieValue(name: String): String? = split(';')
+    .asReversed()
+    .firstNotNullOfOrNull { cookie ->
+        val pair = cookie.trim()
+        pair.takeIf { it.startsWith("$name=") }?.substringAfter('=')?.takeIf { it.isNotBlank() }
+    }
+
 /** A TikTok page of cards (discover, search, a profile grid) rather than a player. */
 internal fun String.isTikTokGridPage(): Boolean {
     if (!isSiteOf("tiktok.com")) return false
@@ -902,5 +934,21 @@ internal fun String.isSpelledOutBy(written: String): Boolean {
     val slug = letters(this)
     return slug.length >= 12 && letters(written).startsWith(slug)
 }
+
+// endregion
+
+// region Flows
+
+/**
+ * A stream that ends when its source fails, rather than throwing into whoever is collecting.
+ *
+ * A host collects these in a ViewModel's scope, where an exception is not a failed read but a
+ * dead process - and the database can fail a *read*: Room writes to its own invalidation table on
+ * every query, so a device with no space left answers `SQLiteFullException` to a plain `SELECT`.
+ * What has already been read stays on screen and nothing new arrives, which is the truth of the
+ * situation and survivable; [what] says in the log which stream stopped.
+ */
+internal fun <T> Flow<T>.endingOnFailure(what: String): Flow<T> =
+    catch { error -> Log.e(Download.LOG_TAG, what, error) }
 
 // endregion

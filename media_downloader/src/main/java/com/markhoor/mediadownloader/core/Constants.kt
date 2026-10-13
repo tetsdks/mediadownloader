@@ -13,6 +13,9 @@ internal object Constants {
         const val PUNYCODE_PREFIX = "xn--"
         const val WWW_PREFIX = "www."
 
+        /** The longest a host can be, by the dns specification that names them. */
+        const val MAX_HOST_LENGTH = 255
+
         /** How far into a string embedded urls are looked for; WebView urls can be megabytes. */
         const val EMBEDDED_SCAN_LIMIT = 8_192
 
@@ -38,6 +41,25 @@ internal object Constants {
 
         const val HEADER_USER_AGENT = "User-Agent"
         const val ACCEPT_LANGUAGE = "en-US,en;q=0.9"
+    }
+
+    object Scraping {
+        /**
+         * How long a reader of ours is given once the backup has already answered. Ours is
+         * preferred, not waited for without end: a site that stalls a request holds it for
+         * [Network.REQUEST_TIMEOUT_MS], and a minute of nothing is a worse answer than a second's
+         * wait and somebody else's.
+         */
+        const val BACKUP_GRACE_MS = 1_500L
+
+        /**
+         * How long the reader that uses the user's own session is given once another reader has
+         * answered. It sees what the user sees - a private post, an age-gated one - so it is
+         * preferred; but it reads a whole page to do it, and a site that is slow about that must
+         * not hold an answer the other readers already have. Measured: an Instagram `/p/` post
+         * waited **13.9s** for it where every other reader had answered within two.
+         */
+        const val SIGNED_IN_GRACE_MS = 1_500L
     }
 
     object MediaSize {
@@ -301,6 +323,16 @@ internal object Constants {
         const val CLOSED_TABS_KEPT = 5
 
         /**
+         * Where the open tabs are kept between runs, under the app's own files. A browser's tabs
+         * are the user's: they are expected back after the app is closed or killed, and to go only
+         * when they are closed, the app's data is cleared or the app is uninstalled.
+         */
+        const val TABS_FILE = "media_downloader/tabs.json"
+
+        /** What a file being written is called until it is whole. */
+        const val HALF_WRITTEN_SUFFIX = ".writing"
+
+        /**
          * How wide a tab's preview picture is kept, in pixels; a page is scaled down to it and
          * never up. A card in a grid is about half a screen wide, so this is a little under what
          * it is drawn at - sharp enough to recognise a page by, and in `RGB_565` about a third of
@@ -483,6 +515,19 @@ internal object Constants {
         const val POST_URL = "https://www.instagram.com/p/"
         const val GRAPHQL_URL = "https://www.instagram.com/graphql/query"
         const val GRAPHQL_DOC_ID = "8845758582119845"
+        const val ORIGIN = "https://www.instagram.com"
+
+        /**
+         * The id Instagram's own web client names itself by. Its api answers `403` to a request
+         * that does not carry it, however good the rest of the request is.
+         */
+        const val WEB_APP_ID = "936619743392459"
+
+        /** The cookie a signed-in session is; the others are set for anyone who visits. */
+        const val SESSION_COOKIE = "sessionid"
+
+        /** The token the api wants echoed back in a header, from the cookie of the same name. */
+        const val CSRF_COOKIE = "csrftoken"
 
         /** Anonymous browser-session cookies the public endpoints expect; not an account. */
         const val GRAPHQL_COOKIE =
@@ -603,7 +648,64 @@ internal object Constants {
     }
 
     object GetInDevice {
-        const val API_URL = "https://www.getindevice.com/wp-json/aio-dl/video-data"
+        /**
+         * The site's own api, in two steps: a token, then the link. **The trailing slashes and the
+         * bare host matter** - `www.` answers `301` and a path without the slash `308`, and a
+         * redirect turns a POST into something the api does not answer. The `/wp-json/aio-dl/`
+         * route this used to call went when the site stopped being WordPress.
+         */
+        const val TOKEN_URL = "https://getindevice.com/api/token/"
+        const val API_URL = "https://getindevice.com/api/download/"
+        const val ORIGIN = "https://getindevice.com"
+        const val TOKEN_HEADER = "x-request-token"
+
+        /**
+         * Titles that mean the service read the site's own shell, not the post.
+         *
+         * Facebook answers a video id it does not have with the Watch feed rather than a `404`,
+         * and Threads answers a post it does not have with its sign-up page; the resolver reads
+         * whichever media that page carries and hands it over as the link's. Measured: every
+         * malformed Facebook link - `watch/?v=`, `/reel/`, `fb.watch/` - comes back as a real,
+         * playable video titled exactly `Facebook`. A wrong video is worse than no video, so an
+         * answer titled like the site itself is refused. TikTok and Pinterest answer an id they do
+         * not have with an error, and are not affected; Instagram answers one with a picture
+         * instead, which [PROFILE_PICTURE_PATH] is for.
+         */
+        val SHELL_NAMES: Set<String> =
+            setOf("facebook", "instagram", "threads", "tiktok", "pinterest", "twitter", "x", "watch")
+        val SHELL_OPENINGS: List<String> =
+            listOf("join threads", "log in", "login", "sign up", "see posts", "watch videos")
+
+        /**
+         * What a sign-in page calls itself after its own name - `LinkedIn Login, Sign in`. Only
+         * read where the title opens with the site's name, so a post that happens to talk about
+         * signing in is left alone.
+         */
+        val SHELL_WORDS: List<String> = listOf("log in", "login", "sign in", "sign up", "join")
+
+        /**
+         * Instagram's cdn namespace for an account's own picture, which is never a post's media.
+         *
+         * The title guard above cannot see this one: an Instagram answer carries no title at all,
+         * so a reel the service could not resolve looks exactly like one it did. Measured on two
+         * made-up reel codes - both came back with no video, no author and the **same**
+         * `t51.75761-19` jpg, a real and downloadable picture that has nothing to do with the
+         * link. A `/p/` code it does not have is answered with an error, and a reel it can read
+         * draws its own media from `-15` and `/t2/`, so dropping this one namespace costs a real
+         * post nothing.
+         */
+        val PROFILE_PICTURE_PATH = Regex("""/t\d+\.\d+-19/""")
+
+        /**
+         * What the api says when the post is not there at all, as against merely unreadable.
+         *
+         * Worth telling apart because the service reads a post as somebody signed in: when **it**
+         * cannot find one, signing in is not what was missing, and asking the user to sign in is
+         * the wrong thing to say. Its other refusals - `Request timed out. The server took too
+         * long to respond.` - mean only that this reader got nothing, so they are left out.
+         */
+        val GONE_WORDS: List<String> =
+            listOf("could not be found", "has been deleted", "no longer available", "does not exist")
     }
 
     object Hosts {

@@ -21,6 +21,10 @@ class DemoApp : Application() {
                 // chip shows this changing as you navigate.
                 strictSupportedSitesOnly = true,
                 twitterApiKey = BuildConfig.TWEELOAD_API_KEY.ifBlank { null },
+                // Instagram shows a post to nobody who is not signed in. The user's own session in
+                // the browser is always preferred; this stands in when they have none, and comes
+                // from local.properties (`instagram.cookie`) so no session is ever committed.
+                instagramCookie = BuildConfig.INSTAGRAM_COOKIE.ifBlank { null },
                 downloadFolderName = "Media Downloader Demo",
                 notificationActivity = MainActivity::class.java,
                 performanceMode = PerformanceMode.Auto,

@@ -311,6 +311,7 @@ data class MediaDownloaderConfig(
     val strictSupportedSitesOnly: Boolean = true,
     val extraBlockedHosts: Set<String> = emptySet(),
     val twitterApiKey: String? = null,
+    val instagramCookie: String? = null,
     val downloadFolderName: String = "All Video Downloader",
     @DrawableRes val notificationIcon: Int = android.R.drawable.stat_sys_download,
     val performanceMode: PerformanceMode = PerformanceMode.Auto,
@@ -325,7 +326,8 @@ data class MediaDownloaderConfig(
 |---|---|---|
 | `strictSupportedSitesOnly` | `true` | `true`: downloads are offered only on the built-in supported sites (§9.3). `false`: on any site where media is found. Blocked sites are refused **either way**. |
 | `extraBlockedHosts` | empty | Hosts to refuse **in addition to** the built-in block list, e.g. `setOf("example.com")` (subdomains included). Always refused; the allow switches below never lift them. |
-| `twitterApiKey` | `null` | The tweeload api key for X/Twitter links. Without it X links fail with `LinkNotRecognised`. Keep it out of source control (§8.9). |
+| `twitterApiKey` | `null` | The tweeload api key for X/Twitter links. Without it an X link has no reader of this module's own and falls to the third-party backup (§9.7), which reads some posts and is not ours to rely on - so set the key for X to work properly. Keep it out of source control (§8.9). |
+| `instagramCookie` | `null` | An Instagram `Cookie` header to read posts with **when the user has not signed in to Instagram in the browser**. Instagram shows a signed-out request no media at all, so without a session no post can be read (§9.6). The user's own session always wins; this is only the fallback, and only for `instagram.com`. **It is a session, not an api key** - read the warning in §9.6 before using it. |
 | `downloadFolderName` | `"All Video Downloader"` | The folder under the public `Download/` directory. **Must be one folder name**, not blank, no `/`, or `initialize` throws. |
 | `notificationIcon` | system download icon | Small icon of the download notifications; use a monochrome drawable. **Must not be 0**, or `initialize` throws. |
 | `performanceMode` | `Auto` | How hard the module may work the device (§3.2). |
@@ -334,7 +336,8 @@ data class MediaDownloaderConfig(
 | `allowAdultSites` | `false` | Offer downloads from adult sites (the built-in list, their mirrors, hosts named after them). **Play's sexual-content policy doesn't allow this: keep `false` in any build published there.** See §9.3. |
 | `extraSources` | empty | Readers your app brings for links this module does not read itself (§3.3). |
 
-`toString()` never prints the api key; it shows `twitterApiKey=set` or `none`.
+`toString()` never prints the api key or the cookie; it shows `twitterApiKey=set` / `none` and
+`instagramCookie=set` / `none`.
 
 **A Play Store build and a build for elsewhere.** Keep the switches out of remote config; set them
 per build, so the Play build cannot turn them on. For example, with a product flavor:
@@ -504,12 +507,19 @@ IMDb**, and - only while
 `allowAdultSites` is on, and refused as `SiteBlocked` otherwise, which is the default - **the tube
 sites**, through one generic reader rather than a scraper each.
 
+Behind the readers for Facebook, Instagram, Threads, TikTok, X, LinkedIn and Pinterest sits a
+third-party resolver as a **backup**: raced with them, but only ever taken when every one of them
+came back empty. It is what reads an Instagram post for a user who is not signed in. §9.7 is worth
+reading before relying on it.
+
 Facebook, Instagram, Threads, TikTok and IMDb can also be read with **the browser's own cookies**,
 when the reader has been signed in there in `MediaBrowser`: a post shared with friends, one inside a
 group, or a video a private account left up for its followers is then read as that reader sees it.
-Nothing is asked of the host app. A public post is still read as a stranger - the session is the
-second question, asked only when the first comes back empty, because some of these sites answer a
-stranger more fully than a reader - so signed out every request goes as it always did. A link
+Nothing is asked of the host app. On most of them a public post is still read as a stranger - the
+session is the second question, asked only when the first comes back empty, because some of these
+sites answer a stranger more fully than a reader - so signed out every request goes as it always
+did. **Instagram is no longer one of those:** it shows a signed-out request no media at all, so
+every Instagram reader asks with the session from the start (§9.6). A link
 pasted with no browsing behind it has no session to borrow, and a post the site itself refuses to
 show has nothing behind it either way - including a Facebook group's post, which Facebook shows to
 no one outside the group: the link fails as `MediaNotFound` rather than hand over the group's cover
@@ -841,6 +851,7 @@ sealed class MediaParseException(val url: String, message: String, cause: Throwa
 | `SiteUnsupported` | Not a supported site in strict mode, or not a web link | Open it in the browser, or "Not supported" |
 | `LinkNotRecognised` | An allowed site, but not a post (a feed, a profile, a home page), or X without a key | Open it in the browser, where the page can be scanned |
 | `MediaNotFound` | Understood, but no media could be read (private, deleted, site changed); `cause` has the detail | "Couldn't find media", or open in the browser |
+| `MediaNotFound` with **`needsSignIn == true`** | The site only shows a post to someone signed in, and there is no session to read it with - nothing was there to read, rather than nothing there (§9.6). A post known to be deleted is **not** flagged this way, where the module could tell (§9.6) | "Open it in the browser and sign in, then try again" - the same button, worth a different label |
 
 ### 6.2 `DownloadException` (from `download`, `pause`, `resume`, `delete`)
 
@@ -1177,8 +1188,16 @@ tab.preview?.let { shot ->
   `activeBrowser` is `null` only before your first `open`, so the browser screen never has to draw
   a state with no page in it. A tab with no page to open has no address and nothing painted
   (`isPageVisible` is `false`), which is where your own new-tab screen goes.
-- Tabs **do not survive the process**: they belong to the ViewModel. A rotation keeps them; a cold
-  start does not.
+- **Tabs are kept between runs.** They are written to a small file of the module's own as they
+  change, and are back the next time your browser screen opens - after the app is closed, killed
+  in the background, or the phone restarted. They go when the user closes them, when the app's
+  data is cleared, or when the app is uninstalled. Nothing to call: it happens under
+  `browserViewModel.tabs(...)`.
+  What comes back is each tab's **page and name**, not its back/forward history or scroll position
+  (`WebView.saveState` hands out a `Bundle`, which is not a thing to keep on disk between versions
+  of an app), and not its card picture - the tab on screen is reloaded, the rest become an address
+  until they are selected. Your `if (count == 0) open(home)` still works: by the time you can ask,
+  the tabs are already there, so it only opens a tab on a first run.
 
 > **Put the page in one container and swap the WebView inside it.** Keep a single view that lives
 > as long as the screen and move the selected tab's `webView` into it; do **not** give each tab a
@@ -1532,7 +1551,101 @@ If the host sets its own `Configuration.Provider` with a custom `WorkerFactory`,
 `DownloadWorker` itself. Alternatively use `DelegatingWorkerFactory`. A factory that answers for
 every class name breaks downloads.
 
-### 9.6 Threads, memory and crashes
+### 9.6 Instagram needs a session (and so, increasingly, do others)
+
+As of **October 2026** Instagram answers a signed-out request with a page that has no media in it
+at all: no `video_versions`, an embed page whose `contextJSON` is `null`, and its api answers
+`401 {"require_login":true}`. The post's title and cover are still there, the video is not. So a
+pasted `instagram.com/reel/…` or `/p/…` link cannot be read by anyone who is not signed in, and
+that is the site's decision, not a fault in the module.
+
+**Signed-out links do still work, through somebody else's service.** One of the readers raced for
+Facebook, TikTok and Instagram is a third-party resolver (getindevice.com), which reads a post as
+an account of its own and answers for a stranger. Live in October 2026 it reads the reel, the same
+post as `/p/`, and a Threads photograph, signed out, in about two seconds. **Do not plan on it:**
+it is not ours, it has no promises attached, and it has already been rebuilt under this module once
+(its old api went when the site stopped being WordPress, and every Instagram link quietly failed
+until it was rewritten). When it goes again, a signed-in user is the only path left - which is why
+the rest of this section matters.
+
+What the module does about it:
+
+- **Every** Instagram reader - the page, the embed page, the api, and the signed-in reader - now
+  asks with whatever session there is, and the api is asked as Instagram's own web client asks
+  (`X-IG-App-ID`, and the csrf token echoed back out of the cookie it came in). Signed in, a `/p/`
+  photo post is readable again; it had no working reader at all before.
+- A `/p/` post, which only the api ever read, is also given the resolver, so a photo post is read
+  signed out as well as signed in.
+- When nothing was read **and there is no session**, the failure is
+  `MediaNotFound(needsSignIn = true)` instead of a plain not-found (§6.1), so the host can say
+  "sign in" rather than "nothing here". **Unless the post is gone:** the resolver reads a site as
+  an account that is signed in, so a post it cannot find is one no session would have shown, and
+  the failure is then the plain not-found. It only knows about half the time - the service answers
+  the same dead link either by naming it as missing or by timing out - so a deleted Instagram post
+  does still ask for a sign-in sometimes. Signing in is harmless advice there; it just reveals the
+  same empty page.
+- An Instagram post read through the resolver arrives with **no title** - the service does not send
+  one. The file is still named `Instagram_<millis>`; a list that shows titles will show a blank, so
+  give it a fallback of your own if that matters.
+- The readers are **ranked, not raced**: the one using the user's session wins whenever it answers,
+  and the others wait about a second and a half for it before their answer is taken. So a parse
+  costs roughly the slowest reader that matters and not the slowest reader there is - a `/p/` post
+  that took 13.9s while a slow Instagram page was awaited now answers in about two. A post only the
+  signed-in user can see is still waited for however long it takes, since nothing else can read it.
+
+**What a host should do:** let the user sign in to Instagram once in `MediaBrowser`. The session is
+the WebView's own, app-wide and lasting, so from then on pasted links are read too - nothing to
+store and nothing to ask for. `MediaBrowser` also still finds the video by watching what the page
+fetches, which is the other way through.
+
+**`instagramCookie` is the fallback, and it is a credential.** A host that wants links to work for
+a user who has not signed in may supply one Instagram `Cookie` header, which is used only when the
+browser holds no Instagram session, and only for `instagram.com`. Before you do:
+
+- It is **a session, not an api key**: it is enough to act as the account it came from. Put it in
+  `local.properties` → `BuildConfig` like the X key (§8.9); never in source, never in a public repo,
+  and remember that anyone who can read your APK can read it too.
+- It **expires** - at a sign-out, a password change, or on Instagram's own schedule - and when it
+  does, every link starts failing again, silently. Expect to replace it.
+- Instagram may **lock an account** it sees used from many devices and addresses at once, and
+  sharing a session is against its terms. One account standing in for a user base is the case it
+  locks. Sending one is the host app's decision and the host app's responsibility; the module ships
+  no session of its own and never will.
+
+A fresh account used for nothing else, replaced when it stops working, is the shape that is
+survivable. The user's own sign-in is the shape that works.
+
+### 9.7 The third-party backup
+
+One reader in this module is not this module's: a resolver at getindevice.com, which reads a post
+as an account of its own. It is asked for **Facebook** (video and share links), **TikTok**,
+**Instagram** and **Threads**, **X/Twitter**, **LinkedIn** and **Pinterest**. It cannot read
+Dailymotion or IMDb, and it is never told about an adult site.
+
+**It is a backup, not a peer.** Its request goes out at the same time as this module's own readers,
+so it costs no waiting, and its answer is taken only when every reader of ours came back empty -
+or when ours have had 1.5s to answer and have not, so one stalled site cannot hold a parse for the
+whole 60s request timeout. A reader of ours always wins when it can answer at all, because it
+answers better: the resolver gives an Instagram post no title, and it is somebody else's service.
+
+Where it earns its place: Instagram signed out (§9.6), an Instagram `/p/` photo post, and an X link
+in an app that set no `twitterApiKey`.
+
+What to expect of it, and to design for:
+
+- **It can vanish without warning.** Its api was rebuilt once already and every Instagram link
+  failed quietly until this module was changed. Treat a site whose only reader is the backup - X
+  with no key - as a site that may stop working.
+- **A link the site itself will not resolve can come back as somebody else's media.** Facebook
+  answers a video id it does not have with the Watch feed rather than a `404`, and the resolver
+  reads whatever that feed is showing. This module refuses an answer whose title is the site's own
+  name or its sign-up line, which catches what was measured, but it is a string test and not a
+  proof. A download that is plainly not what was asked for is this, and `MediaBrowser` reading the
+  page is the way around it.
+- **Its sizes and titles are thinner.** Sizes are measured here rather than taken from it, so what
+  is shown is right either way; titles may be missing.
+
+### 9.8 Threads, memory and crashes
 
 - No module call blocks the main thread; `initialize` and the ViewModel factories do no disk or
   network work there.
@@ -1568,12 +1681,17 @@ switches, or extended with `extraBlockedHosts`), and the supported list (change
 
 | Symptom | Cause | Fix |
 |---|---|---|
+| Crash: `IllegalArgumentException: unexpected hostname: …` in `okhttp3.Dns$Request` | The device's proxy is a name, not a host - some carriers write `Airtel ` or `Jio 4G` into the APN's proxy field and Android hands it to every http client in the app. OkHttp refuses a host with whitespace by **throwing from its own thread**, so it is a crash rather than a failed request. | The module's own clients already drop such a proxy and go direct. Give **your** OkHttp clients (Retrofit, Coil, anything else) the same guard: wrap `ProxySelector.getDefault()`, leave out any proxy whose host has whitespace in it, and fall back to `Proxy.NO_PROXY`. |
+| Crash: `AssertionError: At least one stream configuration for IMPLEMENTATION_DEFINED must exist`, under `org.chromium.media.VideoCaptureFactory` | The phone's camera firmware answers badly when any app asks what its cameras can do, and a page in a WebView asked. The throw happens inside Chromium, on its own thread, so it is a crash and not a failed script. | The module's browser now tells every page it has no camera or microphone, which stops the ask. If you show pages in **your own** WebView too, do the same there, or expect this on those devices. |
+| The downloads list is empty after upgrading the library | A library version whose database schema changed **starts the table again** rather than migrating it, so the list is the one thing an upgrade can cost. The files are not lost: a finished download was published to the gallery when it finished. | Nothing to do. If your users would miss the list, read it with `observeDownloads()` before you upgrade and keep what you need yourself. |
+| Crash: `SQLiteFullException: database or disk is full` inside `androidx.work.impl` | The device has no space left, and **WorkManager's own** database cannot commit. It happens on WorkManager's thread, in its own rescheduling, which no library on top of it can catch. | Not fixable from here or from this module. The module's own database and streams survive a full disk - a read ends the stream, a write answers with a `Result` - and `storageRefusalOrNull()` already refuses a download before it starts when the folder cannot be written to. Surface that to the user so the disk is cleared. |
 | `MediaDownloaderNotInitializedException` | A call before `initialize` | Call `initialize` in `Application.onCreate` (not an Activity) |
 | Downloads never start after a reboot | `initialize` not in `Application.onCreate`; the worker fails with that message in logcat | Move it there |
 | Downloads fail on Android 10 | No `requestLegacyExternalStorage`, or storage permission refused. `download` now says which, in `StorageNotWritable.refusal` | §2.2, §2.3, §6.2 |
 | No notifications | `POST_NOTIFICATIONS` not granted (Android 13+) | Ask for it; downloads run regardless |
 | Notification tap opens the splash and the id is lost | Launcher is a splash screen | Set `notificationActivity` |
-| X links fail with `LinkNotRecognised` | No `twitterApiKey` | §8.9 |
+| X links fail, or read worse than the rest | No `twitterApiKey`: the link is left to the third-party backup, which answers for some posts and not others | Set the key (§8.9); the backup is a safety net, not the reader |
+| Every Instagram link fails, the post is plainly there | Instagram shows a signed-out request no media at all, so there is nothing to read - and the third-party resolver that answers for a stranger has stopped answering too. The failure says so: `MediaNotFound.needsSignIn` is `true` | Let the user sign in to Instagram once in `MediaBrowser` - the session is the WebView's own and is used for pasted links too. §9.6 |
 | A site shows no button | Unsupported in strict mode, blocked, or the video hasn't started. Some players only request their file on play | Check `siteAccess(url)`; press play |
 | My `WebViewClient` stopped getting callbacks | Set on the WebView after `attach` | Pass it to `attach` instead |
 | Typed search does nothing in the browser | Text with spaces passed to `load` | URL-encode it into a search url (§8.2) |
@@ -1603,7 +1721,7 @@ Everything a host can reference. Anything not listed here is `internal` to the m
 - `interface MediaCollectionSource` — a supplied reader that also reads playlists
 - `DownloadRequest` (+ `DownloadRequest.of`), `DownloadModel`, `enum DownloadState`
 - `enum SiteAccess`
-- `sealed MediaParseException`: `SiteBlocked`, `SiteUnsupported`, `LinkNotRecognised`, `MediaNotFound`
+- `sealed MediaParseException`: `SiteBlocked`, `SiteUnsupported`, `LinkNotRecognised`, `MediaNotFound` (+ `needsSignIn`)
 - `sealed DownloadException`: `SiteBlocked`, `InvalidMediaUrl`, `NotFound`, `InvalidState`, `StorageNotWritable`
 - `enum StorageRefusal`: `PermissionNotGranted`, `LegacyStorageDisabled`, `StorageUnavailable`
 - `MediaDownloaderNotInitializedException`

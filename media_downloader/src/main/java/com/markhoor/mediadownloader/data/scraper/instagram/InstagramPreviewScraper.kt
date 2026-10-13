@@ -8,6 +8,7 @@ import com.markhoor.mediadownloader.core.isHttpUrl
 import com.markhoor.mediadownloader.core.isImageFileUrl
 import com.markhoor.mediadownloader.core.isThreadsPostLink
 import com.markhoor.mediadownloader.core.unescapeEmbeddedUrl
+import com.markhoor.mediadownloader.data.network.CookieSource
 import com.markhoor.mediadownloader.data.network.HttpFetcher
 import com.markhoor.mediadownloader.data.scraper.ScrapedMediaDto
 import com.markhoor.mediadownloader.data.scraper.ScrapedQualityDto
@@ -19,22 +20,26 @@ import com.markhoor.mediadownloader.domain.models.MediaType
  * `video_versions` and `image_versions2` JSON without a sign-in. A Threads post's own page is the
  * same read, and the same JSON.
  */
-internal class InstagramPreviewScraper(private val fetcher: HttpFetcher) : SiteScraper() {
+internal class InstagramPreviewScraper(
+    private val fetcher: HttpFetcher,
+    private val cookies: CookieSource = CookieSource { null },
+) : SiteScraper() {
 
-    private val headers = mapOf(
+    private fun headersFor(pageUrl: String) = mapOf(
         "Sec-Fetch-Mode" to "navigate",
         "Sec-Fetch-Dest" to "document",
         "x-requested-with" to "com.android.browser",
         "Upgrade-Insecure-Requests" to "1",
         "Accept" to Network.ACCEPT_HTML,
         "User-Agent" to Instagram.MOBILE_USER_AGENT,
-        "Cookie" to Instagram.PREVIEW_COOKIE,
+        // The user's own session when the browser has one: a signed-out page carries no media.
+        "Cookie" to (cookies.cookiesFor(pageUrl) ?: Instagram.PREVIEW_COOKIE),
     )
 
     override suspend fun scrapeOrNull(url: String): ScrapedMediaDto? {
         val reelUrl = InstagramPageParser.canonicalReelUrl(url, embed = false)
         val pageUrl = if (reelUrl.contains("reel/")) reelUrl.replace("reel", "reels") else reelUrl
-        val page = fetcher.getText(pageUrl, headers).getOrThrow()
+        val page = fetcher.getText(pageUrl, headersFor(pageUrl)).getOrThrow()
 
         val videoUrl = page.substringAfter("video_versions\":", "")
             .substringBefore("}],\"", "")

@@ -30,6 +30,21 @@ internal abstract class SiteScraper {
 /** A scraper ran and found nothing. */
 internal class NoMediaException(message: String) : Exception(message)
 
+/**
+ * The post is not there - deleted, or never was. Told apart from the ordinary nothing-found because
+ * it rules a sign-in out: only a reader that sees a site as a signed-in account can say it, and
+ * when such a reader cannot find a post, a session was not what was missing.
+ */
+internal class MediaGoneException(message: String) : Exception(message)
+
+/**
+ * Every reader of a site came back empty, and the site only answers a signed-in request. Told
+ * apart from finding nothing because what the user can do about it is different: signing in to the
+ * site in the browser is what would fix it, and the host can say so.
+ */
+internal class SignInRequiredException(val site: String) :
+    Exception("$site gives a signed-out request no media")
+
 /** Media as one scraper read it, before labels are settled, sizes measured and streams expanded. */
 internal data class ScrapedMediaDto(
     val qualities: List<ScrapedQualityDto>,

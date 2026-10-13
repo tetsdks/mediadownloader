@@ -230,7 +230,7 @@ com.markhoor.mediadownloader
 │   ├── hls/                    HlsPlaylistParser (pure), HlsQualityReader, …Dto
 │   ├── scraper/                SiteScraper, ScraperResolver, ScraperRacer, one package per site
 │   ├── browser/                MediaDetectionSession, SniffPolicy, StreamLocator, MediaDescriber,
-│   │                           ScriptLibrary (+ assets/media_downloader/*.js)
+│   │                           ScriptLibrary (+ assets/media_downloader/*.js), TabFileStore
 │   ├── device/                 DeviceProfile: low-end detection
 │   ├── download/               DownloadEngine, DirectFileDownloader, HlsStreamDownloader,
 │   │                           HttpFileFetcher, StreamRemuxer (MediaMuxer), DownloadTask/ProgressMeter
@@ -348,6 +348,81 @@ its wiring in `MediaDownloaderComponent`.
   and neither is a tab in the middle of a callback of its own - destroying a WebView from inside
   its own `onCreateWindow` takes the app with it, which is what `TabRoster.overBudget(keep = …)` is
   for.
+- **Every page is told there is no camera and no microphone.** Asking Chromium for the list of
+  capture devices asks the phone's camera service for each camera's stream configuration, and a
+  phone whose camera firmware answers that badly makes the framework throw - `AssertionError: At
+  least one stream configuration for IMPLEMENTATION_DEFINED must exist`, from inside
+  `android.hardware.camera2`, reached through `org.chromium.media.VideoCaptureFactory`. Chromium
+  rethrows it at its JNI boundary, on its own thread, and the app the WebView lives in dies. No
+  client, no `WebSettings` and no `try` on the Java side can catch that, so the only place to stop
+  it is the ask itself: `no_capture.js` replaces `navigator.mediaDevices` with one that enumerates
+  nothing and refuses everything, and the sites that probe for cameras (fingerprinting, mostly)
+  never reach the camera service. Nothing here wanted a camera anyway - a capture permission the
+  module is asked for is already refused - so what the pages lose is a probe.
+  It goes into **every** page as the navigation commits, a blocked site included, because it is
+  not about finding media; that is also why it is sent from `PageStarted` rather than through
+  `scriptFor`. The limit of doing it without another dependency: a page whose own script runs
+  before this one lands is not covered. `WebViewCompat.addDocumentStartJavaScript` would close
+  that window, at the cost of `androidx.webkit` on every consumer.
+- **A schema change starts the downloads table again; it is not migrated.** A migration written
+  here has to be right for every version of every app that has ever published this library, for
+  ever, and a migration that is wrong crashes those apps on launch with nothing their author can
+  do about it - the module is not in a position to fix it for them, because the fix is a new
+  release of each app. `fallbackToDestructiveMigration(dropAllTables = true)` cannot fail that
+  way. The cost is real and is paid by the user: on the upgrade that changes the schema the
+  downloads **list** is empty again. What is not lost is the media - a finished download was
+  published to the gallery when it finished and was never the module's to delete - so what goes is
+  the history, and any download still running is forgotten rather than resumed.
+  Two things make that survivable. `DownloadWorker` ends cleanly when its row is gone
+  (`dao.get(id) ?: return Result.success()`), so the jobs still queued for the rows that went do
+  nothing rather than fail; and `restoreUnfinished` sweeps the scratch folders that no longer have
+  a row, since each is a video's worth of bytes that nothing would ever come back for. A downgrade
+  starts the table again too, so an older build installed over a newer one opens rather than
+  refusing to.
+  The rows are the user's own downloads, not a cache, so this is a reason for a schema change to
+  stay rare - not a licence to change it freely.
+- **A database that cannot be read ends the stream, not the app.** `observeDownloads` and
+  `observeDownload` are Room flows, and a host collects them in a ViewModel's scope, where a throw
+  is a dead process rather than a failed read. The database can fail a *read*: Room writes to its
+  own invalidation table on every query, so a device with no space left answers `SQLiteFullException`
+  to a plain `SELECT`. Both streams now end on a failure instead - what was read stays on screen,
+  nothing new arrives, and the reason is in the log. A cancelled collector is still cancelled;
+  `endingOnFailure` guards against failures, it is not a shield over the scope.
+  Everything else that touches the database already answers with a `Result`: `attempt` turns any
+  exception into one, which is why a full disk makes a pause or a delete fail rather than crash.
+  What the module cannot answer for is **WorkManager's own database** - it reschedules on its own
+  thread, inside its own code, and a `SQLiteFullException` there is not reachable from here.
+- **A proxy the device names but cannot resolve is dropped before the client sees it.** Some
+  carriers write a name rather than a host into the APN's proxy field - `Airtel `, `Jio 4G` - and
+  Android hands it to every http client in the app. OkHttp 5 will not look up a hostname it cannot
+  make canonical: it throws `IllegalArgumentException: unexpected hostname: Airtel `, which is not
+  an `IOException`, so it is not a failed request. On an enqueued call OkHttp tells the callback of
+  a failure and then rethrows from its own thread, where nothing in this module - or in the host -
+  can catch it, and the app dies. `SafeProxySelector` wraps the device's own selector and leaves
+  out the proxies that would be refused, so the request goes direct instead; one that genuinely
+  needed that proxy still fails, as it already did, but as a failed request.
+  What is dropped was measured against OkHttp 5.5.0 rather than guessed: a host is refused for
+  **whitespace in it, or being empty**, while upper case, an underscore, a trailing dot and a name
+  with no dot at all are merely looked up and not found. So only whitespace is dropped - dropping
+  more would bypass proxies that work. `CarrierProxyCrashTest` holds both halves: the crash
+  against a real `OkHttpClient`, and the same proxy behind the guard failing like any other
+  request.
+- **The tabs are the user's, so they are kept on disk - in a file, not the database.** A browser's
+  tabs are expected back after the app is closed or killed; losing them because a process ended is
+  a bug, not a lifecycle. They are written whenever the address, name or selection changes, which
+  is why `keepTabs` compares what it is about to write: published state changes with every percent
+  a page loads, and none of that belongs in a file. The file is small and written whole through a
+  temporary name - a process killed mid-write leaves the tabs as they were rather than half of
+  them - and one that cannot be read costs the tabs and nothing else. It is deliberately **not** a
+  Room table: a tab lost costs a reload, a download row lost costs a file half written, and the
+  downloads should never have to migrate because the browser learned a new field.
+  `TabStore.saved()` answers from memory, because a screen asks for it on the main thread before
+  it can know whether to open a tab of its own; `warmUp` reads the file at start, off the main
+  thread, so by then there is something to answer with.
+  What is kept is each tab's address, its name and which one was shown. Not its history:
+  `WebView.saveState` gives a `Bundle`, and a Bundle is a parcel - the wrong thing to write to disk
+  and read back after an app or OS update. Not its picture either; a card has none until its tab
+  has been drawn again.
 - **Closing the last tab leaves one on the home page, not nothing and not a blank.** A browser with
   no tab is a screen with nothing on it and nothing to do, and every host would have had to invent
   the same answer, so the roster never empties once it has been filled. Leaving a *blank* tab there
@@ -456,7 +531,8 @@ its wiring in `MediaDownloaderComponent`.
   Without it X links are `LinkNotRecognised`. The app reads it from `local.properties`
   (`tweeload.apiKey`, gitignored) into `BuildConfig.TWEELOAD_API_KEY`; the value is the one the
   old url-parser had hard-coded, so a build machine needs that line to parse X links. Instagram's and Pinterest's anonymous
-  browser-session cookies stay in `Constants.kt`: they identify no account.
+  browser-session cookies stay in `Constants.kt`: they identify no account. An Instagram session,
+  which does identify one, is configuration too (`instagramCookie`) and is never a constant here.
 - **A post is read as a stranger first and as the reader second.** Instagram has always been read
   with the browser's own cookies; Facebook, TikTok and IMDb can be too. A Facebook post shared with
   friends, or one inside a group the reader belongs to, and a TikTok video a private account left up
@@ -473,6 +549,148 @@ its wiring in `MediaDownloaderComponent`.
   Two things this does not fix: a post Facebook itself will not show ("this content isn't available
   at the moment") has nothing behind it whatever session asks, and a link pasted into an app that
   has never browsed the site has no session to borrow.
+- **Instagram is the exception to stranger-first: it tells a stranger nothing, so every reader
+  there asks with the session.** Measured on a live public reel
+  (`instagram.com/reel/DQN9eI6CF55`, October 2026): the `/reels/` page answers `200` with 500 kB
+  that hold the title, the cover and `PolarisLoggedOut` 44 times, and **no** `video_versions`,
+  `image_versions2` or `web_info`; the embed page answers `200` with `"contextJSON":null` and no
+  `video_url`; the api answers `403` to the canned cookies and `401 {"require_login":true}` to a
+  perfect request with a freshly issued csrf token. The post is public, and its video is readable by
+  nobody who is not signed in. So the session is no longer the second question on Instagram - the
+  page reader, the embed reader and the api all ask with it, and a `/p/` post, whose only reader is
+  the api, became readable again for a signed-in user, having had no working reader at all. Three
+  things that cost nothing and are what Instagram's own web client sends were missing from the api
+  request and are now there: `X-IG-App-ID` (without it the api answers `403` however good the rest
+  is), the csrf token echoed back out of the cookie it came in, and the session.
+- **A session the host supplied stands in only where there is no session at all, and the module
+  ships none.** `MediaDownloaderConfig.instagramCookie` is read by one `FallbackCookieSource` that
+  all four Instagram readers share: the browser's own cookies win whenever they carry a
+  `sessionid`, and the supplied one is given only to `instagram.com` urls - it is one site's
+  session and means nothing to another, and Threads' session is not Instagram's though one account
+  opens both. It is deliberately not a constant in this repository: a session is enough to act as
+  the account it came from, this repository is public, an APK is readable, Instagram locks an
+  account it sees used from everywhere at once, and the session expires on its own schedule. The
+  host decides, puts it in `local.properties` like the X key, and carries the consequence; the
+  module's answer to a signed-out user is to say so.
+- **The third-party resolver was dead and is rewritten; it is now the only thing that reads an
+  Instagram post signed out.** `GetInDeviceScraper` POSTed to
+  `www.getindevice.com/wp-json/aio-dl/video-data` - a WordPress REST route, `wp-json` being
+  WordPress's own namespace and `aio-dl` a downloader plugin's. That site is a Next.js app now
+  (`x-nextjs-cache`, behind Cloudflare) and WordPress went with the rebuild: `www.` answers `301`
+  to the apex, the route answers `404` with 35 kB of html, and `/wp-json/` **itself** is `404`, so
+  it was the whole api that left rather than one path. The failure was invisible - html where json
+  was expected throws in the decoder, which is a failed scraper, which is what a link with no media
+  looks like - and it had been that way for an unknown time, costing a wasted request on Facebook
+  video, Facebook share, TikTok and Instagram reels, which are the links it was the safety net for.
+  The api it answers on now takes **two requests**: `GET /api/token/` for a token, then
+  `POST /api/download/` with it in `x-request-token`, because without one the api says
+  `401 {"error":"Missing request token"}`. Both urls need the trailing slash and the bare host: a
+  `301` or `308` on a POST does not reach the api as a POST. Verified live in October 2026 against
+  the reel this started with, signed out: 1080p, 0.48 MB, in 2.0s, and the url it names serves
+  `206 video/mp4` to us directly.
+- **That api is read field by field, not deserialized.** It is somebody else's private api with no
+  documentation, no promises and a record of being rebuilt underneath us, and its own answers are
+  loosely typed - `size` and `duration` arrive as `null` here and as something unknown elsewhere,
+  `is_hls` as a boolean, `quality` as a frame size (`1080x1920`) for a video and a word (`HD`) for
+  a photo. So every field is read through `text(key)`, which takes a string, a number or `null`
+  alike: a shape that changes again costs this reader its answer and nothing else. Three rules
+  worth naming: a video labelled by its frame size is named by its **short** side, so `1080x1920`
+  and `1920x1080` are both `1080p`; `audios` is offered only where there is nothing to watch or
+  look at, because on a reel the api lists the same progressive file again as its sound and that is
+  not a second quality; and a video whose sound is genuinely a file of its own (`mergeParts`) is
+  given that sound as its `audioUrl`, unless it is the same url again.
+- **The resolver's answer is refused when it is the site's own page rather than the post.**
+  Facebook does not answer a video id it has never had with a `404`: it answers with the Watch
+  feed, and the resolver reads whatever video that feed happens to be showing and hands it over as
+  the link's. Measured on every malformed shape - `watch/?v=999999999999999`, `/reel/999…`,
+  `fb.watch/zzzzzzzzzz/` - each came back as a real, playable video (`206 video/mp4` to us) titled
+  exactly `Facebook`; Threads does the same with its sign-up page, answering a post that does not
+  exist with the picture off it, titled `Join Threads to share ideas…`. That is the group
+  cover-photo bug again - somebody else's media offered as this link's - and a wrong video is worse
+  than no video, so an answer whose whole title is the site's own name or its sign-up line is
+  refused ([GetInDevice.SHELL_NAMES]), as is one that opens with the site's own name and then says
+  what the page is for - `LinkedIn Login, Sign in`, which is what LinkedIn answers for a link that
+  is not a post. It is one string and a site writing it in another language gets past, and a post
+  of one's own titled nothing but `Facebook` is refused along with it; that is the side to err on,
+  since the site's own reader is racing this one. TikTok, Pinterest and X answer an id they do not
+  have with an error and are untouched by any of this; Instagram does not, which is the next entry.
+- **An Instagram reel the resolver cannot resolve is answered with the account's own picture, and
+  the title guard cannot see it.** Measured on two made-up reel codes (`/reel/ZZZZZZZZZZZ`,
+  `/reel/QQQQQQQQQQQ`): both came back `200` with no video, no author, no title - and the **same**
+  real, downloadable jpg, on Instagram's profile-picture namespace `t51.75761-19`. The guard above
+  is no use here because an Instagram answer carries no title at all, so nothing in the shape says
+  this is not the reel; the module would have offered a stranger's profile picture as the link's
+  media. A picture on a `-19` namespace is therefore dropped before anything else is read
+  ([GetInDevice.PROFILE_PICTURE_PATH]), which leaves no quality at all and so reads as the nothing
+  it is. It costs a real post nothing: a reel the resolver can read draws its video from `/t2/` and
+  its cover from `-15`, and a `/p/` code the service does not have is answered with an error
+  instead of a picture.
+- **A post the resolver says is gone is not blamed on signing in.** Every reader of ours is locked
+  out of a signed-out Instagram and so cannot tell a deleted post from a hidden one, which made the
+  module ask for a sign-in in both cases - advice that cannot help when there is no post. The
+  resolver can tell, because it reads a site as an account that is signed in: when **it** cannot
+  find a post, a session was not what was missing. Its refusal is therefore raised as
+  [MediaGoneException] rather than swallowed as nothing ([GetInDevice.GONE_WORDS]), and the
+  Instagram reader then refuses with the ordinary nothing-found instead of
+  [SignInRequiredException]. Found on a live reel the owner had deleted
+  (`instagram.com/reel/DUnGTG7CDDv`, confirmed signed in): every reader of ours said nothing and the
+  parse advised signing in, which would have shown the user the same empty page. Only the refusal
+  that names the post is read this way - its `Request timed out. The server took too long to
+  respond.` says nothing about the post and stays the plain nothing-found. The two come back about
+  equally often for the same link (four probes: two of each, 33.4s and 33.6s against 35.8s twice),
+  so a deleted post still advises signing in roughly half the time; that is the safe half, since
+  without a session the module genuinely cannot tell.
+- **The signed-in reader is preferred, not waited for without end.** It read the post as the user
+  sees it, so it decided the answer whenever it answered - and until it did, nothing else counted,
+  because its answer was awaited before the others were even looked at. The cost was measured on a
+  live `/p/` post: **13.9s**, where every other reader had answered inside two seconds and the
+  answer taken in the end was one of theirs. It is now ranked rather than awaited: it wins whenever
+  it answers, and once another reader has answered it is given
+  [Scraping.SIGNED_IN_GRACE_MS] to answer before that other answer is taken. A private post is
+  still its alone - with every other reader empty, nothing is taken until it is done, however long
+  that is, which is the case worth being slow for. Same three links after the change: `/p/` 2.4s
+  and 2.1s, the reel 1.4s and 1.1s.
+- **No branch of that `select` may finish with `null` except the one that means "everybody is
+  done".** The branches are a race of waits, and `select` returns whichever finishes first: a
+  branch that finishes with nothing ends the race and takes every reader still working down with
+  it. The resolver's branch did that - it completed the moment the resolver *failed*, so a link the
+  resolver could not read ended the parse before the user's own session had answered. Branches that
+  have nothing to say now wait for ever and are canceled at the end. The same reasoning put a
+  second condition on the resolver's grace: a reader of ours that has answered and is merely being
+  held for the signed-in grace must not lose to it.
+- **The resolver is a backup everywhere it is used, never a peer, and the racer is what enforces
+  it.** It was a peer: in `ScraperResolver` it sat in the same list as the Facebook and TikTok
+  readers, and `ScraperRacer` takes the first success - so on a good link it could win by being
+  quicker and hand over a worse answer (no title, and on Facebook a feed video where ours would
+  have failed honestly). `firstSuccess` now takes a `backups` list: those readers start with the
+  rest, so they cost no waiting, and their answer is held until every other reader has come back
+  empty. **With one bound**: once a backup answer is in hand the others get
+  [Scraping.BACKUP_GRACE_MS] and are then no longer waited for, because a site that stalls a
+  request holds it for [Network.REQUEST_TIMEOUT_MS] - measured, by accident, on the first build of
+  this: Instagram stalled one reader and a reel that parses in 2.7s took **60s** and then failed.
+  A failure reports **our** reader's error rather than the backup's, which is what carries
+  `needsSignIn`. `InstagramScraper` does the same thing in its own select, after its artwork grace.
+- **The backup is offered only where it was measured, and never for an adult site.** Facebook,
+  TikTok, X, LinkedIn and Pinterest in `backupsFor`, plus Instagram and Threads inside their own
+  reader. Not Dailymotion or IMDb: it cannot read them (`Unable to process this URL`). Not the tube
+  reader: an adult link is not named to a third party, whatever the host app allowed. Not a
+  host-supplied site: the app's own reader is the authority on it. And `backupsFor` is deliberately
+  **not** part of `scrapersFor`, which the browser asks whether a parser reads a page - the browser
+  must keep sniffing a page whose only reader is somebody else's service.
+- **A link with no reader of ours may still have the backup.** `scrapersFor` empty used to mean
+  `LinkNotRecognised` outright; an X link in an app that set no tweeload key is exactly that, and
+  the backup reads one. The parse now refuses only when both are empty.
+- **A `/p/` post now has the resolver behind GraphQL.** A `/p/` post is not a reel: the post page
+  and the embed page are reel readers and have nothing in them for it, which left it one reader -
+  and none at all once Instagram signed the public out of GraphQL. The same live check reads
+  `instagram.com/p/<code>` and a Threads photograph signed out.
+- **"Nothing found" and "nothing to find" are different failures.** When every Instagram reader
+  comes back empty *and* there is no session, `SignInRequiredException` is thrown instead of the
+  ordinary nothing-found, and the parse hands the host
+  `MediaParseException.MediaNotFound(needsSignIn = true)`. The link is not empty and the user is
+  not stuck: signing in to the site in the browser is what fixes it, and only the host can say so.
+  With a session the same empty answer stays an ordinary not-found - it is then this post that
+  could not be read.
 - **A share link is read from the page it lands on**, before its ids are taken apart. A group's post
   lives at `/groups/<group>/posts/<story>/`, which is not the `/<author>/posts/<story>` the ids
   build, so rebuilding the address asked Facebook for a page that does not exist - signed in, with
@@ -547,8 +765,9 @@ its wiring in `MediaDownloaderComponent`.
     count towards the 5 attempts; other failures do. Media that can never be saved (a protected
     stream, an empty playlist - `UnusableMediaException`) fails at once with its reason.
   - A download waiting for a connection can be resumed: that tries again now, as the old app did.
-  - The module has its own Room database (`media_downloader.db`, version 1). A schema change needs
-    a migration; rows are the user's downloads.
+  - The module has its own Room database (`media_downloader.db`). A schema change **starts the
+    table again** rather than migrating it - see the decision in §6 - and the scratch files of the
+    rows that go are swept at the next start.
   - Parallel parts only after a ranged request is *answered* with 206, and any part answered with
     the whole file drops back to one piece (the pexels "nine copies" bug). A resume the server
     ignores starts over instead of appending. `bitchute.com` always uses one connection.
@@ -871,7 +1090,19 @@ its wiring in `MediaDownloaderComponent`.
 ## 7. Known gaps
 
 - Instagram and Facebook scrapers are verified by unit tests on sample pages, not yet live: they
-  need a signed-in session or real post links. IMDb was read live on the device in September 2026,
+  need a signed-in session or real post links. **What was measured live in October 2026** is what
+  Instagram refuses a stranger (above) and what the third-party resolver answers for it anyway -
+  a reel, the same post as `/p/`, and a Threads photograph, all signed out, all through
+  `LiveParseCheck`. What is **not** measured is what Instagram gives a session: the session is
+  sent and the headers are asserted in `InstagramSessionTest`, but nothing here has yet read a reel
+  with a real `sessionid`. `MEDIA_DOWNLOADER_LIVE=1` with a signed-in cookie in `instagramCookie`,
+  or a device signed in to Instagram in the browser, is the check still owing.
+- **An Instagram post read through the resolver has no title.** The api answers `title: null` for
+  Instagram (it carries one for Threads), and the readers that do have the caption - the post page's
+  og tags - found no media and so handed over nothing to carry it on. The file is still named
+  sensibly, because a blank title falls back to `Instagram_<millis>` when the place is picked, but a
+  list shows the post with no words. Filling it would cost the caption's own request or plumbing a
+  title-only answer out of the preview reader; neither is done. IMDb was read live on the device in September 2026,
   from a video page, the trailers feed and the home page's rails. LinkedIn has been read live, through a `lnkd.in`
   link, since the shortener was added.
 - **A `lnkd.in` link is read by following it, not by resolving it.** The address says nothing about
@@ -890,9 +1121,10 @@ its wiring in `MediaDownloaderComponent`.
   list and nothing else: a tab that gave its WebView up and is selected again loads its page afresh,
   so a feed scrolled a long way comes back at the top, and a form half filled in comes back empty.
   Only tabs past the live budget are restored this way; the tabs in use are never touched.
-- **Tabs do not outlive the process.** They belong to the ViewModel: a configuration change keeps
-  them (each page saved and put back), and the app being killed loses them. Nothing is written to
-  disk, so a host that wants its tabs back after a cold start would have to keep the addresses.
+- **A tab kept between runs comes back as an address, not as where it was.** The page is reloaded
+  from the top: its back/forward history, its scroll position and anything typed into it are gone,
+  because the only state a WebView hands over is a `Bundle` that cannot be trusted to disk. A tab
+  closed before the app was is not kept either - undo reaches back only within a run.
 - The module logs only failures it cannot report any other way (a job started before
   `initialize`, background upkeep errors), under the tag `MediaDownloader`.
 - Pinterest downloads are filed under `Website`, as in the old app; `Constants.Storage.SITE_FOLDERS`

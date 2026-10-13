@@ -38,6 +38,7 @@ import com.media.downloader.ui.common.MediaThumbnail
 import com.media.downloader.ui.common.canTryInBrowser
 import com.media.downloader.ui.common.parseFailureMessage
 import com.media.downloader.ui.common.qualitySizeLabel
+import com.media.downloader.ui.common.shouldSignIn
 
 /** Paste or share a link, read what is behind it, download one of its qualities. */
 @Composable
@@ -99,7 +100,8 @@ fun LinkScreen(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     // A blocked site gets no way around it, deliberately.
                     if (canTryInBrowser(current.error)) {
-                        TextButton(onClick = { onOpenInBrowser(current.error.url) }) { Text("Open in browser") }
+                        val label = if (shouldSignIn(current.error)) "Open and sign in" else "Open in browser"
+                        TextButton(onClick = { onOpenInBrowser(current.error.url) }) { Text(label) }
                     }
                     TextButton(onClick = { vm.parse(text) }) { Text("Try again") }
                 }

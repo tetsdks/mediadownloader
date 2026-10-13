@@ -2,6 +2,11 @@ package com.markhoor.mediadownloader.data.storage
 
 import com.markhoor.mediadownloader.domain.models.StorageRefusal
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Rule
+import org.junit.rules.TemporaryFolder
+import java.io.File
 import org.junit.Test
 
 /**
@@ -10,6 +15,9 @@ import org.junit.Test
  * something to ask the user about.
  */
 class DownloadStorageTest {
+
+    @get:Rule
+    val folder = TemporaryFolder()
 
     @Test
     fun `up to android 10 a missing permission is the reason`() {
@@ -73,5 +81,21 @@ class DownloadStorageTest {
                 storageRefusalFor(sdk, writePermissionGranted = false, legacyStorage = false),
             )
         }
+    }
+
+    @Test
+    fun `the pieces of a download with no row are swept up, and nothing else is`() {
+        val temp = folder.newFolder("downloading")
+        File(temp, "1").mkdirs()
+        File(temp, "1/part0").writeText("a download that still has its row")
+        File(temp, "7").mkdirs()
+        File(temp, "7/part0").writeText("a download whose row was dropped")
+        File(temp, "notes.txt").writeText("not named after an id at all")
+
+        deleteOrphanedWorkFiles(temp, keep = setOf(1L))
+
+        assertTrue("the row it belongs to is still there", File(temp, "1/part0").isFile)
+        assertFalse("nobody's pieces are gone", File(temp, "7").exists())
+        assertTrue("what is not an id is left alone", File(temp, "notes.txt").isFile)
     }
 }

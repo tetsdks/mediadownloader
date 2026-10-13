@@ -50,14 +50,39 @@ internal class ScraperResolver(
     /** The scrapers to race for [url]; empty when no parser understands it. */
     fun scrapersFor(url: String): List<SiteScraper> = ours(url).ifEmpty { theirs(url) }
 
+    /**
+     * The third-party resolver, on the sites it reads. **A backup, not a peer:** it is raced with
+     * the readers above so its requests cost no waiting, and [ScraperRacer] takes its answer only
+     * where every one of them came back empty. It reads a site less well than the site's own
+     * reader does - no title on an Instagram post, and a Facebook link it cannot resolve is
+     * answered with whatever the Watch feed is showing - so being quicker must not be enough.
+     *
+     * Only sites it was **measured** against are here. Dailymotion and IMDb it cannot read at all;
+     * Instagram and Threads have it already, inside their own reader, which knows to prefer the
+     * session; an adult site is never named to a third party, which is also why the tube reader
+     * has no backup; and a host app's own reader is the authority on its own site.
+     */
+    fun backupsFor(url: String): List<SiteScraper> =
+        if (hasBackup(url)) listOf(getInDevice) else emptyList()
+
+    private fun hasBackup(url: String): Boolean = when {
+        url.isFacebookVideoLink() || url.isFacebookShareLink() -> true
+        url.isTikTokLink() -> true
+        // X without a key has no reader of ours at all, so here the backup is the only one.
+        url.isTwitterStatusLink() -> true
+        url.isLinkedInPostLink() -> true
+        url.isPinterestPinLink() -> true
+        else -> false
+    }
+
     private fun theirs(url: String): List<SiteScraper> = hostSupplied.filter { it.reads(url) }
 
     private fun ours(url: String): List<SiteScraper> = when {
-        url.isFacebookVideoLink() -> listOf(facebookVideo, getInDevice)
-        url.isFacebookShareLink() -> listOf(facebookShare, getInDevice)
+        url.isFacebookVideoLink() -> listOf(facebookVideo)
+        url.isFacebookShareLink() -> listOf(facebookShare)
         url.isInstagramPostLink() || url.isThreadsPostLink() -> listOf(instagram)
         url.isLinkedInPostLink() -> listOf(linkedIn)
-        url.isTikTokLink() -> listOf(tikTok, getInDevice)
+        url.isTikTokLink() -> listOf(tikTok)
         url.isTwitterStatusLink() -> listOfNotNull(twitter)
         url.isDailymotionVideoLink() || url.isDailymotionMetadataLink() -> listOf(dailymotion)
         url.isPinterestPinLink() -> listOf(pinterest)

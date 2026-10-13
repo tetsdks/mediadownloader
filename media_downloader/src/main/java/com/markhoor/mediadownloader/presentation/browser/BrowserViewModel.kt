@@ -15,6 +15,7 @@ import com.markhoor.mediadownloader.MediaDownloader
 import com.markhoor.mediadownloader.domain.models.DetectionEvent
 import com.markhoor.mediadownloader.domain.models.DetectionState
 import com.markhoor.mediadownloader.domain.repo.MediaDetector
+import com.markhoor.mediadownloader.domain.repo.TabStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -52,6 +53,7 @@ internal class PageSession(val detector: MediaDetector, val scope: CoroutineScop
 class BrowserViewModel internal constructor(
     private val detectorFactory: (CoroutineScope) -> MediaDetector,
     private val isLowEndDevice: () -> Boolean = { false },
+    private val tabStore: TabStore? = null,
 ) : ViewModel() {
 
     /** The session whose page the screen shows. */
@@ -123,7 +125,7 @@ class BrowserViewModel internal constructor(
         webChromeClient: WebChromeClient? = null,
     ): BrowserTabs {
         val current = openTabs
-            ?: BrowserTabs(::newSession, ::show, isLowEndDevice).also { openTabs = it }
+            ?: BrowserTabs(::newSession, ::show, isLowEndDevice, tabStore).also { openTabs = it }
         current.hostOn(context, lifecycleOwner, homeUrl, webViewClient, webChromeClient)
         return current
     }
@@ -207,7 +209,11 @@ class BrowserViewModel internal constructor(
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 val component = MediaDownloader.requireComponent()
-                BrowserViewModel(component::newMediaDetector) { component.deviceProfile.isLowEnd }
+                BrowserViewModel(
+                    detectorFactory = component::newMediaDetector,
+                    isLowEndDevice = { component.deviceProfile.isLowEnd },
+                    tabStore = component.tabStore,
+                )
             }
         }
     }

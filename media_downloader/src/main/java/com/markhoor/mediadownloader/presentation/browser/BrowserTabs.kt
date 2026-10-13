@@ -15,7 +15,9 @@ import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import com.markhoor.mediadownloader.core.Constants.Browser
 import com.markhoor.mediadownloader.core.normalizedHost
+import com.markhoor.mediadownloader.domain.models.SavedTabModel
 import com.markhoor.mediadownloader.domain.repo.MediaDetector
+import com.markhoor.mediadownloader.domain.repo.TabStore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -59,6 +61,7 @@ class BrowserTabs internal constructor(
     private val newSession: () -> PageSession,
     private val showing: (MediaDetector?) -> Unit,
     private val isLowEnd: () -> Boolean,
+    private val store: TabStore? = null,
     maxTabs: Int = Browser.MAX_TABS,
 ) {
 
@@ -85,6 +88,10 @@ class BrowserTabs internal constructor(
      */
     private var busy: String? = null
 
+    /** What was last written down, so the tabs are kept again only when they have changed. */
+    private var lastKept: List<SavedTabModel>? = null
+    private var broughtBack = false
+
     private val _state = MutableStateFlow(BrowserTabsUiState())
     val state: StateFlow<BrowserTabsUiState> = _state.asStateFlow()
 
@@ -104,7 +111,13 @@ class BrowserTabs internal constructor(
      */
     @MainThread
     fun capturePreview(): Boolean {
-        val drawn = tabs.values.count { capture(it) }
+        val shown = roster.activeId
+        // Drawing a page costs more than everything else here put together, so only the pictures
+        // that are actually out of date are taken again: the tab on screen, which has been looked
+        // at since, and any whose page is not the page its picture was taken of.
+        val drawn = tabs.values.count { tab ->
+            (tab.id == shown || tab.preview == null || tab.previewOf != tab.url) && capture(tab)
+        }
         if (drawn > 0) publish()
         return drawn > 0
     }
@@ -232,9 +245,31 @@ class BrowserTabs internal constructor(
                 host = null
             }
         })
+        bringBackSavedTabs()
         roster.activeId?.let { giveItAPage(it) }
         onSelectionChanged()
         publish()
+    }
+
+    /**
+     * The tabs the app was last closed with, put back the first time a screen asks for them. A
+     * browser's tabs are the user's, not the session's: they go when the user closes them, or
+     * when the app's data is cleared, and not because the app was killed in the background.
+     *
+     * Only the tab that was shown is given a page here; the rest are an address and a name until
+     * they are selected, which is what the live budget would have left them as anyway. What comes
+     * back is the page, not its history: `WebView.saveState` hands out a `Bundle`, and a Bundle is
+     * not a thing to keep on disk between versions of an app.
+     */
+    private fun bringBackSavedTabs() {
+        if (broughtBack) return
+        broughtBack = true
+        val saved = store?.saved().orEmpty()
+        lastKept = saved
+        if (saved.isEmpty() || tabs.isNotEmpty()) return
+        saved.forEach { tab ->
+            openTab(tab.url, select = tab.isActive, title = tab.title, givePage = false)
+        }
     }
 
     /** The ViewModel is gone: every page is given up and every session ends. */
@@ -256,6 +291,8 @@ class BrowserTabs internal constructor(
         openerId: String? = null,
         saved: Bundle? = null,
         preview: Bitmap? = null,
+        title: String = "",
+        givePage: Boolean = true,
     ): String? {
         val id = "tab-${++opened}"
         if (!roster.open(id, select, openerId)) return null
@@ -264,9 +301,10 @@ class BrowserTabs internal constructor(
         tab.preview = preview
         tab.pending = url.trim()
         tab.url = url.trim()
+        tab.title = title
         tabs[id] = tab
         watch(tab)
-        giveItAPage(id)
+        if (givePage) giveItAPage(id)
         onSelectionChanged()
         trimToBudget()
         publish()
@@ -402,6 +440,7 @@ class BrowserTabs internal constructor(
             }
         }.getOrNull() ?: return false
         tab.preview = picture
+        tab.previewOf = tab.url
         return true
     }
 
@@ -470,6 +509,24 @@ class BrowserTabs internal constructor(
             canOpenMore = roster.canOpenMore,
             canRestoreClosed = closed.isNotEmpty(),
         )
+        keepTabs()
+    }
+
+    /**
+     * Writes the tabs down when what is written down would change. The published state changes
+     * with every percent a page loads, and none of that belongs in a file: a tab's address, its
+     * name and which one is shown are all that is kept, so most of those changes write nothing.
+     */
+    private fun keepTabs() {
+        val store = store ?: return
+        val keep = roster.ids.mapNotNull { id ->
+            tabs[id]?.let {
+                SavedTabModel(url = it.url, title = it.title, isActive = id == roster.activeId)
+            }
+        }
+        if (keep == lastKept) return
+        lastKept = keep
+        store.save(keep)
     }
 
     private fun Tab.toUiState(isActive: Boolean) = BrowserTabUiState(
@@ -497,6 +554,9 @@ class BrowserTabs internal constructor(
 
         /** The last picture taken of its page, for a card in a tab switcher. */
         var preview: Bitmap? = null
+
+        /** The page that picture was taken of, so a page still on screen is not drawn twice. */
+        var previewOf: String = ""
 
         /** Its renderer died and has not been answered yet; the state says so until a page lands. */
         var crashed: Boolean = false

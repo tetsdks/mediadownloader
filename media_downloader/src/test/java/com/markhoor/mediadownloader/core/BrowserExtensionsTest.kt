@@ -2,6 +2,7 @@ package com.markhoor.mediadownloader.core
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -105,5 +106,19 @@ class BrowserExtensionsTest {
     fun `image endings are read from the tail of any length`() {
         assertTrue(("https://a.com/" + "x".repeat(50_000) + ".jpg?w=1").looksLikeImageUrl())
         assertFalse("https://a.com/v.mp4".looksLikeImageUrl())
+    }
+
+    /** The WebView hands over a name twice when two paths set it; the browser uses the last. */
+    @Test
+    fun `one cookie is read out of a header, the last of a repeated name`() {
+        val header = "csrftoken=first; ig_did=ABC; sessionid=1234%3Aabc%3A9; csrftoken=second"
+
+        assertEquals("second", header.cookieValue("csrftoken"))
+        assertEquals("1234%3Aabc%3A9", header.cookieValue("sessionid"))
+        assertNull(header.cookieValue("mid"))
+        // A name that only appears as the tail of another one is not that cookie.
+        assertNull(header.cookieValue("token"))
+        assertNull("sessionid=".cookieValue("sessionid"))
+        assertNull("".cookieValue("sessionid"))
     }
 }

@@ -104,11 +104,21 @@ fun parseFailureMessage(error: MediaParseException): String = when (error) {
     is MediaParseException.SiteBlocked -> "Downloads aren't allowed from this site"
     is MediaParseException.SiteUnsupported -> "This site isn't on the supported list"
     is MediaParseException.LinkNotRecognised -> "That link isn't a post - a feed or a profile has nothing to read"
-    is MediaParseException.MediaNotFound -> "Couldn't find any media behind that link"
+    // The site answered, but only signs in users see a post; nothing was there to read.
+    is MediaParseException.MediaNotFound ->
+        if (error.needsSignIn) {
+            "This site only shows posts to someone signed in. Open it in the browser, sign in, and try again"
+        } else {
+            "Couldn't find any media behind that link"
+        }
 }
 
 /** The browser can still find media on a page the parser could not read; a blocked site cannot. */
 fun canTryInBrowser(error: MediaParseException): Boolean = error !is MediaParseException.SiteBlocked
+
+/** Signing in is done in the browser, so that is the button worth offering first. */
+fun shouldSignIn(error: MediaParseException): Boolean =
+    error is MediaParseException.MediaNotFound && error.needsSignIn
 
 /**
  * A download that was refused or failed. `StorageNotWritable.message` is written for whoever

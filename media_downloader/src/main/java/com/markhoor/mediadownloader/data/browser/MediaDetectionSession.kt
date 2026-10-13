@@ -164,8 +164,10 @@ internal class MediaDetectionSession(
                 // Whatever was on screen was the WebView before this one: this one has drawn nothing.
                 publish { it.copy(isPageVisible = false) }
             }
-            is PageSignal.PageStarted ->
+            is PageSignal.PageStarted -> {
                 if (signal.url.isNotBlank() && signal.url != page.siteUrl) page.siteUrl = signal.url
+                refuseCaptureDevices()
+            }
             is PageSignal.PageCommitted -> onPageCommitted(signal)
             is PageSignal.PageFinished -> keepInstagramSignIn(signal.url)
             // Deliberately not unset when the next page starts: the browser goes on showing the
@@ -275,6 +277,22 @@ internal class MediaDetectionSession(
             return
         }
         inject(pageUrl, script)
+    }
+
+    /**
+     * Takes the camera and the microphone away from the page that is starting, whatever site it
+     * is - a blocked one included, since this is not about finding media. Asking Chromium for the
+     * capture devices is what kills an app whose phone answers for its cameras badly, and the only
+     * place that ask can be stopped is in the page.
+     *
+     * As early as a page can be reached without another library: a navigation has committed and the
+     * document has not been parsed. A page that runs its own script before this one lands is not
+     * covered, which is the limit of doing it this way.
+     */
+    private fun refuseCaptureDevices() {
+        workScope.launch(serialDispatcher) {
+            _commands.trySend(PageCommand.RunScript(scripts.build(PageScript.NoCapture)))
+        }
     }
 
     private fun inject(pageUrl: String, script: PageScript) {

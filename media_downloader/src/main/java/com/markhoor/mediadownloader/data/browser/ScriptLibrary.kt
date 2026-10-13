@@ -6,7 +6,10 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
 import java.util.concurrent.ConcurrentHashMap
 
-/** The scripts put into pages, one per site that needs its own and one for every other site. */
+/**
+ * The scripts put into pages: one per site that needs its own, one for every other site, and
+ * [NoCapture], which is not about finding media at all - it goes into every page, wanted or not.
+ */
 internal enum class PageScript(val fileName: String) {
     Facebook("facebook.js"),
     Instagram("instagram.js"),
@@ -14,6 +17,9 @@ internal enum class PageScript(val fileName: String) {
     Threads("threads.js"),
     TikTok("tiktok.js"),
     Generic("generic.js"),
+
+    /** Takes the camera and the microphone away from the page; see the file for why. */
+    NoCapture("no_capture.js"),
 }
 
 /**
