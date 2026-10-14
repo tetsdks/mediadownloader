@@ -1173,6 +1173,20 @@ its wiring in `MediaDownloaderComponent`.
   number that still clears both trays. A profile page's cover photo is the full width and has
   always had a button; its round picture is 82px, in the same band as a story cover and an avatar,
   and nothing about its size tells it apart - it would need a rule of its own.
+- **A profile picture is a picture, and gets a button of its own.** The floor above keeps the
+  trays out by width, and a profile picture is caught in the same net: 90px of a 384px viewport,
+  between the story covers at 106px that must stay bare and the avatars at 16 to 48px that must
+  too. Being **square** is what separates it - a story or reels cover is a portrait rectangle, and
+  an avatar beside a name is a quarter of the width. Round would have been the better test and is
+  not available: facebook does not round these with a border radius, and measured on the device
+  the image and both boxes above it report `0px` while the picture is plainly a circle on screen.
+  So the rule is square, and at least 18% of the viewport wide. A square photo in a collage passes
+  it too, which is no loss - it is a picture, and it had a button before the floor came down.
+  The disc is sized to what it offers when the picture is small: 38% of its width, never under
+  28px, kept in the corner, and a picture big enough for the full 55px is left exactly as it was,
+  corner and all, so the feed is untouched. Checked on the device: every suggestion on
+  `/friends/center/suggestions/` offers its picture (HD, 6.9 KB on the one that was pressed), and
+  a story's author avatar at 20px still offers nothing.
 - **A button belongs to what the reader can see.** Facebook's signed-out video surface raises a
   "Get the full experience" dialog over the whole page a moment after it loads, and the buttons
   already drawn stayed on top of it: three red discs over a dialog, each belonging to a card the
