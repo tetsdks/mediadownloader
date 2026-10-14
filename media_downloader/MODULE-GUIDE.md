@@ -1152,25 +1152,29 @@ its wiring in `MediaDownloaderComponent`.
   two discs came back over the one video.
   The card is asked rather than the whole post, so a post holding a picture beside its video keeps
   the picture's own button.
-- **The reels tray is a strip of covers, and its button opens what a cover stands for.** On
-  `m.facebook.com/watch` the Reels row holds an `<img>` per reel inside Facebook's own
-  `role="button"`, and that is all it holds: no player, no id, no link, because Facebook resolves
-  the tap on its own server (the page's 369 KB of html names no reel at all, and the cover's file
-  name has nothing to do with the video's id - both were checked). The picture rules leave the row
-  alone on purpose, since a tile is 135px of a 384px screen, which is the shape of the stories tray,
-  and a button there downloaded the cover. So its button claims nothing: it presses the tile and
-  leaves a note in `sessionStorage`, and the script on the page that opens reads the note and hands
-  the reel over by the id in the new address - one press, and the sheet opens on the reel that was
-  pressed. The note carries the address it was written on and the moment it was written, so it
-  cannot fire on a page the reader reached some other way, and a plain tap on a tile leaves no note
-  and opens the reel with nothing else happening. Two things the shape forced: the button is drawn
-  against the viewport from `document.body`, because the strip slides under a `transform` (which a
-  `position: fixed` child is measured from) and sits in a box stacking below the invisible fixed
-  layer Facebook keeps its "Open Facebook" banner in - inside the tile it was visible and took no
-  presses at all; and the handover waits 1.2s, because the script arrives with the new page's first
-  answer, while the app is still letting go of the page the press was made on, and a reel handed
-  over then reached nothing. Drawn only on `/watch`, `/reel` and `/videos/`, so the stories tray on
-  the feed - built exactly the same way - is still left alone.
+- **The reels tray carries no button: there was nothing behind it to download.** On the signed-out
+  Video surface `m.facebook.com/watch` shows a Reels row of covers, and each cover used to be given
+  one. A cover knows nothing - no player, no id, no link, because Facebook resolves the tap on its
+  own server - so the button pressed the tile and left a note in `sessionStorage`, and the script on
+  the page that opened read the note and handed the reel over by the id in the new address. The
+  machinery worked; what it handed over could not be read, because the row is a signed-out surface
+  and a signed-out reel is exactly what the parser cannot see. One press therefore opened a reel the
+  reader had not chosen and then an empty sheet, which is worse than no button at all, and the owner
+  reported it as such in October 2026. The tray rule and its note are gone, so a cover is an
+  ordinary Facebook cover again: it opens the reel, and the reel's own page draws the button the
+  permalink rule has always drawn there. Measured signed in the same day on `m.facebook.com/reel/`:
+  title, artwork, HD 21.3 MB and SD 4.3 MB.
+- **A size test asked before the page has a size lets everything through.** The two picture rules
+  skip anything narrower than 60% of the viewport, which is what keeps the stories tray and the
+  rails beside it from being given buttons. But this script is put into the page with its first
+  answer, long before the page is laid out, and `window.innerWidth` is then `0`: every tile is
+  wider than 60% of nothing, and `Math.min(innerWidth, innerHeight)/5` - the floor a picture must
+  clear at all - is `0` too. Measured on the device on the signed-in feed: four runs at
+  `innerWidth 0` drew eight buttons, over a stories tray and over avatars of 16, 32 and 48 pixels,
+  and the run that could finally measure drew only the five the feed should have. A button once
+  drawn is never drawn again, so all eight stayed on the page. `mksIsStory` now answers "yes" when
+  there is no width to measure against, which makes both rules wait for the run that can see the
+  page; nothing is lost, because every later injection draws what that run finds.
 - The Facebook page parser matches `"browser_native_hd_url":"…"` as plain JSON. The old code also
   read the key when a page wrote it escaped inside a script string; whether Facebook still serves
   that shape is unverified, so the stricter match was kept (it also stops an SD url being taken for
