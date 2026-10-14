@@ -1152,57 +1152,31 @@ its wiring in `MediaDownloaderComponent`.
   two discs came back over the one video.
   The card is asked rather than the whole post, so a post holding a picture beside its video keeps
   the picture's own button.
-- **The reels tray carries no button: there was nothing behind it to download.** On the signed-out
-  Video surface `m.facebook.com/watch` shows a Reels row of covers, and each cover used to be given
-  one. A cover knows nothing - no player, no id, no link, because Facebook resolves the tap on its
-  own server - so the button pressed the tile and left a note in `sessionStorage`, and the script on
-  the page that opened read the note and handed the reel over by the id in the new address. The
-  machinery worked; what it handed over could not be read, because the row is a signed-out surface
-  and a signed-out reel is exactly what the parser cannot see. One press therefore opened a reel the
-  reader had not chosen and then an empty sheet, which is worse than no button at all, and the owner
-  reported it as such in October 2026. The tray rule and its note are gone, so a cover is an
-  ordinary Facebook cover again: it opens the reel, and the reel's own page draws the button the
-  permalink rule has always drawn there. Measured signed in the same day on `m.facebook.com/reel/`:
-  title, artwork, HD 21.3 MB and SD 4.3 MB.
-- **The floor between a tray and a post is 40% of the viewport, not 60%.** The two picture rules
-  skip anything narrower than that, which is what keeps the story tray and the reels rail out. Of a
-  384px viewport, measured: a story cover is 106px, a reels cover 135px, a 'People you may know'
-  card 196px, a photo in a two picture collage about 190px, and a feed photo the full 384. At 60%
-  the floor sat above the suggestion cards as well as the trays; the owner wants a profile card's
-  picture downloadable, and it is a picture like any other, so the floor came down to the first
-  number that still clears both trays. A profile page's cover photo is the full width and has
-  always had a button; its round picture is 82px, in the same band as a story cover and an avatar,
-  and nothing about its size tells it apart - it would need a rule of its own.
-- **A profile picture is a picture, and gets a button of its own.** The floor above keeps the
-  trays out by width, and a profile picture is caught in the same net: 90px of a 384px viewport,
-  between the story covers at 106px that must stay bare and the avatars at 16 to 48px that must
-  too. Being **square** is what separates it - a story or reels cover is a portrait rectangle, and
-  an avatar beside a name is a quarter of the width. Round would have been the better test and is
-  not available: facebook does not round these with a border radius, and measured on the device
-  the image and both boxes above it report `0px` while the picture is plainly a circle on screen.
-  So the rule is square, and at least 18% of the viewport wide. A square photo in a collage passes
-  it too, which is no loss - it is a picture, and it had a button before the floor came down.
-  The disc is sized to what it offers when the picture is small: 38% of its width, never under
-  28px, kept in the corner, and a picture big enough for the full 55px is left exactly as it was,
-  corner and all, so the feed is untouched. Checked on the device: every suggestion on
-  `/friends/center/suggestions/` offers its picture (HD, 6.9 KB on the one that was pressed), and
-  a story's author avatar at 20px still offers nothing.
-- **A button belongs to what the reader can see.** Facebook's signed-out video surface raises a
-  "Get the full experience" dialog over the whole page a moment after it loads, and the buttons
-  already drawn stayed on top of it: three red discs over a dialog, each belonging to a card the
-  dialog covered. Nothing in the markup says "dialog" and class names are not something to guess
-  at - the same reason Reddit's app sheet is left alone below - so the page is asked the only
-  question that matters instead: what is actually at the middle of this card? `document
-  .elementFromPoint` answers it, and a button whose card answers with something outside itself is
-  taken away until it does not. Three things the shape forced: the probe is the middle of whatever
-  part of the card is on screen, so a card half out of view answers for the half that is in it; a
-  card scrolled off the screen is not judged at all, since `elementFromPoint` would answer for
-  whatever happens to be there; and our own buttons are not an answer, because one of them sits on
-  the card being asked about. It runs at the end of each injection and on an 800ms beat besides
-  (2s on a low-end device), because a dialog raised after the last injection would otherwise never
-  be seen, and it puts buttons back when the dialog goes rather than removing them. Measured on the
-  feed against a dialog stacked the way facebook's is: nine buttons, the one under it hidden and
-  nothing drawn over it.
+- **The reels tray's button opens the reel, and that cannot be helped.** On the signed-out video
+  surface `m.facebook.com/watch` shows a row of covers, and each gets a button. A cover knows
+  nothing - no player, no id, no link, because Facebook resolves the tap on its own server - so the
+  button presses the tile and leaves a note in `sessionStorage`, and the script on the page that
+  opens reads the note and hands the reel over by the id in the new address. Measured signed out on
+  the device: one press, the right reel, and a sheet with its title, its artwork and HD 8.8 MB
+  beside SD 2.4 MB.
+  It was taken out once, in October 2026, on a report that the sheet came up empty; pressing the
+  same button in the owner's own app the same day gave HD 3.57 MB, so the sheet was not the
+  problem - the buttons drawn over Facebook's own dialog were, and those are handled above.
+  The reel opening is what the owner minds, and going back after the handover was tried and does
+  not work: the module cancels the search and forgets the media on every committed navigation
+  (`MediaDetectionSession.onPageCommitted`), so the sheet the press was for dies with the page it
+  was found on - measured, back 400ms after the handover and no sheet appeared at all. The reel's
+  address is also the only place the id is ever written, so there is nowhere earlier to read it.
+  Two things the shape forced: the button is drawn against the viewport from `document.body`,
+  because the strip slides under a `transform` (which a `position: fixed` child is measured from)
+  and sits in a box stacking below the invisible fixed layer Facebook keeps its "Open Facebook"
+  banner in - inside the tile it was visible and took no presses at all; and the handover waits
+  1.2s, because the script arrives with the new page's first answer, while the app is still letting
+  go of the page the press was made on, and a reel handed over then reached nothing. Drawn only on
+  `/watch`, `/reel` and `/videos/`, so the stories tray on the feed - built exactly the same way -
+  is still left alone. Such a button hangs off the body rather than its tile, so it carries
+  `mksTileOf`: without it the sweep above would ask the body whether it is covered, and these are
+  precisely the buttons that were drawn over the dialog.
 - **A size test asked before the page has a size lets everything through.** The two picture rules
   skip anything narrower than 60% of the viewport, which is what keeps the stories tray and the
   rails beside it from being given buttons. But this script is put into the page with its first
