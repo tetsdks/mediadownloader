@@ -1164,6 +1164,31 @@ its wiring in `MediaDownloaderComponent`.
   ordinary Facebook cover again: it opens the reel, and the reel's own page draws the button the
   permalink rule has always drawn there. Measured signed in the same day on `m.facebook.com/reel/`:
   title, artwork, HD 21.3 MB and SD 4.3 MB.
+- **The floor between a tray and a post is 40% of the viewport, not 60%.** The two picture rules
+  skip anything narrower than that, which is what keeps the story tray and the reels rail out. Of a
+  384px viewport, measured: a story cover is 106px, a reels cover 135px, a 'People you may know'
+  card 196px, a photo in a two picture collage about 190px, and a feed photo the full 384. At 60%
+  the floor sat above the suggestion cards as well as the trays; the owner wants a profile card's
+  picture downloadable, and it is a picture like any other, so the floor came down to the first
+  number that still clears both trays. A profile page's cover photo is the full width and has
+  always had a button; its round picture is 82px, in the same band as a story cover and an avatar,
+  and nothing about its size tells it apart - it would need a rule of its own.
+- **A button belongs to what the reader can see.** Facebook's signed-out video surface raises a
+  "Get the full experience" dialog over the whole page a moment after it loads, and the buttons
+  already drawn stayed on top of it: three red discs over a dialog, each belonging to a card the
+  dialog covered. Nothing in the markup says "dialog" and class names are not something to guess
+  at - the same reason Reddit's app sheet is left alone below - so the page is asked the only
+  question that matters instead: what is actually at the middle of this card? `document
+  .elementFromPoint` answers it, and a button whose card answers with something outside itself is
+  taken away until it does not. Three things the shape forced: the probe is the middle of whatever
+  part of the card is on screen, so a card half out of view answers for the half that is in it; a
+  card scrolled off the screen is not judged at all, since `elementFromPoint` would answer for
+  whatever happens to be there; and our own buttons are not an answer, because one of them sits on
+  the card being asked about. It runs at the end of each injection and on an 800ms beat besides
+  (2s on a low-end device), because a dialog raised after the last injection would otherwise never
+  be seen, and it puts buttons back when the dialog goes rather than removing them. Measured on the
+  feed against a dialog stacked the way facebook's is: nine buttons, the one under it hidden and
+  nothing drawn over it.
 - **A size test asked before the page has a size lets everything through.** The two picture rules
   skip anything narrower than 60% of the viewport, which is what keeps the stories tray and the
   rails beside it from being given buttons. But this script is put into the page with its first
