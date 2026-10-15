@@ -1177,14 +1177,22 @@ its wiring in `MediaDownloaderComponent`.
   is still left alone. Such a button hangs off the body rather than its tile, so it carries
   `mksTileOf`: without it the sweep above would ask the body whether it is covered, and these are
   precisely the buttons that were drawn over the dialog.
-  Taking the button out of the tile is not the same as raising it over the page, and for a while it
-  was both: at `z-index: 2147483646` it was drawn on top of Facebook's own "Get the full
-  experience" dialog. It stacks at zero now. Measured on the device: that dialog and the banner are
-  both `position: fixed` at `z-index: 1`, so zero puts the button under everything Facebook draws
-  over the strip, while being the last thing in the body keeps it over the covers themselves. It
-  still takes a press - checked by making one, which opened the right reel and offered HD 10.1 MB
-  beside SD 2.0 MB. The sweep is what takes a covered button away; this is what keeps one from
-  being drawn over a dialog at all.
+  Stacking cannot keep such a button under Facebook's own "Get the full experience" dialog, and
+  trying was a wrong turn. The dialog is `position: fixed` at `z-index: 1`, but it sits inside a box
+  that stacks at zero earlier in the body than this button does, so a button low enough to go under
+  it goes under the covers too and is never seen - measured, at `z-index: 0` the discs were still
+  drawn over the dialog. It is back above everything, and what keeps it off a dialog is being told
+  not to appear there.
+- **One timer owns a tray button, because two made it flash.** `mksTrayPlace` runs twice a second
+  to keep each button beside the tile it belongs to, and the covered-button sweep ran on its own
+  800ms beat; both wrote `display` on the same element and disagreed, so a button over the dialog
+  appeared for 500ms and went for 800ms, over and over. That is the blinking the owner reported,
+  and it is also why a disc was on the dialog at all: the placer did not know about the sweep's
+  question and kept putting it back. The placer asks `mksCovered` itself now, and the sweep skips
+  anything carrying `mksTileOf`. Measured after: six seconds with the dialog up and not one disc in
+  any frame, eight seconds with it closed and a disc in every frame - the size of them varies by a
+  few hundred pixels across frames, which is the `pulse` animation every button has had from the
+  start, not a flash.
 - **A size test asked before the page has a size lets everything through.** The two picture rules
   skip anything narrower than 60% of the viewport, which is what keeps the stories tray and the
   rails beside it from being given buttons. But this script is put into the page with its first
