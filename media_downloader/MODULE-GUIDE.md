@@ -1183,20 +1183,27 @@ its wiring in `MediaDownloaderComponent`.
   it goes under the covers too and is never seen - measured, at `z-index: 0` the discs were still
   drawn over the dialog. It is back above everything, and what keeps it off a dialog is being told
   not to appear there.
-- **A tray button is placed in the page's coordinates, not the screen's.** It used to be
-  `position: fixed` with a left and top taken straight from the tile's `getBoundingClientRect`,
-  which is right only while the page is drawn at the scale it was laid out for. Chromium places a
-  fixed element against the visual viewport, so when a page is composited smaller than it was laid
-  out - which happens here, intermittently, and is not understood - the covers shrink and these
-  discs do not: they walk off their tiles and onto whatever else is on screen. The owner's picture
-  of it is two discs beside Facebook's dialog, a screen away from the strip they belong to. They
-  are `position: absolute` now, placed by the offset between the tile's rectangle and the box the
-  button is positioned against - both measured from the viewport, so no scroll position is carried
-  and no screen pixels are used - and they ride the page whatever it is composited at.
-  **Not seen fixed.** The shrunken state would not reproduce on the day this was written, so this
-  is reasoned from how the two position schemes behave rather than watched. The page cannot tell it
-  is in that state either: measured there, `innerWidth`, `clientWidth` and `visualViewport.scale`
-  all report what an unscaled page would.
+- **A tray disc has no coordinates of its own, because every coordinate was wrong.** It was
+  `position: fixed` with a left and top computed from the tile's `getBoundingClientRect`; that was
+  changed to `position: absolute` with the same arithmetic, and the owner's next picture showed the
+  same fault. Measuring his picture is what settled it: the page painted one css pixel as 1.17
+  device pixels, while a css pixel of the discs' spacing was painted as 2.63 - the device's own
+  density - so the three discs stood 2.25 times their tiles apart, out over the white beside the
+  page. When a page is composited at a scale it was not laid out for - the zoom entry below, still
+  not understood - what `getBoundingClientRect` reports and what the page paints disagree by a
+  constant, so **any** placement computed from a rectangle is wrong by that constant, `fixed` or
+  `absolute` alike.
+  The disc now lives inside its own tile, at `right: 8px; bottom: 8px`, and the browser places it.
+  There is no number for the script to get wrong, and it is carried by the strip's transform, the
+  page's scale and every scroll for free. Facebook's `role="button"` wrapper is made `relative`
+  when it is `static`, so it is the box the disc is measured against. Measured afterwards: four
+  cards at 12, 159, 306 and 453 css px, each 135 wide, and four discs at 84, 231, 378 and 525 -
+  `card.right - 63` every time - visible in five consecutive frames, and a press opened the reel
+  the disc sat on. The old note that a disc inside a tile "took no presses at all" does not hold
+  for one hung on the wrapper rather than on the strip.
+  The covered question is asked of that wrapper, not of the `<img>` inside it: the middle of a
+  reels cover is facebook's play circle, a sibling of the picture rather than part of it, so asking
+  about the picture answered "covered" for every tile and took every disc away.
 - **One timer owns a tray button, because two made it flash.** `mksTrayPlace` runs twice a second
   to keep each button beside the tile it belongs to, and the covered-button sweep ran on its own
   800ms beat; both wrote `display` on the same element and disagreed, so a button over the dialog
