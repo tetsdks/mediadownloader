@@ -1183,6 +1183,20 @@ its wiring in `MediaDownloaderComponent`.
   it goes under the covers too and is never seen - measured, at `z-index: 0` the discs were still
   drawn over the dialog. It is back above everything, and what keeps it off a dialog is being told
   not to appear there.
+- **A tray button is placed in the page's coordinates, not the screen's.** It used to be
+  `position: fixed` with a left and top taken straight from the tile's `getBoundingClientRect`,
+  which is right only while the page is drawn at the scale it was laid out for. Chromium places a
+  fixed element against the visual viewport, so when a page is composited smaller than it was laid
+  out - which happens here, intermittently, and is not understood - the covers shrink and these
+  discs do not: they walk off their tiles and onto whatever else is on screen. The owner's picture
+  of it is two discs beside Facebook's dialog, a screen away from the strip they belong to. They
+  are `position: absolute` now, placed by the offset between the tile's rectangle and the box the
+  button is positioned against - both measured from the viewport, so no scroll position is carried
+  and no screen pixels are used - and they ride the page whatever it is composited at.
+  **Not seen fixed.** The shrunken state would not reproduce on the day this was written, so this
+  is reasoned from how the two position schemes behave rather than watched. The page cannot tell it
+  is in that state either: measured there, `innerWidth`, `clientWidth` and `visualViewport.scale`
+  all report what an unscaled page would.
 - **One timer owns a tray button, because two made it flash.** `mksTrayPlace` runs twice a second
   to keep each button beside the tile it belongs to, and the covered-button sweep ran on its own
   800ms beat; both wrote `display` on the same element and disagreed, so a button over the dialog
