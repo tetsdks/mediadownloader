@@ -182,6 +182,7 @@ internal class DownloadWorker(
             mediaUrl = quality.url,
             audioUrl = quality.audioUrl,
             headers = quality.headers,
+            type = quality.type,
             qualityLabel = quality.label,
             isStream = quality.url.isHlsPlaylistUrl(),
             totalBytes = quality.sizeBytes,

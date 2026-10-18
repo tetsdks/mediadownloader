@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.Query
 import com.markhoor.mediadownloader.domain.models.DownloadState
+import com.markhoor.mediadownloader.domain.models.MediaType
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -66,9 +67,11 @@ internal interface DownloadDao {
     /**
      * Fills in what reading the page answered, for a download that was queued with only a page to
      * read - a playlist's entries are queued that way, and read one by one as their turns come.
+     * [type] is what the page turned out to hold: an entry is queued as a video before anyone has
+     * looked, and an album's pictures would otherwise be refused as "a picture instead of the video".
      */
     @Query(
-        "UPDATE downloads SET mediaUrl = :mediaUrl, audioUrl = :audioUrl, headers = :headers, " +
+        "UPDATE downloads SET mediaUrl = :mediaUrl, audioUrl = :audioUrl, headers = :headers, type = :type, " +
             "qualityLabel = :qualityLabel, isStream = :isStream, totalBytes = :totalBytes, " +
             "title = :title, thumbnailUrl = :thumbnailUrl WHERE id = :id",
     )
@@ -77,6 +80,7 @@ internal interface DownloadDao {
         mediaUrl: String,
         audioUrl: String?,
         headers: Map<String, String>,
+        type: MediaType,
         qualityLabel: String,
         isStream: Boolean,
         totalBytes: Long?,
