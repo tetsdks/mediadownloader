@@ -84,6 +84,37 @@ class DownloadEngineTest {
         assertEquals((videoBytes.size + audioBytes.size).toLong(), meter.downloadedBytes)
     }
 
+    /**
+     * The second attempt at a video whose sound is a second file. A run can stop between the
+     * picture arriving and the sound doing - the reader pauses, the system takes the job back, the
+     * connection drops - and the picture is whole on disk when the next run starts. It used to be
+     * fetched again from nothing: `downloadInParts` deletes its parts and the length it cut them
+     * for the moment it joins them, and has no "already whole" test of its own, so the next run
+     * saw an empty work dir and asked for every byte a second time. On a flaky connection a large
+     * video could never finish inside the five attempts it is given.
+     */
+    @Test
+    fun `a picture already whole is not fetched again`() = runTest {
+        // Over 2 x MIN_PART_BYTES, so it is fetched in parts - which is the path that deleted
+        // every trace of itself and then asked for the file again.
+        val bigVideo = sampleBytes(5 * 1024 * 1024)
+        val server = FakeMediaServer(mapOf(videoUrl to bigVideo, audioUrl to audioBytes))
+        val task = task(audioUrl)
+        // What the run before left behind: the picture, whole, and nothing else.
+        DirectFileDownloader(HttpFileFetcher(server.client))
+            .download(task.copy(audioUrl = null, output = File(task.workDir, "video.track")), ProgressMeter())
+        server.requests.clear()
+
+        engine(server, RecordingRemuxer()).download(task, ProgressMeter())
+
+        // One probe for its length is all it may cost; not one byte of the file itself.
+        assertTrue(
+            "the picture was fetched again: ${server.requests}",
+            server.requests.none { it.startsWith(videoUrl) && it != "$videoUrl bytes=0-0" },
+        )
+        assertArrayEquals(bigVideo + audioBytes, task.output.readBytes())
+    }
+
     @Test
     fun `without a sound url nothing is joined`() = runTest {
         val server = FakeMediaServer(mapOf(videoUrl to videoBytes))

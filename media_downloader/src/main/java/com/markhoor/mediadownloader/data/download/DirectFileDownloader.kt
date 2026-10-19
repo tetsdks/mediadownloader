@@ -48,6 +48,18 @@ internal class DirectFileDownloader(
     }
 
     private suspend fun downloadInParts(task: DownloadTask, length: Long, meter: ProgressMeter) {
+        // Already whole, the way downloadWhole asks it of itself. The parts and the length they
+        // were cut for are deleted the moment they are joined, so a run that stopped after this
+        // file was finished - a video whose sound was still coming when the reader paused, or the
+        // system took the job back - left the file here and nothing else, and the next run read
+        // the empty work dir as nothing done and asked for every byte again. A large video on a
+        // poor connection could then never finish inside the attempts it is given.
+        if (task.output.length() == length) {
+            meter.reset(length)
+            partFiles(task.workDir).forEach { it.delete() }
+            File(task.workDir, Scratch.PARTS_LENGTH_NAME).delete()
+            return
+        }
         // Parts cut for another length are pieces of another file - the server's file changed
         // between runs - and would be joined into a corrupt one.
         val cutFor = File(task.workDir, Scratch.PARTS_LENGTH_NAME)
