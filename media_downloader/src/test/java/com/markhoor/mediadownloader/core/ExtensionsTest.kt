@@ -359,4 +359,16 @@ class ExtensionsTest {
         assertEquals("clip", "clip.WEBM".toFileNameBase())
         assertEquals("Version 2.5 release", "Version 2.5 release".toFileNameBase())
     }
+
+    /**
+     * A page sets its own title and may set it to megabytes. Every url from the same page is cut
+     * on the way in; this was not, and went through the title's regex passes, into two copies of
+     * the detector's state, and onto disk in the tabs file on every tab change.
+     */
+    @Test
+    fun `a page's title is cut to what is kept`() {
+        assertEquals(1_000, "t".repeat(2_000_000).asBoundedTitle().length)
+        assertEquals("a short one", "a short one".asBoundedTitle())
+        assertEquals("", null.asBoundedTitle())
+    }
 }

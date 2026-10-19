@@ -920,6 +920,15 @@ internal fun String.isSpelledOutBy(written: String): Boolean {
     return slug.length >= 12 && letters(written).startsWith(slug)
 }
 
+
+/**
+ * Page-supplied text, cut to what is kept. A page sets its own `document.title` and may set it to
+ * megabytes; the title then goes through several regex passes in [asMediaTitle], is held twice in
+ * the detector's state and is written to the tabs file on disk on every tab change. Every url from
+ * the same page is cut on the way in and this was not, though §6 says both are.
+ */
+internal fun String?.asBoundedTitle(): String = orEmpty().take(Download.MAX_STORED_TITLE_LENGTH)
+
 // endregion
 
 // region Flows

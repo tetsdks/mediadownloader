@@ -18,6 +18,7 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.annotation.RequiresApi
 import com.markhoor.mediadownloader.core.Constants.Browser
+import com.markhoor.mediadownloader.core.asBoundedTitle
 import com.markhoor.mediadownloader.core.isHttpUrl
 import com.markhoor.mediadownloader.core.isStaticAssetUrl
 import com.markhoor.mediadownloader.domain.models.PageSignal
@@ -60,7 +61,7 @@ internal class DetectingWebViewClient(
         val sameAgain = committed == lastCommittedUrl
         lastCommittedUrl = committed
         detector?.onSignal(
-            PageSignal.PageCommitted(committed, view.title.orEmpty(), sameAgain, view.canGoBack(), view.canGoForward()),
+            PageSignal.PageCommitted(committed, view.title.asBoundedTitle(), sameAgain, view.canGoBack(), view.canGoForward()),
         )
     }
 
@@ -136,7 +137,7 @@ internal class DetectingChromeClient(
 
     override fun onReceivedTitle(view: WebView, title: String?) {
         delegate?.onReceivedTitle(view, title)
-        detector.onSignal(PageSignal.TitleChanged(title.orEmpty()))
+        detector.onSignal(PageSignal.TitleChanged(title.asBoundedTitle()))
     }
 
     override fun onReceivedIcon(view: WebView, icon: Bitmap?) {
