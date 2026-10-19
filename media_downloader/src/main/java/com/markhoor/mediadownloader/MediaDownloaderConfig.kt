@@ -34,6 +34,14 @@ import com.markhoor.mediadownloader.domain.policy.RestrictedCategory
  *   allow apps that do this: keep this `false` in any build published there.
  * @param extraSources readers the host app supplies for links this module does not read itself;
  *   see [MediaSource]. The module's own readers always win, and a blocked site stays blocked.
+ * @param guardCarrierProxies put a guard in front of the device's own proxy list for the whole
+ *   process, so that a carrier's APN proxy cannot kill the app. Some carriers write a name rather
+ *   than a host there - `Non défini `, `mytelnet ` - and OkHttp refuses a hostname with whitespace
+ *   in it by throwing, on its own thread, where nothing can catch it. The guard drops only the
+ *   names OkHttp would refuse; a request that needed that proxy fails as a failed request instead
+ *   of as a dead process. It is a process-wide default, so it covers the host's own clients and
+ *   its sdks' too, not only this module's. Turn it off to own that decision yourself - this
+ *   module's own two clients carry the same guard either way.
  * @param notificationActivity the screen a download notification opens, with
  *   [MediaDownloader.EXTRA_DOWNLOAD_ID]; the app's launcher activity when `null`. Set it when the
  *   launcher is a splash screen that would not pass the extra on.
@@ -50,6 +58,7 @@ data class MediaDownloaderConfig(
     val allowYouTube: Boolean = false,
     val allowAdultSites: Boolean = false,
     val extraSources: List<MediaSource> = emptyList(),
+    val guardCarrierProxies: Boolean = true,
 ) {
     /** The restricted categories this configuration lifts. */
     internal val allowedRestrictions: Set<RestrictedCategory>

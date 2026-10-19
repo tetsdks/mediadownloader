@@ -1183,6 +1183,24 @@ its wiring in `MediaDownloaderComponent`.
   it goes under the covers too and is never seen - measured, at `z-index: 0` the discs were still
   drawn over the dialog. It is back above everything, and what keeps it off a dialog is being told
   not to appear there.
+- **The carrier-proxy guard is put in the process's own place, not on each client.** A phone whose
+  APN names a proxy rather than addressing one hands that name to every http client in the process;
+  OkHttp refuses a hostname with whitespace in it by throwing `IllegalArgumentException`, which is
+  not an `IOException`, and on an enqueued call that comes out of its own dispatcher thread and
+  kills the app. Measured against okhttp 5.5.0, whitespace is the whole rule: `Airtel`, `MyTelnet`,
+  `AIRTEL`, `Airtel-4G` and `café.example` are all accepted, while `Airtel `, `mytelnet `,
+  `Non défini` and `""` are refused - an upper-case letter is **not** enough, which an earlier note
+  here wrongly said.
+  This module's own two clients have carried the guard since 1.1.1, and that was not enough: the
+  crash reported from a host (65 events, `Dns$Request.<init>`, `Non défini ` and `mytelnet `) was
+  its *own* client, which this module cannot reach. Handing each host a class to wire up makes
+  every host discover the same thing and write the same code, so `initialize` installs it as the
+  process default instead, under `MediaDownloaderConfig.guardCarrierProxies` for a host that would
+  rather not have its global state touched. It only ever drops a proxy that would otherwise crash.
+  Two limits, both tested: a client takes the default **when it is built**, so anything built
+  before `initialize` - an sdk starting from a `ContentProvider` - is not covered; and the
+  installed selector holds the one it replaced rather than looking it up, because by then it is
+  itself the answer and would ask itself for ever.
 - **A tray disc has no coordinates of its own, because every coordinate was wrong.** It was
   `position: fixed` with a left and top computed from the tile's `getBoundingClientRect`; that was
   changed to `position: absolute` with the same arithmetic, and the owner's next picture showed the

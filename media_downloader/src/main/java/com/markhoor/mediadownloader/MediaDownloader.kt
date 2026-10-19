@@ -4,6 +4,7 @@ import android.content.ComponentCallbacks2
 import android.content.Context
 import android.content.res.Configuration
 import com.markhoor.mediadownloader.core.Constants
+import com.markhoor.mediadownloader.data.network.SafeProxySelector
 import com.markhoor.mediadownloader.di.MediaDownloaderComponent
 import com.markhoor.mediadownloader.domain.models.DownloadException
 import com.markhoor.mediadownloader.domain.models.DownloadModel
@@ -61,6 +62,9 @@ object MediaDownloader {
         require(config.notificationIcon != 0) { "MediaDownloaderConfig.notificationIcon must be a drawable resource" }
         synchronized(this) {
             if (component == null) {
+                // Before anything builds an http client, because a client takes the process's
+                // proxy selector when it is built. See SafeProxySelector.install.
+                if (config.guardCarrierProxies) SafeProxySelector.install()
                 val appContext = context.applicationContext
                 val created = MediaDownloaderComponent(appContext, config)
                 component = created

@@ -55,4 +55,35 @@ internal class SafeProxySelector(
         if (!address.isUnresolved) return true
         return address.hostString?.isUsableHost() == true
     }
+
+    internal companion object {
+
+        /**
+         * Puts one in front of whatever the process already had, once.
+         *
+         * The two clients this module builds carry one of these themselves, which is enough for
+         * the module's own requests and nothing else. The crash is not the module's own requests:
+         * the phone's proxy is handed to **every** client in the process, and a host app that
+         * builds its own - or an sdk whose code the host does not have - dies on it just the same.
+         * So the module puts one in the process's own place rather than making each host find
+         * this out and write it again. [MediaDownloaderConfig.guardCarrierProxies] turns it off
+         * for a host that would rather own that decision.
+         *
+         * Two things it cannot do. **A client takes the default when it is built, not when it
+         * calls** - measured - so anything built before `initialize` keeps what it was given; an
+         * sdk that starts from a ContentProvider runs before `Application.onCreate` and is one of
+         * those. And a host that sets its own default afterwards replaces this, as it should.
+         *
+         * The one it replaces is captured and asked for every answer; it is not looked up again,
+         * because by then this *is* the answer and it would ask itself for ever. Installing twice
+         * leaves the first in place rather than wrapping a wrapper.
+         */
+        fun install() {
+            runCatching {
+                val system = getDefault()
+                if (system is SafeProxySelector) return
+                setDefault(SafeProxySelector { system })
+            }
+        }
+    }
 }
