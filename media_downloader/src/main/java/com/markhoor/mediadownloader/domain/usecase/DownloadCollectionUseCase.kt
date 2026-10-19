@@ -8,6 +8,7 @@ import com.markhoor.mediadownloader.domain.models.MediaCollectionModel
 import com.markhoor.mediadownloader.domain.models.MediaQualityModel
 import com.markhoor.mediadownloader.domain.models.MediaType
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -35,17 +36,27 @@ internal class DownloadCollectionUseCase(
     private val _progress = MutableStateFlow(CollectionProgress())
     val progress: StateFlow<CollectionProgress> = _progress.asStateFlow()
 
+    /** The adding that is under way, so the next [start] can replace it as it says it does. */
+    private var adding: Job? = null
+
     /**
      * Queues [collection]. [preferredQuality] is a label to aim for - `"720p"` - and each entry
      * gets the closest it turns out to offer, which is not always the same one.
      */
     fun start(collection: MediaCollectionModel, preferredQuality: String?) {
+        // The one before it, stopped first. It used to be launched and dropped, so nothing
+        // replaced anything: both loops ran, both counted into this same progress, and whichever
+        // finished first said the adding was over while the other was still inserting rows - a
+        // host was shown "added 37 of 3", and a collection that said it was done and was not.
+        // What the old loop already queued stays, as the promise says.
+        adding?.cancel()
         _progress.value = CollectionProgress(
             title = collection.title,
             total = collection.items.size,
             isAdding = true,
         )
-        scope.launch {
+        var mine: Job? = null
+        mine = scope.launch {
             try {
                 collection.items.forEachIndexed { index, item ->
                     val queued = enqueue(request(item, collection, index, preferredQuality)).isSuccess
@@ -55,9 +66,13 @@ internal class DownloadCollectionUseCase(
                     }
                 }
             } finally {
-                _progress.update { it.copy(isAdding = false) }
+                // Only if this is still the adding that is under way. A cancelled loop reaches
+                // here after the collection that replaced it has put its own progress in place,
+                // and would otherwise announce that one as finished while it is still going.
+                if (adding === mine) _progress.update { it.copy(isAdding = false) }
             }
         }
+        adding = mine
     }
 
     private fun request(

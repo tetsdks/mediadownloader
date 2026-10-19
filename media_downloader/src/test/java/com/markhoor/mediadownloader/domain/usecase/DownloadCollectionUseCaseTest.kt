@@ -6,6 +6,7 @@ import com.markhoor.mediadownloader.domain.models.MediaCollectionModel
 import com.markhoor.mediadownloader.domain.models.MediaQualityModel
 import com.markhoor.mediadownloader.domain.models.MediaType
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -72,6 +73,52 @@ class DownloadCollectionUseCaseTest {
         assertEquals(12, requests.size)
         assertEquals("01 - v1", requests.first().fileName)
         assertEquals("the numbers are as wide as the list is long", "12 - v12", requests.last().fileName)
+    }
+
+    /**
+     * `MediaDownloader.downloadCollection` promises that starting another collection replaces the
+     * one being added. The job was launched and dropped, so nothing replaced anything: both loops
+     * ran, both counted into the same progress, and whichever finished first said the adding was
+     * over while the other was still inserting rows - a host reading `collectionProgress()` was
+     * shown "added 37 of 3", and a finished collection that was not finished.
+     */
+    @Test
+    fun `starting another collection replaces the one being added`() = runTest {
+        val subject = useCase(this)
+
+        subject.start(collection(*Array(50) { "song$it" }), preferredQuality = null)
+        subject.start(collection("a", "b", "c"), preferredQuality = null)
+        advanceUntilIdle()
+
+        assertEquals("only the second collection's entries", 3, requests.size)
+        assertEquals(listOf("01 - a", "02 - b", "03 - c"), requests.map { it.fileName })
+        val progress = subject.progress.value
+        assertEquals(3, progress.total)
+        assertEquals(3, progress.added)
+        assertFalse(progress.isAdding)
+    }
+
+    /**
+     * And the one it replaced must not have the last word. Its `finally` runs when the cancel
+     * reaches it, which is after the new collection's progress is already in place - so a naive
+     * cancel has the old loop announce that the adding is over while the new one is still going.
+     */
+    @Test
+    fun `the collection that was replaced does not end the new one's progress`() = runTest {
+        downloads.enqueueTakes = 10
+        val subject = useCase(this)
+
+        subject.start(collection(*Array(50) { "song$it" }), preferredQuality = null)
+        advanceTimeBy(25)
+        subject.start(collection("a", "b", "c"), preferredQuality = null)
+        // Long enough for the cancelled loop to reach its `finally`, not long enough for the new
+        // one to have queued everything.
+        advanceTimeBy(15)
+
+        assertTrue("the new collection is still being added", subject.progress.value.isAdding)
+        advanceUntilIdle()
+        assertFalse(subject.progress.value.isAdding)
+        assertEquals(3, subject.progress.value.added)
     }
 
     @Test

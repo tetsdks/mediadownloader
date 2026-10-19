@@ -3,6 +3,7 @@ package com.markhoor.mediadownloader.domain.usecase
 import com.markhoor.mediadownloader.domain.models.DownloadModel
 import com.markhoor.mediadownloader.domain.models.DownloadRequest
 import com.markhoor.mediadownloader.domain.repo.DownloadRepository
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
@@ -17,7 +18,11 @@ internal class FakeDownloadRepository : DownloadRepository {
 
     override fun observeDownload(id: Long): Flow<DownloadModel?> = downloads.map { list -> list.firstOrNull { it.id == id } }
 
+    /** Makes queueing take time, so a test can catch a loop in the middle of one. */
+    var enqueueTakes: Long = 0
+
     override suspend fun enqueue(request: DownloadRequest): Long {
+        if (enqueueTakes > 0) delay(enqueueTakes)
         enqueued += request
         return enqueued.size.toLong()
     }
