@@ -24,16 +24,11 @@ import java.net.URI
  * says so by throwing `IllegalArgumentException`, which is not an `IOException` and so is not a
  * failed request: on an enqueued call OkHttp rethrows it from its own thread, and the app dies.
  *
- * **Whitespace is the whole of it.** This was written saying an upper-case letter was enough,
- * which is not true; asking okhttp 5.5.0 itself:
- *
- * ```
- * "Airtel"  "MyTelnet"  "AIRTEL"  "Airtel-4G"  "My_Telnet"  "café.example"   all accepted
- * "Airtel " "mytelnet " "Non défini" ""                                      all refused
- * ```
- *
- * So the guard drops a name with whitespace in it and nothing else, and the two names below are
- * the ones a crash report actually carried.
+ * **The rule is okhttp's own, and is not one to copy.** This said first that an upper-case letter
+ * was enough, and then that whitespace was the whole of it; both were written after measuring a
+ * handful of names and both were wrong. Of 22 names put through okhttp and through the
+ * hand-written rule, the two disagreed on 12. So the guard asks okhttp instead, and
+ * [everyOneOkhttpRefuses] below is that comparison kept.
  */
 class CarrierProxyCrashTest {
 
@@ -63,6 +58,19 @@ class CarrierProxyCrashTest {
     /** The two a crash report carried, and the one this test was first written for. */
     private val reported = listOf("Non défini ", "mytelnet ", "Airtel ")
 
+    /**
+     * Names okhttp refuses that the hand-written rule handed straight on. The first two are what
+     * someone writes into a proxy field that wanted a host; the last is a label over 63 bytes.
+     */
+    private val everyOneOkhttpRefuses = reported + listOf(
+        "wap:8080", "http://wap.mtn.com", "wap@airtel", "wap/proxy", "wap?x", "wap#x",
+        "wap%20x", "[airtel]", "wap" + 92.toChar() + "proxy", "airtel", "a".repeat(64),
+    )
+
+    /** And the ones it is happy with, which must still be handed on rather than dropped. */
+    private val everyOneOkhttpAccepts =
+        listOf("MyTelnet", "Airtel-4G", "café.example", "proxy.example.com", "10.0.0.1", "my_proxy")
+
     @Test
     fun `the client refuses a carrier's proxy name, and not as a failed request`() {
         reported.forEach { name ->
@@ -79,7 +87,7 @@ class CarrierProxyCrashTest {
 
     @Test
     fun `behind the guard the same proxy is a failed request, which a caller can handle`() {
-        reported.forEach { name ->
+        everyOneOkhttpRefuses.forEach { name ->
             val client = OkHttpClient.Builder()
                 .proxySelector(SafeProxySelector { Carrier(name) })
                 .build()
@@ -92,14 +100,34 @@ class CarrierProxyCrashTest {
 
     /** A name okhttp is happy with is left alone: it is looked up, and simply not found. */
     @Test
-    fun `a name without whitespace is handed on, not dropped`() {
-        val client = OkHttpClient.Builder()
-            .proxySelector(SafeProxySelector { Carrier("MyTelnet") })
-            .build()
+    fun `a name okhttp would look up is handed on, not dropped`() {
+        everyOneOkhttpAccepts.forEach { name ->
+            val client = OkHttpClient.Builder()
+                .proxySelector(SafeProxySelector { Carrier(name) })
+                .build()
 
-        val thrown = runCatching { client.newCall(nowhere).execute() }.exceptionOrNull()
+            val thrown = runCatching { client.newCall(nowhere).execute() }.exceptionOrNull()
 
-        assertTrue("expected an ordinary failure, got $thrown", thrown is IOException)
+            assertTrue("expected an ordinary failure for $name, got $thrown", thrown is IOException)
+        }
+    }
+
+    /**
+     * What the one it replaces throws is its own answer and is passed on. Swallowing it would turn
+     * a proxy that refused to answer into a quiet direct connection - for every client in the
+     * process, now that this is the process's selector.
+     */
+    @Test
+    fun `a selector that throws is not turned into a direct connection`() {
+        val angry = object : ProxySelector() {
+            override fun select(uri: URI?): List<Proxy> = throw IllegalStateException("no")
+            override fun connectFailed(uri: URI?, a: SocketAddress?, e: IOException?) = Unit
+        }
+
+        val thrown = runCatching { SafeProxySelector { angry }.select(URI("http://example.com/")) }
+            .exceptionOrNull()
+
+        assertTrue("expected the refusal to come through, got $thrown", thrown is IllegalStateException)
     }
 
     // region The guard the module puts in the process's own place
@@ -110,7 +138,7 @@ class CarrierProxyCrashTest {
      */
     @Test
     fun `once installed, a client nobody configured fails the request instead of dying`() {
-        reported.forEach { name ->
+        everyOneOkhttpRefuses.forEach { name ->
             setDefault(Carrier(name))
             SafeProxySelector.install()
 

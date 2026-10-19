@@ -73,5 +73,6 @@ data class MediaDownloaderConfig(
             "instagramCookie=${if (instagramCookie.isNullOrBlank()) "none" else "set"}, " +
             "downloadFolderName=$downloadFolderName, notificationIcon=$notificationIcon, performanceMode=$performanceMode, " +
             "notificationActivity=${notificationActivity?.simpleName}, allowYouTube=$allowYouTube, " +
-            "allowAdultSites=$allowAdultSites, extraSources=${extraSources.size})"
+            "allowAdultSites=$allowAdultSites, extraSources=${extraSources.size}, " +
+            "guardCarrierProxies=$guardCarrierProxies)"
 }

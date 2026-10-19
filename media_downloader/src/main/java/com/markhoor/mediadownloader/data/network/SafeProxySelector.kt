@@ -1,6 +1,6 @@
 package com.markhoor.mediadownloader.data.network
 
-import com.markhoor.mediadownloader.core.isUsableHost
+import okhttp3.HttpUrl
 import java.io.IOException
 import java.net.InetSocketAddress
 import java.net.Proxy
@@ -19,8 +19,9 @@ import java.net.URI
  * **rethrows it from its own thread**, where no caller can catch it - a crash in the host app,
  * caused by a phone's settings, on a request nobody could have written differently.
  *
- * A name without whitespace is not refused this way; it is looked up and not found, which is an
- * ordinary failed request. So only the ones that would be refused are dropped.
+ * Which names those are is not guessed at: okhttp is asked, by the same canonicalisation it uses
+ * itself. A name it accepts is looked up and merely not found, which is an ordinary failed
+ * request, so only the ones it would refuse are dropped.
  *
  * So a proxy whose host the client would refuse is dropped here, before it is ever handed over,
  * and the request goes direct instead. A request that genuinely needed that proxy still fails -
@@ -34,7 +35,11 @@ internal class SafeProxySelector(
 ) : ProxySelector() {
 
     override fun select(uri: URI?): List<Proxy> {
-        val offered = runCatching { of()?.select(uri) }.getOrNull().orEmpty()
+        // Whatever the one this replaced would have answered, failures included: it is asked here
+        // only so its answer can be filtered, and swallowing what it throws would turn a refusal
+        // into a quiet direct connection. As a per-client selector that was this module's own
+        // business; as the process's it would be every client's, an enterprise proxy among them.
+        val offered = of()?.select(uri).orEmpty()
         val usable = offered.filter { it.isUsable() }
         // Never an empty list: a selector that offers nothing is one that offers no connection.
         return usable.ifEmpty { listOf(Proxy.NO_PROXY) }
@@ -53,8 +58,24 @@ internal class SafeProxySelector(
         if (type() == Proxy.Type.DIRECT) return true
         val address = address() as? InetSocketAddress ?: return false
         if (!address.isUnresolved) return true
-        return address.hostString?.isUsableHost() == true
+        return address.hostString?.let { isLookedUpWithoutThrowing(it) } == true
     }
+
+    /**
+     * Whether okhttp will look this name up rather than refuse it. **Asked of okhttp itself**,
+     * because its rule is not one to copy: `HttpUrl.Builder.host` runs the same canonicalisation
+     * `Dns.Request` does and throws for the same names.
+     *
+     * This was a hand-written rule - not empty, not too long, no whitespace - written after
+     * measuring a handful of names, and it was wrong on more than half of a wider set. Of 22 names
+     * put through both, it disagreed with okhttp on 12: `wap:8080`, `http://wap.mtn.com`,
+     * `wap@airtel`, `wap/proxy`, `wap?x`, `wap#x`, `wap%20x`, `[airtel]`, a backslash, a control
+     * character, and a label over 63 bytes were all handed straight on to be refused. The first
+     * two are exactly what someone writes into a proxy field that wanted a host. Asking okhttp
+     * disagreed on none of the 22.
+     */
+    private fun isLookedUpWithoutThrowing(host: String): Boolean =
+        runCatching { HttpUrl.Builder().host(host) }.isSuccess
 
     internal companion object {
 

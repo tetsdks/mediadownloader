@@ -78,21 +78,6 @@ private fun String.withHttpsScheme(): String =
     if (SCHEME_AT_START.containsMatchIn(this)) this else "https://$this"
 
 /**
- * Whether the http client will *try* this host rather than refuse it outright. OkHttp 5 will not
- * look up a hostname it cannot make canonical: it throws `IllegalArgumentException: unexpected
- * hostname`, which is not a failed request but an exception from its own thread, where no caller
- * can catch it. Measured against OkHttp 5.5.0, what it refuses that way is a host with whitespace
- * in it, or none at all; upper case, an underscore, a trailing dot or a name with no dot are all
- * looked up and merely not found, which is an ordinary failed request.
- *
- * Only ever asked about a proxy. The hosts that arrive in that shape are not sites but the names
- * some carriers write into an APN's proxy field - `Airtel `, `Jio 4G` - and hand to every http
- * client in the app.
- */
-internal fun String.isUsableHost(): Boolean =
-    isNotEmpty() && length <= Url.MAX_HOST_LENGTH && none { it.isWhitespace() }
-
-/**
  * Whether this host is one of [domains] or a subdomain of one. The host is walked one label at a
  * time, so a match only ever starts after a dot: `reddit.com.evil.net` is not `reddit.com`.
  */

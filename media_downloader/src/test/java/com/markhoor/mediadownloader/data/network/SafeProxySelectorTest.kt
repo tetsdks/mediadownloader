@@ -1,6 +1,7 @@
 package com.markhoor.mediadownloader.data.network
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.IOException
 import java.net.InetSocketAddress
@@ -79,9 +80,24 @@ class SafeProxySelectorTest {
     fun `nothing offered is a direct connection`() {
         val (selector, _) = selectorOver()
         assertEquals(listOf(Proxy.NO_PROXY), selector.select(uri))
+    }
 
+    /**
+     * A selector that throws used to be answered with a direct connection. That was this module's
+     * own business while this sat on this module's own two clients; it is everyone's now that
+     * `initialize` puts one in the process's place, where turning a refusal into a quiet direct
+     * connection would walk an enterprise host straight past a proxy it is required to use. What
+     * the one it replaces throws is its own answer and is passed on - which is also what the host
+     * would have seen had this module never been there.
+     * See `CarrierProxyCrashTest`.
+     */
+    @Test
+    fun `what the device's own selector throws is passed on`() {
         val throwing = SafeProxySelector { error("this device's selector is broken") }
-        assertEquals(listOf(Proxy.NO_PROXY), throwing.select(uri))
+
+        val thrown = runCatching { throwing.select(uri) }.exceptionOrNull()
+
+        assertTrue("expected the refusal to come through, got $thrown", thrown is IllegalStateException)
     }
 
     @Test

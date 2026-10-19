@@ -13,9 +13,6 @@ internal object Constants {
         const val PUNYCODE_PREFIX = "xn--"
         const val WWW_PREFIX = "www."
 
-        /** The longest a host can be, by the dns specification that names them. */
-        const val MAX_HOST_LENGTH = 255
-
         /** How far into a string embedded urls are looked for; WebView urls can be megabytes. */
         const val EMBEDDED_SCAN_LIMIT = 8_192
 
