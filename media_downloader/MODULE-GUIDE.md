@@ -1086,6 +1086,49 @@ its wiring in `MediaDownloaderComponent`.
   (`isUsableThumbnail`): the old app stored Pinterest's `.m3u8` as the "thumbnail", which no image
   loader can draw. Imported Pinterest rows get their cover rebuilt from the stream url
   (`i.pinimg.com/videos/thumbnails/originals/...`).
+- **A sound that is gone and a sound that was interrupted are different answers.** A video whose
+  sound is a second file wrapped the sound's whole fetch in `runCatching`, which reads every
+  outcome as one: a connection broken mid-sound was taken for sound that will never come, so the
+  silent picture was published and the download called complete, and nothing ever asked for the
+  sound again. Measured on the device, serving the two tracks from a socket on the phone's own
+  loopback that hands the picture over whole and then cuts the sound off mid-body: before,
+  `Completed, 262144 bytes, error=null` with the sound asked for exactly once; after, `Queued,
+  error=unexpected end of stream` and four rounds of retries in the server's own log. The stream
+  downloader already told the two apart, so its rule is now shared by both
+  (`unlessMediaIsGone`): only a 4xx that means gone - 408 and 429 excepted, as `isMediaGone`
+  says - or media this module cannot save leaves the picture as the file. `runCatching` also
+  caught `CancellationException`, against the module's own rule. On the device that was latent
+  rather than live: `markFinishing` runs right after and is a suspend call, so it threw on the
+  cancelled coroutine before the picture could be moved out of the work dir, and a paused download
+  kept its picture before the fix too (measured: `video.track=2059987` either way). It is the next
+  thing that suspends that was saving it, which is not a thing to rely on.
+- **The two tracks of one download need a scratch dir each.** Both are fetched in parallel parts,
+  and the parts of one are named exactly like the parts of the other - `part-0`, beside one record
+  of the length they were cut for. Sharing a dir, the picture's own "already whole" test deleted
+  whatever the sound had fetched on every single run, so the sound began again from nothing however
+  often the download was retried; on a connection that cannot hold for a whole track it could never
+  finish inside the attempts it is given. Isolated with the cancellation fix already in place, so
+  it stands on its own: the sound's finished 2 MB first part was asked for again from byte zero
+  (`audio.m4a bytes=0-2097151`) while the picture cost only its `bytes=0-0` probe. Both tracks now
+  build under `video/` and `audio/`, as a stream's tracks already did. Needs both tracks over 4 MB
+  to bite, which is why it is proved on the JVM: measured on the device, the biggest plain file any
+  reader answers with today is TikTok's 3.4 MB watermarked copy.
+- **A lookup that can answer null is never read straight off in a page script.** `twitter.js` ends
+  with the fallback for a video no article or image button was drawn for, and it read two:
+  `videos[i].closest('[data-testid="videoComponent"]')`, then that one's immersive controls. A
+  video in an ordinary timeline sits in no `videoComponent`, and one that does has play controls
+  rather than immersive ones, so the first such video threw a TypeError that nothing caught - and
+  an injected script that throws outside a handler stops there, taking the rest of the sweep and
+  every video behind it with it. Run in the device's own Chromium over a page holding one timeline
+  video and one immersive one: before, `threw TypeError: Cannot read properties of null (reading
+  'querySelector')` and no buttons at all; after, the sweep runs to its last line and draws the one
+  button the immersive video has earned. The legacy Facebook video's `data-store` is guarded the
+  same way, though that one is inside the press handler and cost the press alone.
+- **The bridge contract is checkable, and was checked.** 31 `MediaDownloaderBridge` calls across
+  the seven scripts, every one matching a `PageScriptBridge` method by name **and** by argument
+  count, with nothing dead on either side - no method no script calls, no call no method answers.
+  Every other DOM lookup in the scripts that can answer null is guarded by the loop that walks it
+  (`for(... && node; ...)`), which is why only `twitter.js` came out of the sweep.
 
 ## 7. Known gaps
 
@@ -1403,6 +1446,14 @@ ANDROID_SERIAL=<device> ./gradlew --no-daemon :media_downloader:connectedDebugAn
   -Pandroid.testInstrumentationRunnerArguments.class=com.markhoor.mediadownloader.BrowserDeviceCheck \
   -Pandroid.testInstrumentationRunnerArguments.performanceMode=LowEnd
 ```
+
+`SoundAndScriptDeviceCheck` holds the two that need the device itself rather than a reading of the
+code: a video whose sound is a second file - interrupted, and paused between the two tracks - and
+the fallback at the end of `twitter.js` run by the phone's own Chromium. Its dropped-connection
+check serves both tracks from a socket on the device's loopback, because cutting a body off
+mid-file on cue is the one thing a CDN cannot be asked to do; that is why the **test** manifest
+alone allows cleartext. Pass `#aSoundLostToADroppedConnectionIsNotCalledComplete` as the class
+argument to run that one on its own.
 
 Process death, by hand: install the test APK with `adb install -r -t`, run
 `am instrument -w -e class com.markhoor.mediadownloader.DownloadDeviceCheck#processDeath -e processDeath start

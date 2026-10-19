@@ -1,8 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- The device check's own host app: initializes the module the way a real app does, so a
-     download can be carried on by WorkManager after its process died. Test APK only. -->
+     download can be carried on by WorkManager after its process died. Test APK only.
+
+     Cleartext is allowed because one check serves the two tracks of a download from a socket on
+     the device's own loopback, so it can cut the sound off mid-body the way a dropped connection
+     does. Test APK only: this manifest is not part of the published library. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <application android:name="com.markhoor.mediadownloader.DeviceCheckApplication">
+    <application
+        android:name="com.markhoor.mediadownloader.DeviceCheckApplication"
+        android:usesCleartextTraffic="true">
         <activity
             android:name="com.markhoor.mediadownloader.BrowserCheckActivity"
             android:exported="false" />
