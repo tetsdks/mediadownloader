@@ -75,10 +75,20 @@ internal class MediaDescriber(
         }
     }
 
-    /** The bytes of a quality's sound, when its sound is a file of its own. */
-    private suspend fun soundBytes(quality: MediaQualityModel, permits: Semaphore): Long =
+    /**
+     * The bytes of a quality's sound, when its sound is a file of its own.
+     *
+     * No permit of its own: the caller already holds one for this quality, and this asked for a
+     * second from inside the first. `kotlinx`'s `Semaphore` is not re-entrant, so with as many
+     * such qualities as there are permits every permit was held by a coroutine waiting for one
+     * that nobody could release - `awaitAll` never returned and the host's sheet span for ever on
+     * a coroutine that was never going to finish. A video above 360p keeps its sound apart, so
+     * that was the ordinary shape of an answer rather than an odd one. The permit now covers the
+     * picture and its sound together, which is one quality's worth of asking either way.
+     */
+    private suspend fun soundBytes(quality: MediaQualityModel): Long =
         quality.audioUrl?.takeIf { !it.isHlsPlaylistUrl() }
-            ?.let { permits.withPermit { sizeProbe.sizeOf(it, quality.headers) } } ?: 0L
+            ?.let { sizeProbe.sizeOf(it, quality.headers) } ?: 0L
 
     /** Every quality with a size where one can be known; a size already known is not asked again. */
     private suspend fun sized(qualities: List<MediaQualityModel>): List<MediaQualityModel> {
@@ -92,7 +102,7 @@ internal class MediaDescriber(
                             sizeProbe.sizeOf(quality.url, quality.headers, acceptsImage = !isVideo)
                                 // The sound is a second file that is downloaded and joined, so it
                                 // is part of what this costs and of what the progress counts.
-                                ?.plus(soundBytes(quality, permits))
+                                ?.plus(soundBytes(quality))
                         }
                     quality.copy(sizeBytes = size.sensibleSize(isVideo))
                 }
