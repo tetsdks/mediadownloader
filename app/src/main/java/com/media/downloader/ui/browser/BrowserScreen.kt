@@ -49,6 +49,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.markhoor.mediadownloader.IncognitoPrivacy
 import com.markhoor.mediadownloader.domain.models.MediaModel
 import com.markhoor.mediadownloader.domain.models.MediaQualityModel
 import com.markhoor.mediadownloader.domain.models.SiteAccess
@@ -62,6 +63,10 @@ import java.net.URLEncoder
 
 /** The red the module's own in-page buttons use, so both read as the same affordance. */
 private val DownloadButtonColor = Color(0xFFE53935)
+
+/** What a private tab is drawn in, and the one glyph that says so wherever it appears. */
+private val IncognitoColor = Color(0xFF37474F)
+private const val IncognitoMark = "\uD83D\uDD75"
 
 /** Where a new tab starts. */
 const val BrowserHome = "https://www.dailymotion.com"
@@ -91,6 +96,10 @@ fun BrowserScreen(
     val browser by tabs.activeBrowser.collectAsStateWithLifecycle()
     var address by rememberSaveable { mutableStateOf("") }
     var showGrid by rememberSaveable { mutableStateOf(false) }
+    // Read off the published state rather than tabs.hasIncognitoTabs, so opening or closing one
+    // recomposes this: the state is a flow, the property is a plain getter.
+    val anyIncognito = tabState.tabs.any { it.isIncognito }
+    val showingIncognito = tabState.active?.isIncognito == true
 
     // Follow the page. Without this the field keeps whatever was typed last, so after following a
     // link - or switching tabs - it names a page you are not on, and Reload looks like it went
@@ -102,6 +111,7 @@ fun BrowserScreen(
     if (showGrid) {
         TabGrid(
             tabs = tabState,
+            anyIncognito = anyIncognito,
             onSelect = {
                 tabs.select(it)
                 showGrid = false
@@ -111,6 +121,11 @@ fun BrowserScreen(
                 tabs.open()
                 showGrid = false
             },
+            onNewIncognito = {
+                tabs.openIncognito()
+                showGrid = false
+            },
+            onCloseIncognito = { tabs.closeIncognito() },
             onDone = { showGrid = false },
         )
     } else Box(Modifier.fillMaxSize()) {
@@ -120,6 +135,7 @@ fun BrowserScreen(
                 onSelect = tabs::select,
                 onClose = { tabs.close(it) },
                 onNew = { tabs.open() },
+                onNewIncognito = { tabs.openIncognito() },
                 onRestore = { tabs.restoreLastClosed() },
                 onGrid = {
                     // The card for the tab on screen is the one from when it was last left:
@@ -152,6 +168,10 @@ fun BrowserScreen(
                     }
                 }) { Text("Go") }
                 TextButton(onClick = { browser?.reload() }) { Text("Reload") }
+            }
+
+            if (showingIncognito) {
+                IncognitoBanner(tabs.incognitoPrivacy)
             }
 
             if (state.isLoading) {
@@ -196,6 +216,7 @@ fun BrowserScreen(
                 ) {
                     Text("No tabs open.")
                     Button(onClick = { tabs.open() }) { Text("New tab") }
+                    Button(onClick = { tabs.openIncognito() }) { Text("$IncognitoMark  New private tab") }
                 }
             } else {
                 Box(Modifier.fillMaxSize()) {
@@ -222,7 +243,10 @@ fun BrowserScreen(
                     // new tab, and a tab whose page is being put back, would otherwise open on.
                     // The module says when there is a page to show; until then this is the screen.
                     if (!state.isPageVisible) {
-                        NewTabPage(isOpening = state.isLoading || tabState.active?.url?.isNotBlank() == true)
+                        NewTabPage(
+                            isOpening = state.isLoading || tabState.active?.url?.isNotBlank() == true,
+                            isIncognito = showingIncognito,
+                        )
                     }
                 }
             }
@@ -257,9 +281,51 @@ fun BrowserScreen(
     }
 }
 
+/**
+ * What a private tab says about itself. Worth the room it takes: how private it is depends on the
+ * device's own WebView, and `MediaDownloader.incognitoPrivacy` is the library asking the host to
+ * say which rather than letting a reader assume the stronger one.
+ *
+ * Either way the tab is left out of the tabs kept between runs, and the library writes none of its
+ * session to disk. What differs is whether its cookies are its own.
+ */
+@Composable
+private fun IncognitoBanner(privacy: IncognitoPrivacy) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(IncognitoColor)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(IncognitoMark, color = Color.White)
+        Column {
+            Text(
+                text = "Private tab",
+                color = Color.White,
+                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Text(
+                text = when (privacy) {
+                    IncognitoPrivacy.Separate ->
+                        "Cookies, storage and cache are this tab's own, and are emptied when the " +
+                            "last private tab closes. Downloads are kept, as in any browser."
+                    IncognitoPrivacy.SharedJar ->
+                        "This device's WebView keeps one cookie jar, so signing in here signs you " +
+                            "in outside private tabs too. The tab is still not remembered."
+                },
+                color = Color.White,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+    }
+}
+
 /** What a tab shows before its page has drawn anything, in place of the WebView's blank white. */
 @Composable
-private fun NewTabPage(isOpening: Boolean) {
+private fun NewTabPage(isOpening: Boolean, isIncognito: Boolean) {
     Column(
         modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -269,7 +335,10 @@ private fun NewTabPage(isOpening: Boolean) {
             CircularProgressIndicator(Modifier.size(28.dp), strokeWidth = 3.dp)
             Text("Opening…", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 12.dp))
         } else {
-            Text("New tab", style = MaterialTheme.typography.titleMedium)
+            Text(
+                text = if (isIncognito) "$IncognitoMark  New private tab" else "New tab",
+                style = MaterialTheme.typography.titleMedium,
+            )
             Text(
                 text = "Type an address above, or search for something.",
                 style = MaterialTheme.typography.bodyMedium,
@@ -286,6 +355,7 @@ private fun TabStrip(
     onSelect: (String) -> Unit,
     onClose: (String) -> Unit,
     onNew: () -> Unit,
+    onNewIncognito: () -> Unit,
     onRestore: () -> Unit,
     onGrid: () -> Unit,
 ) {
@@ -305,15 +375,21 @@ private fun TabStrip(
                     onClick = { onSelect(tab.id) },
                     label = {
                         Text(
-                            text = tab.label.ifBlank { "New tab" }.take(20),
+                            text = tab.label.ifBlank { if (tab.isIncognito) "Private tab" else "New tab" }.take(20),
                             maxLines = 1,
                             style = MaterialTheme.typography.bodySmall,
                         )
                     },
-                    leadingIcon = if (tab.isLoading) {
-                        { CircularProgressIndicator(Modifier.size(12.dp), strokeWidth = 2.dp) }
-                    } else {
-                        null
+                    leadingIcon = when {
+                        tab.isLoading -> {
+                            { CircularProgressIndicator(Modifier.size(12.dp), strokeWidth = 2.dp) }
+                        }
+                        // A private tab says so on the chip as well as in the banner: the banner is
+                        // only on the tab in front, and the strip is where the others are chosen.
+                        tab.isIncognito -> {
+                            { Text(IncognitoMark, style = MaterialTheme.typography.bodySmall) }
+                        }
+                        else -> null
                     },
                     trailingIcon = {
                         TextButton(onClick = { onClose(tab.id) }, contentPadding = PaddingValues(4.dp)) {
@@ -329,6 +405,13 @@ private fun TabStrip(
         TextButton(onClick = onNew, enabled = tabs.canOpenMore, contentPadding = PaddingValues(6.dp)) {
             Text("＋")
         }
+        TextButton(
+            onClick = onNewIncognito,
+            enabled = tabs.canOpenMore,
+            contentPadding = PaddingValues(6.dp),
+        ) {
+            Text("＋$IncognitoMark")
+        }
         TextButton(onClick = onGrid, contentPadding = PaddingValues(6.dp)) { Text("▦ ${tabs.count}") }
     }
 }
@@ -340,9 +423,12 @@ private fun TabStrip(
 @Composable
 private fun TabGrid(
     tabs: BrowserTabsUiState,
+    anyIncognito: Boolean,
     onSelect: (String) -> Unit,
     onClose: (String) -> Unit,
     onNew: () -> Unit,
+    onNewIncognito: () -> Unit,
+    onCloseIncognito: () -> Unit,
     onDone: () -> Unit,
 ) {
     Column(Modifier.fillMaxSize()) {
@@ -352,12 +438,23 @@ private fun TabGrid(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             TextButton(onClick = onNew, enabled = tabs.canOpenMore) { Text("＋ New tab") }
+            TextButton(onClick = onNewIncognito, enabled = tabs.canOpenMore) { Text("＋$IncognitoMark Private") }
             Text(
                 text = "${tabs.count} open",
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.weight(1f),
             )
             TextButton(onClick = onDone) { Text("Done") }
+        }
+        // Closing them all at once is how a browser offers it, and it is the moment the private
+        // session is thrown away - the library empties the jar as the last one goes.
+        if (anyIncognito) {
+            TextButton(
+                onClick = onCloseIncognito,
+                modifier = Modifier.padding(horizontal = 8.dp),
+            ) {
+                Text("Close all private tabs")
+            }
         }
         LazyVerticalGrid(
             columns = GridCells.Fixed(2),
@@ -376,17 +473,24 @@ private fun TabGrid(
 private fun TabCard(tab: BrowserTabUiState, onSelect: (String) -> Unit, onClose: (String) -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth().clickable { onSelect(tab.id) },
-        border = if (tab.isActive) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
+        border = when {
+            tab.isActive -> BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
+            tab.isIncognito -> BorderStroke(1.dp, IncognitoColor)
+            else -> null
+        },
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(start = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            if (tab.isIncognito) {
+                Text(IncognitoMark, style = MaterialTheme.typography.bodySmall)
+            }
             tab.favicon?.let { icon ->
                 Image(icon.asImageBitmap(), contentDescription = null, modifier = Modifier.size(16.dp))
             }
             Text(
-                text = tab.label.ifBlank { "New tab" },
+                text = tab.label.ifBlank { if (tab.isIncognito) "Private tab" else "New tab" },
                 style = MaterialTheme.typography.bodySmall,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
