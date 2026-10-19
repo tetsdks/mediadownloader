@@ -32,6 +32,11 @@ that uses it.
   tabs are there again after the app is closed or killed, and go when the user closes them. The
   memory is kept in hand - sixteen tabs, four live WebViews - and only the tab on screen reaches
   the host's download sheet.
+- **Incognito.** A private tab, or a private browser without tabs. It is left out of the tabs kept
+  between runs and the module never writes its session to disk; where the device's own WebView can
+  keep a second cookie jar, its cookies, storage and cache are its own and are emptied when the last
+  private page closes. How private it can really be is the WebView's answer rather than the Android
+  version's, so `MediaDownloader.incognitoPrivacy` says which **before** a host offers the button.
 - **Downloads.** Background downloads through WorkManager with a progress notification, surviving
   the app being closed, killed or the phone restarting. Pause, resume, retry and delete. HLS
   (including AES-128) is remuxed into MP4, separate audio merged.
@@ -42,6 +47,11 @@ that uses it.
 - **Site policy.** Adult sites and YouTube are blocked by default, and each category is lifted only
   by its own switch (`allowYouTube` / `allowAdultSites`). An optional supported-sites list limits
   downloads to sites that are known to work.
+- **Settings can change while it runs.** For a settings screen:
+  `MediaDownloader.reconfigure { it.copy(allowAdultSites = true) }` takes effect from the next
+  question asked of it - the browser screens and the downloads already running included - with
+  nothing rebuilt and nothing in flight stopped. The few settings that are read once and cannot
+  change are **named** in the answer rather than quietly dropped.
 
 ## Documentation
 
@@ -119,6 +129,29 @@ MediaDownloader.observeDownload(id).collect { download ->
 There are also ready-made ViewModels - `LinkParseViewModel`, `BrowserViewModel`,
 `DownloadsViewModel` - each with a `Factory`, if you would rather not hold the state yourself. The
 demo app uses those.
+
+**4. Change your mind later, if you have a settings screen.**
+
+```kotlin
+val fixed = MediaDownloader.reconfigure { it.copy(allowAdultSites = true) }
+// fixed is the settings this call could not change; empty when everything was applied.
+```
+
+**Browsing privately.** Ask what the device can give, then offer it:
+
+```kotlin
+if (MediaDownloader.incognitoPrivacy == IncognitoPrivacy.Separate) showPrivateButton()
+
+tabs.openIncognito()        // a private tab
+tabs.closeIncognito()       // closes them all, and empties the private session
+
+// without tabs:
+browserViewModel.createBrowser(context, owner, incognito = true)
+browserViewModel.endIncognito()
+```
+
+A file saved from a private page is a download like any other - it is in the downloads list and in
+the public Download folder, as it is in a desktop browser.
 
 ## What the host is responsible for
 
