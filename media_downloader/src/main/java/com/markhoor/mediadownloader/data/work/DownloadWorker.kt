@@ -81,7 +81,16 @@ internal class DownloadWorker(
         // in its own turn. Now rather than when it was queued, because a site mints a video's urls
         // for whoever asked and they go stale within hours.
         val entity = if (queued.mediaUrl.isBlank()) {
-            readItsPage(queued, component) ?: return Result.success()
+            when (val read = readItsPage(queued, component)) {
+                is PageRead.Read -> read.entity
+                // Whatever the failure asked for. It used to be thrown away and answered with
+                // success: an ordinary failure - a connection reset while the page was read -
+                // puts the row back in `Queued` and asks for a retry, so answering success left
+                // WorkManager thinking the work was done with nothing scheduled to run it. The
+                // row then sat in `Queued` for ever, and `resume` would not take it either,
+                // since that accepts only `Paused`, `Failed` and `WaitingForNetwork`.
+                is PageRead.Failed -> return read.result
+            }
         } else {
             queued
         }
@@ -162,20 +171,28 @@ internal class DownloadWorker(
      * the page has nothing to give. [DownloadEntity.qualityLabel] is the quality to aim for until
      * this runs; afterwards it is the one that was actually found.
      */
+    /** What reading a queued entry's page came to: the row as it now stands, or what to answer. */
+    private sealed interface PageRead {
+        data class Read(val entity: DownloadEntity) : PageRead
+        data class Failed(val result: Result) : PageRead
+    }
+
     private suspend fun readItsPage(
         entity: DownloadEntity,
         component: MediaDownloaderComponent,
-    ): DownloadEntity? {
+    ): PageRead {
         val media = component.parseLink(entity.sourceUrl).getOrElse { error ->
             // A parse failure is an Exception in every path that can reach here; anything else is
             // the page being impossible rather than the read going wrong.
-            onFailed(entity, error as? Exception ?: UnusableMediaException(error.message.orEmpty()), component)
-            return null
+            return PageRead.Failed(
+                onFailed(entity, error as? Exception ?: UnusableMediaException(error.message.orEmpty()), component),
+            )
         }
         val quality = media.qualities.filter { it.url.isNotBlank() }.closestTo(entity.qualityLabel)
         if (quality == null) {
-            onFailed(entity, UnusableMediaException("Nothing to download at ${entity.sourceUrl}"), component)
-            return null
+            return PageRead.Failed(
+                onFailed(entity, UnusableMediaException("Nothing to download at ${entity.sourceUrl}"), component),
+            )
         }
         component.downloadDao.setResolved(
             id = entity.id,
@@ -190,7 +207,10 @@ internal class DownloadWorker(
             title = media.title.ifBlank { entity.title }.take(Download.MAX_STORED_TITLE_LENGTH),
             thumbnailUrl = media.thumbnailUrl ?: entity.thumbnailUrl,
         )
-        return component.downloadDao.get(entity.id)
+        // Gone from under us - deleted while its page was read - is nothing to answer with but
+        // success, as it was before.
+        val read = component.downloadDao.get(entity.id) ?: return PageRead.Failed(Result.success())
+        return PageRead.Read(read)
     }
 
     private suspend fun complete(entity: DownloadEntity, component: MediaDownloaderComponent): Result {
