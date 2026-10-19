@@ -11,7 +11,6 @@ import com.markhoor.mediadownloader.data.hls.HlsMediaPlaylistDto
 import com.markhoor.mediadownloader.data.hls.HlsPlaylistParser
 import com.markhoor.mediadownloader.data.hls.HlsSegmentDto
 import com.markhoor.mediadownloader.data.network.HttpFetcher
-import com.markhoor.mediadownloader.data.network.HttpStatusException
 import java.io.File
 import java.io.IOException
 import java.nio.ByteBuffer
@@ -57,13 +56,13 @@ internal class HlsStreamDownloader(
         // download of its own. Sound that could not be fetched this time, a dropped connection,
         // fails the run so it is tried again, rather than finished silent and called complete.
         val audio = audioUrl?.let { url ->
-            unlessGone { resolveMediaPlaylist(url, audioUrl = null, task.headers).first }
+            unlessMediaIsGone { resolveMediaPlaylist(url, audioUrl = null, task.headers).first }
         }
 
         val progress = StreamProgress(video, audio, meter)
         val videoFile = downloadTrack(video, File(task.workDir, Scratch.VIDEO_DIR), task.headers, progress)
         val audioFile = audio?.let {
-            unlessGone { downloadTrack(it, File(task.workDir, Scratch.AUDIO_DIR), task.headers, progress) }
+            unlessMediaIsGone { downloadTrack(it, File(task.workDir, Scratch.AUDIO_DIR), task.headers, progress) }
         }
 
         // Every piece is here; what is left is writing them into one file, which has nothing left
@@ -261,16 +260,6 @@ internal class HlsStreamDownloader(
             throw e
         } catch (e: Exception) {
             null
-        }
-
-    /** Runs [block]; `null` when what it reads is gone for good, any other failure passed on. */
-    private suspend fun <T> unlessGone(block: suspend () -> T): T? =
-        try {
-            block()
-        } catch (e: UnusableMediaException) {
-            null
-        } catch (e: HttpStatusException) {
-            if (e.status in 400..499) null else throw e
         }
 
     /**
