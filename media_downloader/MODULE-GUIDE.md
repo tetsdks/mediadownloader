@@ -1183,6 +1183,40 @@ its wiring in `MediaDownloaderComponent`.
   it goes under the covers too and is never seen - measured, at `z-index: 0` the discs were still
   drawn over the dialog. It is back above everything, and what keeps it off a dialog is being told
   not to appear there.
+- **A permit is taken once per quality, not once per file.** Sizing a quality took one and then
+  asked for a second from inside the first, to size the sound that is a file of its own, and
+  `kotlinx`'s `Semaphore` is not re-entrant: with as many such qualities as there are permits -
+  four, or two on a low-end device - every permit was held by a coroutine waiting for one nobody
+  could release. `awaitAll` never returned, the sheet span for ever with `isDescribingMedia` true,
+  and a coroutine was leaked per offer. A video above 360p keeps its sound apart, so this was the
+  ordinary shape of an answer rather than an odd one. Reproduced before fixing, and the test keeps
+  it reproduced: four such qualities against two permits hang until a 30s timeout.
+- **A failed page read answers WorkManager itself.** A playlist's entries are queued with only a
+  page to read. `readItsPage` called `onFailed` and returned `null`, and the caller turned `null`
+  into `Result.success()` - so the `Result` `onFailed` had decided on was thrown away. An ordinary
+  failure puts the row back in `Queued` and asks for a retry; answering success left WorkManager
+  believing the work was done with nothing scheduled, and `resume` would not take the row either,
+  since `requeue` accepts only `Paused`, `Failed` and `WaitingForNetwork`. Read rather than
+  reproduced: the worker wants WorkManager, which the unit tests have not got, and the device
+  check runs real links, where a transient read failure cannot be asked for.
+- **A part download looks at what is already there.** It deletes its parts and the length it cut
+  them for the moment it joins them, and had no "already whole" test - only `downloadWhole` had
+  one. A run that stopped after a file was finished left that file and nothing else, and the next
+  run read the empty work dir as nothing done. The shape that hits it is a video whose sound is a
+  second file: the picture is fetched first, and a pause or a job the system takes back in the
+  seconds after leaves it whole and the sound missing, so a 500 MB picture was refetched on every
+  one of five attempts.
+- **Starting a collection replaces the one being added, which it did not.** The loop was launched
+  and its `Job` dropped, so a fifty-item playlist followed by a three-item one queued all
+  fifty-three rows and both counted into the same progress - "added 37 of 3", and a collection that
+  said it was done and was not. Cancelling alone brings the other half of the fault: the cancelled
+  loop reaches its `finally` after the new progress is in place and would announce *that* one as
+  finished, so the `finally` ends only the adding that is still current. Both halves are tests.
+- **A download's lock is dropped by counting, not by looking.** One lock per download kept an entry
+  for every download the app ever ran. Removing it the moment it goes free is unsafe and is why it
+  was never removed: between one run letting go and the next taking it the entry would be gone, and
+  a third run asking then would be handed a new lock and run beside the second. The runs that want
+  one are counted before any of them can see it free, and the entry goes at zero.
 - **The carrier-proxy guard is put in the process's own place, and the rule is okhttp's, not ours.**
   A phone whose APN names a proxy rather than addressing one hands that name to every http client
   in the process; OkHttp refuses a hostname it cannot make canonical by throwing
