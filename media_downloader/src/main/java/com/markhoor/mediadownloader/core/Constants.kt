@@ -326,6 +326,12 @@ internal object Constants {
          */
         const val TABS_FILE = "media_downloader/tabs.json"
 
+        /**
+         * The WebView profile every incognito page browses in. One for the process: a profile
+         * cannot be deleted once it has been loaded, so it is emptied instead; see IncognitoProfile.
+         */
+        const val INCOGNITO_PROFILE = "media_downloader_incognito"
+
         /** What a file being written is called until it is whole. */
         const val HALF_WRITTEN_SUFFIX = ".writing"
 

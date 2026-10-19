@@ -30,6 +30,9 @@ data class BrowserTabsUiState(
  *   been drawn once. It is taken as the tab leaves the screen and before its page is put away, and
  *   [BrowserTabs.capturePreview] takes a fresh one of the tab on screen. The bitmap belongs to the
  *   module: draw it, do not recycle it.
+ * @param isIncognito opened with [BrowserTabs.openIncognito], or by a link followed in such a
+ *   tab. Draw it apart: it is left out of the tabs kept between runs, and how private it really is
+ *   depends on the device - see [BrowserTabs.incognitoPrivacy].
  * @param hasLivePage the tab still holds a WebView. A tab without one keeps its page as saved
  *   state - it was put away to leave the memory to the tabs in use - and is restored when selected;
  *   the host needs this for nothing but a hint that selecting it will take a moment.
@@ -43,6 +46,7 @@ data class BrowserTabUiState(
     val preview: Bitmap? = null,
     val isActive: Boolean = false,
     val hasLivePage: Boolean = true,
+    val isIncognito: Boolean = false,
 ) {
     val isLoading: Boolean get() = progress in 1..99
 

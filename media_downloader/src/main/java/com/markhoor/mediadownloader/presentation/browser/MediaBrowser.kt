@@ -13,6 +13,7 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import com.markhoor.mediadownloader.core.Constants.Browser
 import com.markhoor.mediadownloader.core.isHttpUrl
+import com.markhoor.mediadownloader.data.browser.IncognitoProfile
 import com.markhoor.mediadownloader.domain.models.PageCommand
 import com.markhoor.mediadownloader.domain.models.PageSignal
 import com.markhoor.mediadownloader.domain.repo.MediaDetector
@@ -29,6 +30,9 @@ import kotlinx.coroutines.launch
  *
  * @param tabHost set when this browser is a tab's, which is what lets its pages open tabs of their
  *   own; `null` for a browser the host drives on its own.
+ * @param incognito set when this browser's page is an incognito one: the WebView is put in the
+ *   incognito profile before it is touched. The claim on that profile belongs to whoever opened the
+ *   page - a tab holds it across losing its WebView - so this never takes or gives one up.
  */
 class MediaBrowser internal constructor(
     /** The WebView this browser drives; add it to a layout when the module created it. */
@@ -39,6 +43,7 @@ class MediaBrowser internal constructor(
     private val clientDelegate: WebViewClient?,
     private val chromeDelegate: WebChromeClient?,
     private val tabHost: BrowserTabHost? = null,
+    private val incognito: IncognitoProfile? = null,
 ) {
 
     private val bridge = PageScriptBridge(detector)
@@ -148,6 +153,10 @@ class MediaBrowser internal constructor(
      */
     @SuppressLint("SetJavaScriptEnabled", "JavascriptInterface")
     private fun configure() {
+        // Before anything else at all. The platform refuses a profile to a WebView that has
+        // navigated, had a script run in it, or been given one already - so this is the first
+        // statement here, and a host's own WebView that has been used keeps the ordinary profile.
+        incognito?.applyTo(webView)
         webView.settings.javaScriptEnabled = true
         webView.settings.domStorageEnabled = true
         if (ownsWebView) {

@@ -11,7 +11,10 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.markhoor.mediadownloader.IncognitoPrivacy
 import com.markhoor.mediadownloader.MediaDownloader
+import com.markhoor.mediadownloader.data.browser.IncognitoProfile
+import com.markhoor.mediadownloader.data.network.WebViewCookieSource
 import com.markhoor.mediadownloader.domain.models.DetectionEvent
 import com.markhoor.mediadownloader.domain.models.DetectionState
 import com.markhoor.mediadownloader.domain.repo.MediaDetector
@@ -31,9 +34,26 @@ import kotlinx.coroutines.launch
 /**
  * One detection session and the scope it runs in: a tab's, or the one browser's. Closing it ends
  * the session and everything it has running, without touching the others.
+ *
+ * @param isIncognito its page browses in the incognito profile, is kept out of the saved tabs, and
+ *   has no session written to disk.
+ * @param onClosed gives up what the session held - an incognito page's claim on the profile.
+ *   Called once, however often [close] is.
  */
-internal class PageSession(val detector: MediaDetector, val scope: CoroutineScope) {
-    fun close() = scope.cancel()
+internal class PageSession(
+    val detector: MediaDetector,
+    val scope: CoroutineScope,
+    val isIncognito: Boolean = false,
+    private val onClosed: () -> Unit = {},
+) {
+    private var closed = false
+
+    fun close() {
+        if (closed) return
+        closed = true
+        scope.cancel()
+        onClosed()
+    }
 }
 
 /**
@@ -51,7 +71,8 @@ internal class PageSession(val detector: MediaDetector, val scope: CoroutineScop
  * are let go of when the lifecycle owner they were made for is destroyed.
  */
 class BrowserViewModel internal constructor(
-    private val detectorFactory: (CoroutineScope) -> MediaDetector,
+    private val detectorFactory: (CoroutineScope, Boolean) -> MediaDetector,
+    private val incognito: IncognitoProfile,
     private val isLowEndDevice: () -> Boolean = { false },
     private val tabStore: TabStore? = null,
 ) : ViewModel() {
@@ -68,10 +89,21 @@ class BrowserViewModel internal constructor(
     val events: Flow<BrowserEvent> = _events.receiveAsFlow()
 
     /** The session of a host that drives one browser itself, rather than asking for [tabs]. */
-    private val single = newSession()
+    private val single = newSession(incognito = false)
+
+    /** Its incognito counterpart, made on the first incognito browser and ended with [endIncognito]. */
+    private var singleIncognito: PageSession? = null
 
     private var browser: MediaBrowser? = null
+    private var browserIsIncognito = false
     private var openTabs: BrowserTabs? = null
+
+    /**
+     * How private an incognito page can be on this device - ask before offering incognito at all,
+     * since [IncognitoPrivacy.SharedJar] means the cookies cannot be kept apart. The answer is the
+     * same for tabs and for the one browser.
+     */
+    val incognitoPrivacy: IncognitoPrivacy get() = incognito.privacy
 
     init {
         show(single.detector)
@@ -81,6 +113,12 @@ class BrowserViewModel internal constructor(
      * Drives the host's own [webView]. Its callbacks are passed on to [webViewClient] and
      * [webChromeClient] when given; set them here rather than on the WebView, which this replaces.
      * A browser attached before is detached first.
+     *
+     * With [incognito], the page browses in the incognito profile and nothing of it is written
+     * down - but **hand over a WebView nothing has been done to yet**. The platform refuses a
+     * profile to a WebView that has already navigated or already run a script, and such a WebView
+     * goes on browsing in the ordinary profile; [createBrowser] has no such trouble, since the
+     * module makes the WebView itself. End it with [endIncognito].
      */
     @MainThread
     fun attach(
@@ -88,11 +126,17 @@ class BrowserViewModel internal constructor(
         lifecycleOwner: LifecycleOwner,
         webViewClient: WebViewClient? = null,
         webChromeClient: WebChromeClient? = null,
-    ): MediaBrowser = bind(webView, lifecycleOwner, ownsWebView = false, webViewClient, webChromeClient)
+        incognito: Boolean = false,
+    ): MediaBrowser = bind(webView, lifecycleOwner, false, webViewClient, webChromeClient, incognito)
 
     /**
      * A WebView made by the module; add [MediaBrowser.webView] to a layout. It is destroyed when
      * [lifecycleOwner] is, or on [MediaBrowser.detach].
+     *
+     * With [incognito] the page browses in the incognito profile: its cookies, storage and cache
+     * are not the ordinary browsing's where this device can keep them apart (ask
+     * [incognitoPrivacy]), its session is never written to disk, and all of it is emptied by
+     * [endIncognito] or when the ViewModel goes.
      */
     @MainThread
     fun createBrowser(
@@ -100,7 +144,27 @@ class BrowserViewModel internal constructor(
         lifecycleOwner: LifecycleOwner,
         webViewClient: WebViewClient? = null,
         webChromeClient: WebChromeClient? = null,
-    ): MediaBrowser = bind(WebView(context), lifecycleOwner, ownsWebView = true, webViewClient, webChromeClient)
+        incognito: Boolean = false,
+    ): MediaBrowser = bind(WebView(context), lifecycleOwner, true, webViewClient, webChromeClient, incognito)
+
+    /**
+     * Ends incognito browsing in the one browser: the session goes, the page with it, and the
+     * incognito jar is emptied once no incognito tab wants it either. The browser is detached, so
+     * ask for another with [createBrowser] or [attach] for ordinary browsing. Does nothing when
+     * there was no incognito browser. Incognito **tabs** are closed with
+     * [BrowserTabs.closeIncognito] instead.
+     */
+    @MainThread
+    fun endIncognito() {
+        if (browserIsIncognito) {
+            browser?.detach()
+            browser = null
+            browserIsIncognito = false
+        }
+        singleIncognito?.close()
+        singleIncognito = null
+        show(single.detector)
+    }
 
     /**
      * Several pages open at once, with one on screen - what a phone browser calls tabs. The tabs
@@ -125,7 +189,7 @@ class BrowserViewModel internal constructor(
         webChromeClient: WebChromeClient? = null,
     ): BrowserTabs {
         val current = openTabs
-            ?: BrowserTabs(::newSession, ::show, isLowEndDevice, tabStore).also { openTabs = it }
+            ?: BrowserTabs(::newSession, ::show, isLowEndDevice, incognito, tabStore).also { openTabs = it }
         current.hostOn(context, lifecycleOwner, homeUrl, webViewClient, webChromeClient)
         return current
     }
@@ -138,6 +202,8 @@ class BrowserViewModel internal constructor(
     override fun onCleared() {
         browser?.detach()
         browser = null
+        singleIncognito?.close()
+        singleIncognito = null
         openTabs?.release()
         openTabs = null
     }
@@ -148,11 +214,25 @@ class BrowserViewModel internal constructor(
         ownsWebView: Boolean,
         webViewClient: WebViewClient?,
         webChromeClient: WebChromeClient?,
+        asIncognito: Boolean,
     ): MediaBrowser {
         browser?.detach()
-        show(single.detector)
-        return MediaBrowser(webView, single.detector, lifecycleOwner, ownsWebView, webViewClient, webChromeClient)
-            .also { browser = it }
+        browserIsIncognito = asIncognito
+        val session = if (asIncognito) {
+            singleIncognito ?: newSession(incognito = true).also { singleIncognito = it }
+        } else {
+            single
+        }
+        show(session.detector)
+        return MediaBrowser(
+            webView = webView,
+            detector = session.detector,
+            lifecycleOwner = lifecycleOwner,
+            ownsWebView = ownsWebView,
+            clientDelegate = webViewClient,
+            chromeDelegate = webChromeClient,
+            incognito = incognito.takeIf { asIncognito },
+        ).also { browser = it }
     }
 
     /**
@@ -160,19 +240,28 @@ class BrowserViewModel internal constructor(
      * Both streams are collected here and then, so a background tab's moments are taken and
      * dropped rather than left to arrive late - selecting a tab must not pop the sheet of a page
      * that finished loading minutes ago.
+     *
+     * An incognito session takes a claim on the incognito profile here and gives it up when it is
+     * closed, which is what keeps the jar alive while any incognito page is still open.
      */
-    private fun newSession(): PageSession {
+    private fun newSession(incognito: Boolean): PageSession {
         val scope = CoroutineScope(
             viewModelScope.coroutineContext + SupervisorJob(viewModelScope.coroutineContext[Job]),
         )
-        val detector = detectorFactory(scope)
+        val detector = detectorFactory(scope, incognito)
         scope.launch {
             detector.state.collect { if (shown.value === detector) _uiState.value = toUiState(it) }
         }
         scope.launch {
             detector.events.collect { if (shown.value === detector) _events.send(toUiEvent(it)) }
         }
-        return PageSession(detector, scope)
+        if (incognito) this.incognito.claim()
+        return PageSession(
+            detector = detector,
+            scope = scope,
+            isIncognito = incognito,
+            onClosed = { if (incognito) this.incognito.release() },
+        )
     }
 
     /** With no tab open there is nothing to show, which is the one browser's state: empty. */
@@ -210,7 +299,13 @@ class BrowserViewModel internal constructor(
             initializer {
                 val component = MediaDownloader.requireComponent()
                 BrowserViewModel(
-                    detectorFactory = component::newMediaDetector,
+                    detectorFactory = { scope, incognito ->
+                        component.newMediaDetector(
+                            scope = scope,
+                            cookies = if (incognito) component.incognitoProfile.cookies() else WebViewCookieSource,
+                        )
+                    },
+                    incognito = component.incognitoProfile,
                     isLowEndDevice = { component.deviceProfile.isLowEnd },
                     tabStore = component.tabStore,
                 )

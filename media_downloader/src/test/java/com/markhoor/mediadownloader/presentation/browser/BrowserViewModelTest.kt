@@ -1,5 +1,6 @@
 package com.markhoor.mediadownloader.presentation.browser
 
+import com.markhoor.mediadownloader.data.browser.IncognitoProfile
 import com.markhoor.mediadownloader.domain.models.DetectionEvent
 import com.markhoor.mediadownloader.domain.models.MediaModel
 import com.markhoor.mediadownloader.domain.models.SiteAccess
@@ -31,7 +32,7 @@ class BrowserViewModelTest {
 
     @Test
     fun `the detector's state becomes the screen's`() = runTest(dispatcher) {
-        val viewModel = BrowserViewModel({ detector })
+        val viewModel = BrowserViewModel({ _, _ -> detector }, IncognitoProfile { false })
         val media = MediaModel("t", null, emptyList(), "s")
 
         detector.state.value = detector.state.value.copy(
@@ -49,7 +50,7 @@ class BrowserViewModelTest {
 
     @Test
     fun `the detector's moments become the screen's events`() = runTest(dispatcher) {
-        val viewModel = BrowserViewModel({ detector })
+        val viewModel = BrowserViewModel({ _, _ -> detector }, IncognitoProfile { false })
         detector.eventChannel.send(DetectionEvent.RendererGone)
         assertEquals(BrowserEvent.BrowserCrashed, viewModel.events.first())
     }

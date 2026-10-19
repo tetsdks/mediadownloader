@@ -1129,6 +1129,38 @@ its wiring in `MediaDownloaderComponent`.
   count, with nothing dead on either side - no method no script calls, no call no method answers.
   Every other DOM lookup in the scripts that can answer null is guarded by the loop that walks it
   (`for(... && node; ...)`), which is why only `twitter.js` came out of the sweep.
+- **Incognito is a WebView profile, and the profile cannot be thrown away.** An incognito page
+  browses in one profile shared by every incognito page in the process, reached through
+  `androidx.webkit`'s `ProfileStore`. It is **emptied** rather than deleted because
+  `deleteProfile` refuses a profile that has been loaded in this process at all, and reaching its
+  cookie jar is what loads it - so cookies and web storage are cleared when the last incognito page
+  closes, which is the promise anyway. Who wants it is counted, the way a download's lock counts its
+  runs: a tab holds its claim across losing and regaining its WebView to the live-page budget, and
+  emptying on the first close would wipe the session of every other incognito tab still on screen.
+  Measured on the device: a second incognito tab held the jar while the first closed, and a fresh
+  incognito page after both closed saw nothing.
+- **Whether incognito is private at all is the WebView's answer, not the SDK level's.** A second
+  profile needs `WebViewFeature.MULTI_PROFILE`, which comes with the WebView, so an old or stripped
+  WebView answers `SharedJar` on a new phone. The module says which (`MediaDownloader.incognitoPrivacy`)
+  instead of calling a shared jar private; an incognito page is still kept out of the saved tabs and
+  its session is still never flushed either way, because its `CookieSource.flush` does nothing -
+  which is also what stops the browser's Instagram sign-in being written down for it.
+  `WebViewCompat.setProfile` has to be the first thing done to a WebView (the platform refuses one
+  that has navigated, run a script, or been given a profile already), so it is the first statement
+  in `MediaBrowser.configure`, and a host's own already-used WebView keeps the ordinary profile and
+  is told so. Measured on the device: `Separate`, with a cookie set in an incognito page invisible
+  to an ordinary one and the other way round, and no incognito tab in `tabs.json`.
+- **The configuration is read live where it can be, and fixed where it cannot.** `reconfigure`
+  replaces a `@Volatile` config on the component; the collaborators that can honour a change ask it
+  each time (`CheckSiteAccessUseCase` reads `SiteAccessSettings` through a lambda and re-normalises
+  its host sets only when they change, `DownloadStorage` its folder name, `DownloadNotifier` its
+  icon and activity, `FallbackCookieSource` its supplied cookie). Four settings are read once by
+  something already in use and are **named** in the answer rather than silently dropped -
+  `performanceMode` (parallelism captured when each downloader was built), `extraSources` (the
+  scraper graph and the supported-host set), `guardCarrierProxies` (OkHttp copies the selector when
+  a client is built - measured last round), `twitterApiKey` (no key means no X reader to hand a link
+  to). One use case instance lives for the process, so a lifted block reaches the browser screens
+  and the downloads already in flight; measured on the device through the public api.
 
 ## 7. Known gaps
 

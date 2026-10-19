@@ -3,12 +3,14 @@ package com.markhoor.mediadownloader.di
 import android.content.Context
 import android.util.Log
 import androidx.work.WorkManager
+import com.markhoor.mediadownloader.FixedSetting
 import com.markhoor.mediadownloader.MediaCollectionSource
 import com.markhoor.mediadownloader.MediaDownloaderConfig
 import com.markhoor.mediadownloader.core.Constants.Browser
 import com.markhoor.mediadownloader.core.Constants.Device
 import com.markhoor.mediadownloader.core.Constants.Download
 import com.markhoor.mediadownloader.data.browser.MediaDescriber
+import com.markhoor.mediadownloader.data.browser.IncognitoProfile
 import com.markhoor.mediadownloader.data.browser.MediaDetectionSession
 import com.markhoor.mediadownloader.data.browser.TabFileStore
 import com.markhoor.mediadownloader.data.browser.ScriptLibrary
@@ -24,6 +26,7 @@ import com.markhoor.mediadownloader.data.download.MediaMuxerRemuxer
 import com.markhoor.mediadownloader.data.hls.HlsQualityReader
 import com.markhoor.mediadownloader.data.local.DownloadDao
 import com.markhoor.mediadownloader.data.local.MediaDownloaderDatabase
+import com.markhoor.mediadownloader.data.network.CookieSource
 import com.markhoor.mediadownloader.data.network.FallbackCookieSource
 import com.markhoor.mediadownloader.data.network.HttpClientFactory
 import com.markhoor.mediadownloader.data.network.HttpFetcher
@@ -64,6 +67,7 @@ import com.markhoor.mediadownloader.domain.usecase.DownloadCollectionUseCase
 import com.markhoor.mediadownloader.domain.usecase.EnqueueDownloadUseCase
 import com.markhoor.mediadownloader.domain.usecase.ParseLinkUseCase
 import com.markhoor.mediadownloader.domain.usecase.ReadLinkUseCase
+import com.markhoor.mediadownloader.domain.usecase.SiteAccessSettings
 import io.ktor.client.HttpClient
 import java.io.File
 import kotlinx.coroutines.CoroutineDispatcher
@@ -80,9 +84,29 @@ import kotlinx.coroutines.SupervisorJob
  */
 internal class MediaDownloaderComponent(
     val appContext: Context,
-    val config: MediaDownloaderConfig,
+    initialConfig: MediaDownloaderConfig,
     val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
+
+    /**
+     * How the host app wants the module to behave, now rather than at start: the collaborators
+     * that can honour a change ask this each time they need an answer. See [reconfigure] for the
+     * ones that cannot, and why.
+     */
+    @Volatile
+    var config: MediaDownloaderConfig = initialConfig
+        private set
+
+    /**
+     * Takes [wanted] as the configuration from here on, except for the settings something already
+     * built is holding - those keep what [MediaDownloaderConfig] was first given, and are answered
+     * with so a host app is never left thinking a change landed when it did not.
+     */
+    fun reconfigure(wanted: MediaDownloaderConfig): Set<FixedSetting> {
+        val current = config
+        config = wanted.keepingFixedSettingsOf(current)
+        return current.fixedSettingsChangedBy(wanted)
+    }
 
     /** What the device can take; decided once. */
     val deviceProfile: DeviceProfile by lazy {
@@ -97,13 +121,20 @@ internal class MediaDownloaderComponent(
         config.extraSources.map(::HostSuppliedScraper).filter { it.hosts.isNotEmpty() }
     }
 
+    /**
+     * One instance for the life of the process, reading the configuration as it stands: a host app
+     * that lifts a block or leaves strict mode is answered from the next question on, including by
+     * the browser screens and the downloads already in flight.
+     */
     val checkSiteAccess: CheckSiteAccessUseCase by lazy {
-        CheckSiteAccessUseCase(
-            strictSupportedSitesOnly = config.strictSupportedSitesOnly,
-            extraBlockedHosts = config.extraBlockedHosts,
-            allowedRestrictions = config.allowedRestrictions,
-            extraSupportedHosts = hostSuppliedScrapers.flatMapTo(mutableSetOf()) { it.hosts },
-        )
+        CheckSiteAccessUseCase {
+            SiteAccessSettings(
+                strictSupportedSitesOnly = config.strictSupportedSitesOnly,
+                extraBlockedHosts = config.extraBlockedHosts,
+                allowedRestrictions = config.allowedRestrictions,
+                extraSupportedHosts = hostSuppliedScrapers.flatMapTo(mutableSetOf()) { it.hosts },
+            )
+        }
     }
 
     val parseLink: ParseLinkUseCase by lazy {
@@ -138,14 +169,14 @@ internal class MediaDownloaderComponent(
     val downloadStorage: DownloadStorage by lazy {
         DownloadStorage(
             appContext,
-            config.downloadFolderName
+            { config.downloadFolderName },
         )
     }
     val downloadNotifier: DownloadNotifier by lazy {
         DownloadNotifier(
             appContext,
-            config.notificationIcon,
-            config.notificationActivity
+            { config.notificationIcon },
+            { config.notificationActivity },
         )
     }
     val downloadRunLocks = DownloadRunLocks()
@@ -253,16 +284,28 @@ internal class MediaDownloaderComponent(
     }
 
     /**
+     * The profile every incognito page browses in, and the count of how many want it. One for the
+     * process, so two incognito tabs share a session and the last one out empties it.
+     */
+    val incognitoProfile: IncognitoProfile by lazy { IncognitoProfile() }
+
+    /**
      * A detector for one browser screen, living as long as [scope] - its ViewModel's. Made on the
      * main thread, so it is handed its collaborators unbuilt; the session builds them off it.
+     *
+     * [cookies] is where the page's session is read from: the browser's own jar, or an incognito
+     * page's, which is also the one that is never written to disk.
      */
-    fun newMediaDetector(scope: CoroutineScope): MediaDetector = MediaDetectionSession(
+    fun newMediaDetector(
+        scope: CoroutineScope,
+        cookies: CookieSource = WebViewCookieSource,
+    ): MediaDetector = MediaDetectionSession(
         policyProvider = lazy { sniffPolicy },
         scriptsProvider = lazy { scriptLibrary },
         locatorProvider = lazy { streamLocator },
         describerProvider = lazy { mediaDescriber },
         parseLinkProvider = lazy { parseLink },
-        cookies = WebViewCookieSource,
+        cookies = cookies,
         injectIntervalProvider = lazy {
             if (deviceProfile.isLowEnd) Browser.INJECT_INTERVAL_LOW_END_MS else Browser.INJECT_INTERVAL_MS
         },
@@ -316,7 +359,7 @@ internal class MediaDownloaderComponent(
     private val scraperResolver: ScraperResolver by lazy {
         val getInDevice = GetInDeviceScraper(httpFetcher)
         // Every Instagram reader asks with the same session: the browser's own, or the host's.
-        val instagramCookies = FallbackCookieSource(WebViewCookieSource, config.instagramCookie)
+        val instagramCookies = FallbackCookieSource(WebViewCookieSource) { config.instagramCookie }
         val instagram = InstagramScraper(
             fetcher = httpFetcher,
             signedIn = InstagramSignedInScraper(httpFetcher, instagramCookies),

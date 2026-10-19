@@ -86,6 +86,9 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.work.runtime.ktx)
+    // Only for the WebView profile an incognito tab browses in; absent, incognito is still
+    // session-only, it just shares the one cookie jar. See IncognitoProfile.
+    implementation(libs.androidx.webkit)
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
 

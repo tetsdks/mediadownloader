@@ -64,7 +64,8 @@ internal fun storageRefusalFor(
 /** Where a download's file goes, what it is called, and the scratch space it is built in. */
 internal class DownloadStorage(
     private val appContext: Context,
-    private val rootFolderName: String,
+    /** Asked each time: a host app may change it after start; see `MediaDownloader.reconfigure`. */
+    private val rootFolderName: () -> String,
     /** The public Download folder; a lambda so a test can point this at a folder it owns. */
     private val publicDownloads: () -> File = {
         @Suppress("DEPRECATION") // Plain file access to Download/ is what MediaStore indexes; see the guide.
@@ -86,7 +87,7 @@ internal class DownloadStorage(
     fun writeRefusalOrNull(): DownloadException.StorageNotWritable? = synchronized(probeLock) {
         val now = System.currentTimeMillis()
         if (probedAtMillis != 0L && now - probedAtMillis < Storage.WRITE_PROBE_TTL_MS) return lastRefusal
-        val root = runCatching { File(publicDownloads(), rootFolderName) }.getOrNull()
+        val root = runCatching { File(publicDownloads(), rootFolderName()) }.getOrNull()
         val refusal = when {
             root == null -> DownloadException.StorageNotWritable("", StorageRefusal.StorageUnavailable)
             isWritable(root) -> null
@@ -136,7 +137,7 @@ internal class DownloadStorage(
     fun placeFor(request: DownloadRequest): Pair<File, String> {
         // One folder name from the host, never a path: it cannot leave Websites/.
         val site = request.siteFolder?.toFileNameBase()?.ifEmpty { null } ?: request.sourceUrl.siteFolderName()
-        val directory = File(publicDownloads(), "$rootFolderName/${Storage.WEBSITES_FOLDER}/$site")
+        val directory = File(publicDownloads(), "${rootFolderName()}/${Storage.WEBSITES_FOLDER}/$site")
         val baseName = (request.fileName ?: request.title).toFileNameBase()
             .ifEmpty { "${site.replace(" ", "")}_${System.currentTimeMillis()}" }
         val name = directory.freeFile(baseName, request.mediaUrl.mediaExtension(request.type)).name

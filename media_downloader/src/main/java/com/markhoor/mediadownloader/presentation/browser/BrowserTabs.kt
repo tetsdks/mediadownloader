@@ -13,8 +13,10 @@ import android.webkit.WebViewClient
 import androidx.annotation.MainThread
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
+import com.markhoor.mediadownloader.IncognitoPrivacy
 import com.markhoor.mediadownloader.core.Constants.Browser
 import com.markhoor.mediadownloader.core.normalizedHost
+import com.markhoor.mediadownloader.data.browser.IncognitoProfile
 import com.markhoor.mediadownloader.domain.models.SavedTabModel
 import com.markhoor.mediadownloader.domain.repo.MediaDetector
 import com.markhoor.mediadownloader.domain.repo.TabStore
@@ -58,9 +60,10 @@ internal interface BrowserTabHost {
  * Every method is for the main thread.
  */
 class BrowserTabs internal constructor(
-    private val newSession: () -> PageSession,
+    private val newSession: (Boolean) -> PageSession,
     private val showing: (MediaDetector?) -> Unit,
     private val isLowEnd: () -> Boolean,
+    private val incognito: IncognitoProfile,
     private val store: TabStore? = null,
     maxTabs: Int = Browser.MAX_TABS,
 ) {
@@ -130,10 +133,41 @@ class BrowserTabs internal constructor(
     @MainThread
     fun open(url: String = ""): String? = openTab(url.ifBlank { homeUrl }, select = true)
 
-    /** Opens a tab beside the one on screen without leaving it - "open in a new tab". */
+    /**
+     * Opens an incognito tab and shows it. Its page browses in the incognito profile, it is left
+     * out of the tabs kept between runs, and this module writes none of its session to disk. The
+     * jar it shares with the other incognito tabs is emptied when the last of them closes.
+     *
+     * Ask [incognitoPrivacy] before offering this: where the WebView cannot keep a second jar,
+     * incognito is only session-deep and a reader should be told so, or not offered it.
+     */
+    @MainThread
+    fun openIncognito(url: String = ""): String? =
+        openTab(url.ifBlank { homeUrl }, select = true, incognito = true)
+
+    /**
+     * Opens a tab beside the one on screen without leaving it - "open in a new tab". It is
+     * incognito when the tab it was opened from is, as a link followed in an incognito tab stays
+     * incognito.
+     */
     @MainThread
     fun openInBackground(url: String): String? =
-        openTab(url, select = false, openerId = roster.activeId)
+        openTab(url, select = false, openerId = roster.activeId, incognito = isIncognito(roster.activeId))
+
+    /** How private an incognito tab can be on this device; see [IncognitoPrivacy]. */
+    val incognitoPrivacy: IncognitoPrivacy get() = incognito.privacy
+
+    /** Whether any incognito tab is open, for a host that draws the browser differently then. */
+    val hasIncognitoTabs: Boolean get() = tabs.values.any { it.isIncognito }
+
+    /**
+     * Closes every incognito tab, which empties the incognito jar once the last one is gone -
+     * "close all incognito tabs". Answers with how many were closed. Closing the last tab of all
+     * still leaves one on the home page, as [close] does.
+     */
+    @MainThread
+    fun closeIncognito(): Int =
+        roster.ids.filter { isIncognito(it) }.count { close(it) }
 
     @MainThread
     fun select(id: String): Boolean {
@@ -191,7 +225,15 @@ class BrowserTabs internal constructor(
     @MainThread
     fun restoreLastClosed(): String? {
         val gone = closed.removeLastOrNull() ?: return null
-        val id = openTab(gone.url, select = true, saved = gone.saved, preview = gone.preview)
+        // An incognito tab comes back incognito, and with an emptied jar if it was the last one
+        // out: its page is loaded again, its session is not brought back to life.
+        val id = openTab(
+            gone.url,
+            select = true,
+            saved = gone.saved,
+            preview = gone.preview,
+            incognito = gone.isIncognito,
+        )
         if (id == null) closed.addLast(gone)
         return id
     }
@@ -293,10 +335,13 @@ class BrowserTabs internal constructor(
         preview: Bitmap? = null,
         title: String = "",
         givePage: Boolean = true,
+        incognito: Boolean = false,
     ): String? {
         val id = "tab-${++opened}"
         if (!roster.open(id, select, openerId)) return null
-        val tab = Tab(id, newSession())
+        // The session takes the claim on the incognito jar and gives it up when the tab closes, so
+        // a tab that loses its WebView to the live-page budget keeps the session it was browsing.
+        val tab = Tab(id, newSession(incognito), incognito)
         tab.saved = saved
         tab.preview = preview
         tab.pending = url.trim()
@@ -328,6 +373,7 @@ class BrowserTabs internal constructor(
             clientDelegate = screen.webViewClient,
             chromeDelegate = screen.webChromeClient,
             tabHost = windowsOf(id),
+            incognito = incognito.takeIf { tab.isIncognito },
         )
         tab.browser = browser
         // Only one that nothing else will measure. The tab being shown is about to be put in the
@@ -454,7 +500,7 @@ class BrowserTabs internal constructor(
     }
 
     private fun remember(tab: Tab) {
-        closed.addLast(ClosedTab(tab.url, tab.title, tab.saved, tab.preview))
+        closed.addLast(ClosedTab(tab.url, tab.title, tab.saved, tab.preview, tab.isIncognito))
         while (closed.size > Browser.CLOSED_TABS_KEPT) closed.removeFirst()
     }
 
@@ -483,7 +529,7 @@ class BrowserTabs internal constructor(
         override fun openWindow(): WebView? {
             busy = id
             try {
-                return openTab(url = "", select = true, openerId = id)
+                return openTab(url = "", select = true, openerId = id, incognito = isIncognito(id))
                     ?.let { tabs[it]?.browser?.webView }
             } finally {
                 busy = null
@@ -502,6 +548,8 @@ class BrowserTabs internal constructor(
         }
     }
 
+    private fun isIncognito(id: String?): Boolean = id?.let { tabs[it]?.isIncognito } == true
+
     private fun publish() {
         _state.value = BrowserTabsUiState(
             tabs = roster.ids.mapNotNull { id -> tabs[id]?.toUiState(isActive = id == roster.activeId) },
@@ -519,8 +567,10 @@ class BrowserTabs internal constructor(
      */
     private fun keepTabs() {
         val store = store ?: return
+        // Incognito tabs are left out: what is written here is what comes back after a restart,
+        // and an incognito page coming back is the one thing it must never do.
         val keep = roster.ids.mapNotNull { id ->
-            tabs[id]?.let {
+            tabs[id]?.takeUnless { it.isIncognito }?.let {
                 SavedTabModel(url = it.url, title = it.title, isActive = id == roster.activeId)
             }
         }
@@ -538,10 +588,11 @@ class BrowserTabs internal constructor(
         preview = preview,
         isActive = isActive,
         hasLivePage = browser?.isAttached == true,
+        isIncognito = isIncognito,
     )
 
     /** One tab: a session for as long as it is open, and a page only while it is worth one. */
-    private class Tab(val id: String, val session: PageSession) {
+    private class Tab(val id: String, val session: PageSession, val isIncognito: Boolean) {
         var browser: MediaBrowser? = null
         var saved: Bundle? = null
 
@@ -567,6 +618,7 @@ class BrowserTabs internal constructor(
         val title: String,
         val saved: Bundle?,
         val preview: Bitmap?,
+        val isIncognito: Boolean,
     )
 
     /** The screen the tabs are drawn on, and what their WebViews are built from. */

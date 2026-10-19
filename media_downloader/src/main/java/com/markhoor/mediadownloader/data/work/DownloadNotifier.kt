@@ -30,8 +30,9 @@ import com.markhoor.mediadownloader.data.local.DownloadEntity
  */
 internal class DownloadNotifier(
     private val context: Context,
-    private val smallIcon: Int,
-    private val openActivity: Class<out Activity>?,
+    /** Both asked each time: a host app may change them after start; see `MediaDownloader.reconfigure`. */
+    private val smallIcon: () -> Int,
+    private val openActivity: () -> Class<out Activity>?,
 ) {
 
     private val manager = NotificationManagerCompat.from(context)
@@ -131,14 +132,14 @@ internal class DownloadNotifier(
 
     private fun builder(entity: DownloadEntity): NotificationCompat.Builder =
         NotificationCompat.Builder(context, Download.NOTIFICATION_CHANNEL_ID)
-            .setSmallIcon(smallIcon)
+            .setSmallIcon(smallIcon())
             .setContentTitle(entity.title.ifBlank { entity.fileName })
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setCategory(NotificationCompat.CATEGORY_PROGRESS)
             .apply { openAppIntent(entity.id)?.let(::setContentIntent) }
 
     private fun openAppIntent(id: Long): PendingIntent? {
-        val launch = openActivity?.let { Intent(context, it) }
+        val launch = openActivity()?.let { Intent(context, it) }
             ?: context.packageManager.getLaunchIntentForPackage(context.packageName)
             ?: return null
         launch.putExtra(MediaDownloader.EXTRA_DOWNLOAD_ID, id)

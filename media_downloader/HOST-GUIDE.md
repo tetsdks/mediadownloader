@@ -306,6 +306,9 @@ Calling it again does nothing: **the first call's config is kept**. It throws
 
 ### 3.1 `MediaDownloaderConfig`
 
+Passed once to `initialize`, and changeable afterwards with `MediaDownloader.reconfigure` for all
+but four of its settings - see §4.5.
+
 ```kotlin
 data class MediaDownloaderConfig(
     val strictSupportedSitesOnly: Boolean = true,
@@ -485,6 +488,10 @@ fine. Before `initialize`:
 | `EXTRA_DOWNLOAD_ID` | `const val String` | Intent extra (a `Long`) on the intent a download notification opens the app with. Value: `"com.markhoor.mediadownloader.DOWNLOAD_ID"`. |
 | `isInitialized` | `Boolean` | Whether `initialize` has run. |
 | `initialize(context, config)` | `Unit` | See §3. |
+| `config` | `MediaDownloaderConfig` | The configuration in force: `initialize`'s with whatever `reconfigure` has changed since. Throws before `initialize`. |
+| `reconfigure(change)` | `Set<FixedSetting>` | Changes the configuration after start; see §4.5. |
+| `reconfigure(config)` | `Set<FixedSetting>` | The same, given the configuration to use rather than a change to make. |
+| `incognitoPrivacy` | `IncognitoPrivacy` | How private an incognito page can be on **this** device; see §7.5. Throws before `initialize`. |
 
 ### 4.2 Links
 
@@ -634,6 +641,41 @@ Concurrent calls are safe: when two callers pause/resume/delete the same downloa
 one wins and the other gets `InvalidState` or `NotFound`.
 
 ---
+
+### 4.5 Changing the configuration after start
+
+For a settings screen: a block lifted, strict mode left, a fresh Instagram session, another download
+folder or notification icon. Copy what is in force and change the one thing:
+
+```kotlin
+MediaDownloader.reconfigure { it.copy(allowAdultSites = true) }
+// or, equivalently
+MediaDownloader.reconfigure(MediaDownloader.config.copy(allowAdultSites = true))
+```
+
+The change is in force from the next question asked of it - the browser screens and the downloads
+already running included. Nothing is rebuilt, nothing in flight is stopped, and the lambda runs
+under the module's own lock, so reading and replacing cannot be split by another caller.
+
+**Four settings cannot change**, because something built once from each is already in use by the
+time you call. Each keeps the value `initialize` was given and is named in the answer; everything
+else in the same call is applied either way, so one unchangeable setting never costs a call its
+other changes.
+
+```kotlin
+val fixed = MediaDownloader.reconfigure { it.copy(allowYouTube = true, performanceMode = LowEnd) }
+// fixed == setOf(FixedSetting.PerformanceMode)   -- and allowYouTube is on.
+```
+
+| `FixedSetting` | Why |
+|---|---|
+| `PerformanceMode` | How many parts a download is fetched in, how many sizes are probed at once and how often a page is scanned are read when each of those is built. |
+| `ExtraSources` | They decide which hosts count as supported and which reader answers for a link, both settled when the scrapers were wired together. |
+| `GuardCarrierProxies` | A process-wide default OkHttp copies when a client is built, so a change would miss every client that already has one. |
+| `TwitterApiKey` | Whether X links have a reader at all is decided when the scrapers are wired: with no key there is no X reader to hand a link to. |
+
+A configuration that cannot work is refused the same way `initialize` refuses one
+(`IllegalArgumentException`, with the reason), and what was in force stays in force.
 
 ## 5. Models
 
@@ -1102,12 +1144,17 @@ class BrowserTabs {
     val state: StateFlow<BrowserTabsUiState>       // the strip: every tab, and which is shown
     val activeBrowser: StateFlow<MediaBrowser?>    // the page on screen
 
+    val incognitoPrivacy: IncognitoPrivacy          // what incognito can give on this device
+    val hasIncognitoTabs: Boolean                   // any incognito tab open
+
     @MainThread fun open(url: String = ""): String?          // opens and shows it; null when full
+    @MainThread fun openIncognito(url: String = ""): String?  // the same, incognito; see 7.5
     @MainThread fun openInBackground(url: String): String?   // "open in a new tab"
     @MainThread fun select(id: String): Boolean
     @MainThread fun close(id: String): Boolean
     @MainThread fun closeOthers(id: String)
     @MainThread fun closeAll()
+    @MainThread fun closeIncognito(): Int                    // "close all incognito tabs"
     @MainThread fun restoreLastClosed(): String?             // undo close, with the page it was on
     @MainThread fun goBack(): Boolean
     @MainThread fun capturePreview(): Boolean                // a fresh picture of the page on screen
@@ -1226,6 +1273,53 @@ tab.preview?.let { shot ->
 > ```
 
 ---
+
+### 7.5 Incognito
+
+```kotlin
+// Ask first: the answer is the WebView's, not the SDK level's.
+when (MediaDownloader.incognitoPrivacy) {
+    IncognitoPrivacy.Separate  -> showIncognitoButton()
+    IncognitoPrivacy.SharedJar -> showIncognitoButton(withWarning = true)  // or not at all
+}
+
+tabs.openIncognito()                       // a tab, on the home page
+tabs.closeIncognito()                      // close them all; returns how many
+
+// or, for a host driving one browser itself rather than using tabs:
+val browser = browserViewModel.createBrowser(context, owner, incognito = true)
+browserViewModel.endIncognito()            // ends it; the page goes with it
+```
+
+An incognito page browses in a WebView **profile** of its own, and `IncognitoPrivacy` says whether
+this device can give it one:
+
+| | `Separate` | `SharedJar` |
+|---|---|---|
+| Cookies, web storage, cache | Its own, invisible to ordinary browsing and the other way round | The one shared jar |
+| Emptied when the last incognito page closes | Yes | Nothing of its own to empty |
+| Kept out of the saved tabs | Yes | Yes |
+| Session written to disk by the module | Never | Never |
+
+`Separate` needs a recent WebView, not a recent Android - it is the WebView's own multi-profile
+support, so an old or stripped WebView answers `SharedJar` on a new phone. **Ask before you offer
+it**, and either say so in the UI or leave the button out: on `SharedJar`, a site signed in to in an
+incognito page is signed in outside it too.
+
+What incognito does **not** cover, on any device:
+
+- **Downloads.** A file saved from an incognito page is a download like any other: it is in the
+  downloads list and in the public Download folder, as it is in a desktop browser. Delete it with
+  `MediaDownloader.delete(id, deleteFile = true)` if that is not what you want.
+- **A WebView you have already used.** `attach(webView, owner, incognito = true)` can only put a
+  profile on a WebView nothing has been done to yet; the platform refuses one that has already
+  navigated or already run a script, and such a WebView goes on browsing in the ordinary profile.
+  Hand over a fresh one, or use `createBrowser`, where the module makes it.
+- **Your own storage.** The module writes nothing of an incognito session down; what your app
+  records about what the user did is yours.
+
+A link followed into a new tab from an incognito tab opens incognito too, and
+`BrowserTabUiState.isIncognito` is how a tab strip draws them apart.
 
 ## 8. Recipes
 

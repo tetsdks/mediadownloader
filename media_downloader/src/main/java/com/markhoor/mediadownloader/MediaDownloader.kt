@@ -56,10 +56,7 @@ object MediaDownloader {
      */
     fun initialize(context: Context, config: MediaDownloaderConfig = MediaDownloaderConfig()) {
         if (component != null) return
-        require(config.downloadFolderName.isNotBlank() && '/' !in config.downloadFolderName) {
-            "MediaDownloaderConfig.downloadFolderName must be one folder name, was \"${config.downloadFolderName}\""
-        }
-        require(config.notificationIcon != 0) { "MediaDownloaderConfig.notificationIcon must be a drawable resource" }
+        config.requireUsable()
         synchronized(this) {
             if (component == null) {
                 // Before anything builds an http client, because a client takes the process's
@@ -75,6 +72,64 @@ object MediaDownloader {
             }
         }
     }
+
+    /**
+     * The configuration in force, which is [initialize]'s with whatever [reconfigure] has changed
+     * since. Copy it to change one thing:
+     * ```
+     * MediaDownloader.reconfigure(MediaDownloader.config.copy(allowAdultSites = true))
+     * ```
+     *
+     * @throws MediaDownloaderNotInitializedException before [initialize].
+     */
+    val config: MediaDownloaderConfig get() = requireComponent().config
+
+    /**
+     * Changes the configuration after start, for a host app with a settings screen: a block lifted,
+     * strict mode left, a fresh Instagram session, another download folder, another notification
+     * icon. The change is in force from the next question asked of it - the browser screens and the
+     * downloads already running included - and nothing is rebuilt and nothing in flight is stopped.
+     *
+     * **Not everything can change.** A few settings are read once, by something that is already in
+     * use by the time this is called; each of those keeps the value [initialize] was given, and is
+     * named in the answer. Everything else in the same config is applied either way, so one
+     * unchangeable setting never costs a call its other changes.
+     *
+     * ```
+     * val fixed = MediaDownloader.reconfigure { it.copy(allowYouTube = true, performanceMode = LowEnd) }
+     * // fixed == setOf(FixedSetting.PerformanceMode); allowYouTube is on.
+     * ```
+     *
+     * @param change given the configuration in force, answers with the one to use. It runs under
+     *   the module's own lock, so reading and replacing cannot be split by another caller.
+     * @return the settings this call could not change; empty when everything was applied.
+     * @throws MediaDownloaderNotInitializedException before [initialize].
+     * @throws IllegalArgumentException when the new configuration cannot work, with the reason. The
+     *   configuration in force is then unchanged.
+     */
+    fun reconfigure(change: (MediaDownloaderConfig) -> MediaDownloaderConfig): Set<FixedSetting> {
+        val current = requireComponent()
+        return synchronized(this) {
+            val wanted = change(current.config)
+            wanted.requireUsable()
+            current.reconfigure(wanted)
+        }
+    }
+
+    /** [reconfigure] with the configuration to use rather than a change to make. */
+    fun reconfigure(config: MediaDownloaderConfig): Set<FixedSetting> = reconfigure { config }
+
+    /**
+     * How private an incognito page can be on this device - ask before offering incognito at all.
+     * The WebView's cookies, storage and cache can only be kept apart where the WebView itself
+     * offers a second profile, which needs a recent WebView rather than a recent Android; where it
+     * does not, incognito is session-deep only. See [IncognitoPrivacy],
+     * [presentation.browser.BrowserTabs.openIncognito] and
+     * [presentation.browser.BrowserViewModel.createBrowser].
+     *
+     * @throws MediaDownloaderNotInitializedException before [initialize].
+     */
+    val incognitoPrivacy: IncognitoPrivacy get() = requireComponent().incognitoProfile.privacy
 
     // region Links
 

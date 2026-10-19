@@ -28,25 +28,52 @@ import com.markhoor.mediadownloader.domain.policy.RestrictedSites
  *   strict mode does not refuse them - blocking still does, which is what keeps YouTube behind its
  *   own switch however it is read.
  */
-internal class CheckSiteAccessUseCase(
-    private val strictSupportedSitesOnly: Boolean,
-    extraBlockedHosts: Set<String>,
-    private val allowedRestrictions: Set<RestrictedCategory> = emptySet(),
-    extraSupportedHosts: Set<String> = emptySet(),
-) {
+internal class CheckSiteAccessUseCase(private val settings: () -> SiteAccessSettings) {
 
-    private val extraBlockedHosts: Set<String> =
-        extraBlockedHosts.mapNotNull { it.normalizedHost() }.toSet()
+    /** The settings as fixed values, which is how every test and every pure caller gives them. */
+    constructor(
+        strictSupportedSitesOnly: Boolean,
+        extraBlockedHosts: Set<String>,
+        allowedRestrictions: Set<RestrictedCategory> = emptySet(),
+        extraSupportedHosts: Set<String> = emptySet(),
+    ) : this(
+        {
+            SiteAccessSettings(
+                strictSupportedSitesOnly = strictSupportedSitesOnly,
+                extraBlockedHosts = extraBlockedHosts,
+                allowedRestrictions = allowedRestrictions,
+                extraSupportedHosts = extraSupportedHosts,
+            )
+        },
+    )
 
-    private val extraSupportedHosts: Set<String> =
-        extraSupportedHosts.mapNotNull { it.normalizedHost() }.toSet()
+    /**
+     * The hosts normalised, which is the only work here worth not doing twice. Kept against the
+     * settings they were made from, so a host app changing them at runtime
+     * (`MediaDownloader.reconfigure`) is noticed at the next question and nothing else is.
+     */
+    private class Hostnames(val from: SiteAccessSettings, val blocked: Set<String>, val supported: Set<String>)
+
+    @Volatile
+    private var hostnames: Hostnames? = null
+
+    private fun hostnames(): Hostnames {
+        val now = settings()
+        hostnames?.takeIf { it.from == now }?.let { return it }
+        return Hostnames(
+            from = now,
+            blocked = now.extraBlockedHosts.mapNotNullTo(mutableSetOf()) { it.normalizedHost() },
+            supported = now.extraSupportedHosts.mapNotNullTo(mutableSetOf()) { it.normalizedHost() },
+        ).also { hostnames = it }
+    }
 
     operator fun invoke(url: String): SiteAccess {
         val host = url.normalizedHost() ?: return SiteAccess.Unsupported
-        if (isBlockedHost(host) || carriesBlockedUrl(url)) return SiteAccess.Blocked
-        val supported = host.isUnderAnyOf(Hosts.SUPPORTED) || host.isUnderAnyOf(extraSupportedHosts) ||
+        val names = hostnames()
+        if (isBlockedHost(host, names) || carriesBlockedUrl(url, names)) return SiteAccess.Blocked
+        val supported = host.isUnderAnyOf(Hosts.SUPPORTED) || host.isUnderAnyOf(names.supported) ||
             RestrictedSites.categoryOf(host) != null
-        if (strictSupportedSitesOnly && !supported) return SiteAccess.Unsupported
+        if (names.from.strictSupportedSitesOnly && !supported) return SiteAccess.Unsupported
         return SiteAccess.Allowed
     }
 
@@ -55,12 +82,24 @@ internal class CheckSiteAccessUseCase(
      * Only the host counts: a CDN request often carries a referrer in its query, and a link to
      * YouTube there says nothing about the file being fetched.
      */
-    fun blocksHostOf(url: String): Boolean = url.normalizedHost()?.let(::isBlockedHost) == true
+    fun blocksHostOf(url: String): Boolean =
+        url.normalizedHost()?.let { isBlockedHost(it, hostnames()) } == true
 
-    private fun isBlockedHost(host: String): Boolean =
-        host.isUnderAnyOf(extraBlockedHosts) ||
-            RestrictedSites.categoryOf(host)?.let { it !in allowedRestrictions } == true
+    private fun isBlockedHost(host: String, names: Hostnames): Boolean =
+        host.isUnderAnyOf(names.blocked) ||
+            RestrictedSites.categoryOf(host)?.let { it !in names.from.allowedRestrictions } == true
 
-    private fun carriesBlockedUrl(url: String): Boolean =
-        url.embeddedUrls().any { embedded -> embedded.normalizedHost()?.let(::isBlockedHost) == true }
+    private fun carriesBlockedUrl(url: String, names: Hostnames): Boolean =
+        url.embeddedUrls().any { embedded -> embedded.normalizedHost()?.let { isBlockedHost(it, names) } == true }
 }
+
+/**
+ * What [CheckSiteAccessUseCase] decides by. A value, so the one use case can be asked again after
+ * the host app has changed its mind: see `MediaDownloader.reconfigure`.
+ */
+internal data class SiteAccessSettings(
+    val strictSupportedSitesOnly: Boolean,
+    val extraBlockedHosts: Set<String>,
+    val allowedRestrictions: Set<RestrictedCategory> = emptySet(),
+    val extraSupportedHosts: Set<String> = emptySet(),
+)

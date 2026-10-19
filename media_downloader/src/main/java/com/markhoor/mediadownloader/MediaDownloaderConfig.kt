@@ -67,6 +67,37 @@ data class MediaDownloaderConfig(
             if (allowAdultSites) add(RestrictedCategory.Adult)
         }
 
+    /**
+     * The settings [other] would change that cannot be changed after start, because something
+     * built once from each of them is already in use. See [FixedSetting] for why, one by one.
+     */
+    internal fun fixedSettingsChangedBy(other: MediaDownloaderConfig): Set<FixedSetting> = buildSet {
+        if (other.performanceMode != performanceMode) add(FixedSetting.PerformanceMode)
+        if (other.extraSources != extraSources) add(FixedSetting.ExtraSources)
+        if (other.guardCarrierProxies != guardCarrierProxies) add(FixedSetting.GuardCarrierProxies)
+        if (other.twitterApiKey != twitterApiKey) add(FixedSetting.TwitterApiKey)
+    }
+
+    /** [other], with every setting that cannot change after start taken back from this one. */
+    internal fun keepingFixedSettingsOf(other: MediaDownloaderConfig): MediaDownloaderConfig = copy(
+        performanceMode = other.performanceMode,
+        extraSources = other.extraSources,
+        guardCarrierProxies = other.guardCarrierProxies,
+        twitterApiKey = other.twitterApiKey,
+    )
+
+    /**
+     * Refuses a configuration that cannot work, with the reason. Asked by both
+     * [MediaDownloader.initialize] and [MediaDownloader.reconfigure], so a change made later is
+     * held to the same rules as the first one.
+     */
+    internal fun requireUsable() {
+        require(downloadFolderName.isNotBlank() && '/' !in downloadFolderName) {
+            "MediaDownloaderConfig.downloadFolderName must be one folder name, was \"$downloadFolderName\""
+        }
+        require(notificationIcon != 0) { "MediaDownloaderConfig.notificationIcon must be a drawable resource" }
+    }
+
     override fun toString(): String =
         "MediaDownloaderConfig(strictSupportedSitesOnly=$strictSupportedSitesOnly, " +
             "extraBlockedHosts=$extraBlockedHosts, twitterApiKey=${if (twitterApiKey == null) "none" else "set"}, " +

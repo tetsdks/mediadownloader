@@ -33,6 +33,10 @@ import com.markhoor.mediadownloader.domain.repo.MediaDetector
  * renderer crash: every WebView alive in the app shares one renderer, and a single one that does
  * not handle its death takes the whole app down.
  */
+// androidx.webkit's lint cannot see the override below through its @RequiresApi, and the callback
+// it asks for is the one this class exists to answer: onRenderProcessGone is implemented, returns
+// true, and is checked on a device by BrowserDeviceCheck.aRendererCrashIsReportedAndTheAppSurvives.
+@Suppress("MissingOnRenderProcessGone")
 internal class DetectingWebViewClient(
     private val detector: MediaDetector?,
     private val delegate: WebViewClient?,

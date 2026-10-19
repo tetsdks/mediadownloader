@@ -27,10 +27,14 @@ internal fun interface CookieSource {
  */
 internal class FallbackCookieSource(
     private val browser: CookieSource,
-    private val supplied: String?,
+    /** Asked each time: a session expires, and a host app may hand over a fresh one. */
+    private val supplied: () -> String?,
 ) : CookieSource {
 
-    private val usable = supplied?.trim()?.takeIf { it.isNotBlank() }
+    /** The fixed cookie a test or a pure caller gives. */
+    constructor(browser: CookieSource, supplied: String?) : this(browser, { supplied })
+
+    private val usable: String? get() = supplied()?.trim()?.takeIf { it.isNotBlank() }
 
     override fun cookiesFor(url: String): String? {
         val own = browser.cookiesFor(url)
