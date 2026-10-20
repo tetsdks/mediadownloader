@@ -1350,6 +1350,28 @@ its wiring in `MediaDownloaderComponent`.
   any frame, eight seconds with it closed and a disc in every frame - the size of them varies by a
   few hundred pixels across frames, which is the `pulse` animation every button has had from the
   start, not a flash.
+- **Only a raised layer counts as covering a card.** The sweep above asked what is at the middle
+  of a card and took the button away when the answer was not the card's own. That is a different
+  question from "is something drawn over this", and answering it cost the button on every opened
+  reel. On `m.facebook.com/watch/?v=<id>` the player's chrome - the caption bar, the like and
+  comment rail, the tap target that unmutes it - is laid out as a sibling of the `<video>` and
+  covers the whole player, so the middle of the card belongs to the chrome and never to the card.
+  Measured on the device, signed out, on a reel opened from the tray: the disc was created
+  (`btnFound=redbtn`), `mksShowOrHide` put `display:none` on it a beat later, and it never came
+  back - seven probe points over the card, every one of them answering `DIV.wbloks_1`, none of them
+  the card's.
+  What separates a dialog from the page's own chrome is how it is placed, and that is measurable.
+  The "Get the full experience" sheet is raised over the page: `m fixed-container bottom`,
+  `position: fixed`, `z-index: 1` on the feed, and `wbloks_25 … position: fixed, z-index: 1000` on
+  a reel. The player's chrome is not raised at all - walking from it up to the ancestor it shares
+  with the card gives `relative`, `relative`, `absolute`, and the shared ancestor is a few steps
+  up rather than the body. So `mksCovered` now walks that stretch and reports covered only when a
+  `fixed` or `sticky` box is on it. Measured both ways on the one page, with the function lifted
+  out of the asset and run in the live page: with the sheet up, the playing video's disc stays
+  hidden and two of four on-screen cards are judged covered; with the sheet dismissed, all eight
+  are shown, the disc is back on the playing reel, and pressing it opened the sheet on HD 1.97 MB.
+  This shipped broken in 1.1.2, where the cover check was added, and was reported after a host
+  moved from 1.0.1 to 1.1.4.
 - **A size test asked before the page has a size lets everything through.** The two picture rules
   skip anything narrower than 60% of the viewport, which is what keeps the stories tray and the
   rails beside it from being given buttons. But this script is put into the page with its first
