@@ -18,6 +18,7 @@ import com.markhoor.mediadownloader.domain.usecase.closestTo
 import com.markhoor.mediadownloader.data.local.DownloadEntity
 import com.markhoor.mediadownloader.data.network.HttpStatusException
 import com.markhoor.mediadownloader.data.network.isMediaGone
+import com.markhoor.mediadownloader.data.network.isRefused
 import com.markhoor.mediadownloader.di.MediaDownloaderComponent
 import com.markhoor.mediadownloader.domain.models.DownloadState
 import kotlinx.coroutines.CancellationException
@@ -252,19 +253,33 @@ internal class DownloadWorker(
 
     private suspend fun onFailed(entity: DownloadEntity, error: Exception, component: MediaDownloaderComponent): Result {
         val dao = component.downloadDao
-        val message = (error.message ?: error::class.simpleName)?.take(Download.MAX_ERROR_LENGTH)
+        val refusal = (error as? HttpStatusException)?.takeIf { it.isRefused() }
+        // A refusal says nothing about the reader and everything about the link, so it says so -
+        // rather than "HTTP 403 for <a signed url two hundred characters long>", which is what the
+        // row used to carry and what a host had to put in front of its reader.
+        val message = (refusal?.let { refusedMessage(it.status) } ?: error.message ?: error::class.simpleName)
+            ?.take(Download.MAX_ERROR_LENGTH)
         component.downloadNotifier.cancelProgress(entity.id)
         // Media that is not there to take: the site answered with a page or a placeholder instead
-        // of the video, or refused the request outright - a private or deleted post, a link already
-        // spent. Asking four more times over a growing backoff would be told the same thing, so it
-        // fails now, and the notification says what happened instead of inviting a retry.
-        if (error is UnusableMediaException || (error is HttpStatusException && error.isMediaGone())) {
+        // of the video - a private or deleted post. Asking four more times over a growing backoff
+        // would be told the same thing, so it fails now, and the notification says what happened
+        // instead of inviting a retry. A refusal is not that, and is left to the ordinary path.
+        if (error is UnusableMediaException || (error is HttpStatusException && error.isMediaGone() && !error.isRefused())) {
             // Marked, so the row can say this too rather than reading as an ordinary failure.
             dao.countFailure(entity.id, Download.MEDIA_GONE_MARKER + message)
             if (dao.moveState(entity.id, from = runningStates, state = DownloadState.Failed) > 0) {
                 component.downloadNotifier.showUnavailable(entity)
             }
             return Result.failure()
+        }
+        // Turned away: most often a signed link that has been spent, and the page it came from is
+        // the only place a fresh one is minted. Forgetting what was resolved sends the next run
+        // back through `readItsPage`, which is the same path every playlist entry already takes.
+        // Only where a parser actually reads that page - a stream found by sniffing a page nobody
+        // parses has nowhere to go back to, and asking again is all that is left to try.
+        if (refusal != null && component.canReadPageOf(entity.sourceUrl)) {
+            dao.forgetResolvedMedia(entity.id)
+            component.downloadStorage.deleteWorkFiles(entity)
         }
         if (!component.networkStatus.hasConnection()) {
             dao.moveState(entity.id, from = runningStates, state = DownloadState.WaitingForNetwork)
@@ -284,6 +299,10 @@ internal class DownloadWorker(
         }
         return Result.failure()
     }
+
+    /** What a refusal tells the reader, in place of the raw status and the signed url it names. */
+    private fun refusedMessage(status: Int) =
+        "The site turned this download away (HTTP $status). Its link may have expired - try again."
 
     /**
      * Keeps the process alive while the app is in the background. Android 12+ refuses a foreground

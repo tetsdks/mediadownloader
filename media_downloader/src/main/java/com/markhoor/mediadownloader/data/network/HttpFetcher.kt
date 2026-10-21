@@ -113,3 +113,18 @@ internal class HttpStatusException(val status: Int, url: String) : Exception("HT
  */
 internal fun HttpStatusException.isMediaGone(): Boolean =
     status in 400..499 && status != 408 && status != 429
+
+/**
+ * Whether the site turned this request away rather than saying the media is not there: `401` and
+ * `403`. The two read the same at the moment they arrive, and [isMediaGone] deliberately keeps
+ * them together - `DirectFileDownloader` needs a `403` on a ranged part to mean "ask for the file
+ * whole instead", because some sites sign a link for one connection and refuse the rest.
+ *
+ * For a whole download they are not the same thing at all. Measured on the device in October 2026:
+ * Dailymotion's own CDN answered `403 X-Error-Code: E030` to the manifest url that Dailymotion's
+ * own metadata endpoint had just handed out, for every video tried, while the video was public and
+ * `protected_delivery` was false - plain Chrome on the same network could not play it either. The
+ * media was there; the link was refused. Calling that "private or no longer available" and giving
+ * up was wrong twice over, so a refusal now keeps its ordinary retries and says what happened.
+ */
+internal fun HttpStatusException.isRefused(): Boolean = status == 401 || status == 403

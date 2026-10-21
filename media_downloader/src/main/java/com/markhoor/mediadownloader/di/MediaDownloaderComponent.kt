@@ -137,6 +137,13 @@ internal class MediaDownloaderComponent(
         }
     }
 
+    /**
+     * Whether a parser reads this page, so a download whose link was refused has somewhere to go
+     * back to for a fresh one. A page found by sniffing alone answers `false`: there is nothing to
+     * re-read it with, and the only thing left to try is the link already in hand.
+     */
+    fun canReadPageOf(url: String): Boolean = scraperResolver.scrapersFor(url).isNotEmpty()
+
     val parseLink: ParseLinkUseCase by lazy {
         ParseLinkUseCase(
             checkSiteAccess = checkSiteAccess,

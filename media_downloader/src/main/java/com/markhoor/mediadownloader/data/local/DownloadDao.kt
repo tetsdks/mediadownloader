@@ -88,6 +88,14 @@ internal interface DownloadDao {
         thumbnailUrl: String?,
     )
 
+    /**
+     * Forgets the media a page was read for, so the next run reads the page again - the one path
+     * that can mint a fresh link when the one in hand was refused. What was fetched is forgotten
+     * with it: the bytes belong to a url that is no longer the one being asked for.
+     */
+    @Query("UPDATE downloads SET mediaUrl = '', audioUrl = NULL, downloadedBytes = 0, totalBytes = NULL WHERE id = :id")
+    suspend fun forgetResolvedMedia(id: Long)
+
     @Query("UPDATE downloads SET downloadedBytes = :downloadedBytes, totalBytes = :totalBytes WHERE id = :id")
     suspend fun setProgress(id: Long, downloadedBytes: Long, totalBytes: Long?)
 
