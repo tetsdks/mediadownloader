@@ -1276,10 +1276,27 @@ its wiring in `MediaDownloaderComponent`.
   that method on anything reporting SDK 34, with no fallback, so initialisation raised
   `NoSuchMethodError`. Seven crashes, one user, October 2026, before a download had been asked for
   at all. Reading the list is Room and nothing else, so now it stays that way and such a device
-  gets its list. Starting a download there still cannot work - WorkManager cannot run on it - and
-  that is not something this module can mend. The guard is a test on the constructor's parameter
-  types, because the three collaborators the read path never touches each need a `Context` and
-  Kotlin will not let them be left out.
+  gets its list. The guard is a test on the constructor's parameter types, because the three
+  collaborators the read path never touches each need a `Context` and Kotlin will not let them be
+  left out. Starting a download there still cannot work; the bullet below is what happens instead.
+- **A scheduler that cannot be built is a refused download, not a dead app.** The same framework
+  answers `WorkManager.getInstance` with a `LinkageError`, and an `Error` is not an `Exception`:
+  it goes straight through `EnqueueDownloadUseCase`'s guard and the repository's `attempt`, and
+  `MediaDownloader.download` has no guard at all. Deferring the build only moved the death from
+  app start to the first press of `Download` - reproduced on a device by making that one call
+  throw, where the app died on the press and lived once it refused. So `DownloadScheduler.of` is
+  now the only way one is made, and it turns a `LinkageError` into
+  `DownloadException.SchedulerUnavailable`, which every guard on the way out already reports.
+  Nothing is swallowed: the platform's own error is the cause, and each download still fails,
+  visibly, with the reason. Only a `LinkageError` is converted - the `IllegalStateException` a
+  host gets for removing `WorkManagerInitializer` without supplying a `Configuration` is already
+  an exception, already reported, and wrapping it would only hide the host's own mistake.
+  `enqueue` inserts the row before it schedules, so the row is marked `Failed` with
+  `Download.SCHEDULER_UNAVAILABLE_MESSAGE` as well; without that it sat in `Queued` for ever with
+  nothing to run it, which is what the device showed. The limit of all this: a host that keeps
+  `WorkManagerInitializer` has WorkManager initialised by `androidx.startup` before any module
+  code runs, and on such a device it dies there, out of reach. The host this came from had
+  removed it, which is why the module is in the path at all.
 - **A failed page read answers WorkManager itself.** A playlist's entries are queued with only a
   page to read. `readItsPage` called `onFailed` and returned `null`, and the caller turned `null`
   into `Result.success()` - so the `Result` `onFailed` had decided on was thrown away. An ordinary

@@ -8,6 +8,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.workDataOf
 import com.markhoor.mediadownloader.core.Constants.Download
+import com.markhoor.mediadownloader.domain.models.DownloadException
 import java.util.concurrent.TimeUnit
 
 /**
@@ -44,4 +45,25 @@ internal class DownloadScheduler(private val workManager: WorkManager) {
     }
 
     private fun workName(id: Long) = Download.WORK_NAME_PREFIX + id
+
+    companion object {
+        /**
+         * The only way one is made: [build] is `WorkManager.getInstance`, and on a device whose
+         * framework cannot carry WorkManager that call raises a [LinkageError] rather than an
+         * exception - an `Error`, which no `catch (e: Exception)` on the way out to the host stops,
+         * so the host app dies where it asked for a download. Reported from the field in October
+         * 2026 on an Android 14 build with no `JobScheduler.forNamespace`: WorkManager 2.12 calls
+         * that method on anything reporting SDK 34, with no fallback.
+         *
+         * Turned here into [DownloadException.SchedulerUnavailable], which is what this module
+         * already promises a scheduler that will not work: a refused download, not a dead app.
+         * Nothing is swallowed - the refusal carries the platform's own error as its cause, and
+         * every download on such a device still fails, visibly and with the reason.
+         */
+        fun of(build: () -> WorkManager): DownloadScheduler = try {
+            DownloadScheduler(build())
+        } catch (e: LinkageError) {
+            throw DownloadException.SchedulerUnavailable(e)
+        }
+    }
 }

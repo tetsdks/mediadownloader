@@ -112,7 +112,17 @@ internal class DownloadRepositoryImpl(
      * this the moment it runs.
      */
     private suspend fun startAndSayIfItMustWait(id: Long, replace: Boolean = false) {
-        scheduler.start(id, replace = replace)
+        try {
+            scheduler.start(id, replace = replace)
+        } catch (e: DownloadException.SchedulerUnavailable) {
+            // The row is in the table already and nothing will ever run it, so it says why rather
+            // than sitting in Queued for ever - which is what a reader on such a device saw, one
+            // download after another, with no reason given anywhere they could look.
+            dao.countFailure(id, Download.SCHEDULER_UNAVAILABLE_MESSAGE)
+            dao.moveState(id, from = listOf(DownloadState.Queued), state = DownloadState.Failed)
+            notifier.cancel(id)
+            throw e
+        }
         if (network.hasConnection()) return
         val entity = dao.get(id) ?: return
         notifier.showWaitingForNetwork(entity)

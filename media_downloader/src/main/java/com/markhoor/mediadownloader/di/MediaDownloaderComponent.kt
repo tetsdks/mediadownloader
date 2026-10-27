@@ -189,11 +189,9 @@ internal class MediaDownloaderComponent(
     val downloadRunLocks = DownloadRunLocks()
     val networkStatus: NetworkStatus by lazy { NetworkStatus(appContext) }
     val downloadScheduler: DownloadScheduler by lazy {
-        DownloadScheduler(
-            WorkManager.getInstance(
-                appContext
-            )
-        )
+        // `of`, not the constructor: a framework that cannot carry WorkManager answers with an
+        // Error, and that must reach the host as a refused download rather than as its death.
+        DownloadScheduler.of { WorkManager.getInstance(appContext) }
     }
 
     val downloadEngine: DownloadEngine by lazy {

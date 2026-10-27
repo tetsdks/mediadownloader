@@ -87,6 +87,13 @@ internal object Constants {
          */
         const val MEDIA_GONE_MARKER = "media-gone|"
 
+        /**
+         * What a download says when the device cannot run one at all - WorkManager would not
+         * start on it. Written for whoever reads the list: the platform's own words are on
+         * `DownloadException.SchedulerUnavailable`, for the log, and mean nothing to a reader.
+         */
+        const val SCHEDULER_UNAVAILABLE_MESSAGE = "Downloads cannot run on this device."
+
         /** Parts a file is fetched in at once, and segments of a stream. */
         const val MAX_PARALLEL_PARTS = 8
         const val MAX_PARALLEL_SEGMENTS = 8

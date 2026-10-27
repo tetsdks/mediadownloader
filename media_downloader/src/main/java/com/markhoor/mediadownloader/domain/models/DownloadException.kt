@@ -1,7 +1,7 @@
 package com.markhoor.mediadownloader.domain.models
 
 /** Why a download could not be started or changed. */
-sealed class DownloadException(message: String) : Exception(message) {
+sealed class DownloadException(message: String, cause: Throwable? = null) : Exception(message, cause) {
 
     /** The page or the media is on YouTube or an adult site the configuration does not allow, or on a host the app blocked. */
     class SiteBlocked(val url: String) : DownloadException("Downloads are not allowed from this site")
@@ -15,6 +15,23 @@ sealed class DownloadException(message: String) : Exception(message) {
     /** The action does not apply in the download's current state, e.g. resuming a completed one. */
     class InvalidState(val id: Long, val state: DownloadState, action: String) :
         DownloadException("Cannot $action download $id while it is $state")
+
+    /**
+     * Background downloads cannot run on this device at all: WorkManager would not start on it.
+     *
+     * Seen in the field on an Android 14 build whose framework has no `JobScheduler.forNamespace`,
+     * which WorkManager 2.12 calls on anything reporting SDK 34 with no fallback. The platform
+     * answers such a call with a [LinkageError] - an `Error`, not an exception, so it walks
+     * through every `catch (e: Exception)` between there and the host and takes the app down.
+     * Nothing can be downloaded on such a device; saying so is this module's job, dying is not.
+     *
+     * There is nothing the user can do, and nothing you can do either. Show a plain "downloads
+     * aren't supported on this device"; [cause] is what the platform threw, worth logging.
+     */
+    class SchedulerUnavailable(cause: Throwable) : DownloadException(
+        "Downloads cannot run on this device: WorkManager could not start (${cause.message})",
+        cause,
+    )
 
     /**
      * The download folder cannot be written, so the download is refused before it is made rather

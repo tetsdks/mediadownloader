@@ -900,7 +900,7 @@ sealed class MediaParseException(val url: String, message: String, cause: Throwa
 ### 6.2 `DownloadException` (from `download`, `pause`, `resume`, `delete`)
 
 ```kotlin
-sealed class DownloadException(message: String) : Exception
+sealed class DownloadException(message: String, cause: Throwable? = null) : Exception
 ```
 
 | Subclass | Properties | When |
@@ -909,6 +909,7 @@ sealed class DownloadException(message: String) : Exception
 | `InvalidMediaUrl` | `url` | Not http(s), or absurdly long |
 | `NotFound` | `id` | No such download (never made, or deleted) |
 | `InvalidState` | `id`, `state` | The action doesn't apply in this state (e.g. resuming a completed download) |
+| `SchedulerUnavailable` | `cause` | The device cannot run background downloads at all: WorkManager would not start on it. Seen on an Android 14 build whose framework is missing `JobScheduler.forNamespace`. Nothing to ask the user for and nothing you can change - show a plain "downloads aren't supported on this device" and log `cause`. The download is left in `Failed` saying the same thing |
 | `StorageNotWritable` | `path`, `refusal` | The download folder can't be written. `refusal` says what to do: `PermissionNotGranted` (ask for `WRITE_EXTERNAL_STORAGE`), `LegacyStorageDisabled` (add `requestLegacyExternalStorage="true"`, §2.2), `StorageUnavailable` (nothing to ask for) |
 
 `StorageNotWritable` is decided by **writing to** the folder, not by reading the permission - on
@@ -1818,7 +1819,7 @@ Everything a host can reference. Anything not listed here is `internal` to the m
 - `DownloadRequest` (+ `DownloadRequest.of`), `DownloadModel`, `enum DownloadState`
 - `enum SiteAccess`
 - `sealed MediaParseException`: `SiteBlocked`, `SiteUnsupported`, `LinkNotRecognised`, `MediaNotFound` (+ `needsSignIn`)
-- `sealed DownloadException`: `SiteBlocked`, `InvalidMediaUrl`, `NotFound`, `InvalidState`, `StorageNotWritable`
+- `sealed DownloadException`: `SiteBlocked`, `InvalidMediaUrl`, `NotFound`, `InvalidState`, `StorageNotWritable`, `SchedulerUnavailable`
 - `enum StorageRefusal`: `PermissionNotGranted`, `LegacyStorageDisabled`, `StorageUnavailable`
 - `MediaDownloaderNotInitializedException`
 
