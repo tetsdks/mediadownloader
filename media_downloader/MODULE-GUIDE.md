@@ -1266,6 +1266,20 @@ its wiring in `MediaDownloaderComponent`.
   and a coroutine was leaked per offer. A video above 360p keeps its sound apart, so this was the
   ordinary shape of an answer rather than an odd one. Reproduced before fixing, and the test keeps
   it reproduced: four such qualities against two permits hang until a 30s timeout.
+- **Reading the downloads does not initialise WorkManager.** The repository is handed its
+  scheduler as a `Lazy`, so it is built the first time something actually schedules and never to
+  answer `observeDownloads`. Building it is `WorkManager.getInstance`, and in a host that has
+  removed `WorkManagerInitializer` - which is what implementing `Configuration.Provider` asks for -
+  whichever call comes first is the one that initialises WorkManager. That used to be a host
+  collecting `observeDownloads` at startup to count finished downloads, and on an Android 14 build
+  whose framework has no `JobScheduler.forNamespace` it took the app down: WorkManager 2.12.0 calls
+  that method on anything reporting SDK 34, with no fallback, so initialisation raised
+  `NoSuchMethodError`. Seven crashes, one user, October 2026, before a download had been asked for
+  at all. Reading the list is Room and nothing else, so now it stays that way and such a device
+  gets its list. Starting a download there still cannot work - WorkManager cannot run on it - and
+  that is not something this module can mend. The guard is a test on the constructor's parameter
+  types, because the three collaborators the read path never touches each need a `Context` and
+  Kotlin will not let them be left out.
 - **A failed page read answers WorkManager itself.** A playlist's entries are queued with only a
   page to read. `readItsPage` called `onFailed` and returned `null`, and the caller turned `null`
   into `Result.success()` - so the `Result` `onFailed` had decided on was thrown away. An ordinary

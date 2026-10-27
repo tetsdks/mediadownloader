@@ -34,12 +34,26 @@ import kotlinx.coroutines.withContext
  */
 internal class DownloadRepositoryImpl(
     private val dao: DownloadDao,
-    private val scheduler: DownloadScheduler,
+    schedulerProvider: Lazy<DownloadScheduler>,
     private val storage: DownloadStorage,
     private val notifier: DownloadNotifier,
     private val network: NetworkStatus,
     private val ioDispatcher: CoroutineDispatcher,
 ) : DownloadRepository {
+
+    /**
+     * Built the first time something is actually scheduled, and never to read the list.
+     *
+     * Building it is `WorkManager.getInstance`, which initialises WorkManager, and that is not
+     * free of risk: WorkManager 2.12.0 calls `JobScheduler.forNamespace` on anything reporting
+     * SDK 34 or above, with no fallback, and a device whose framework lacks that method answers
+     * with `NoSuchMethodError`. Reported from the field in October 2026 on an Android 14 build -
+     * seven crashes, raised by a host that only wanted to count finished downloads and so was
+     * collecting `observeDownloads` at startup. Reading the list is Room and nothing else, so it
+     * has no business initialising a scheduler; now it does not, and such a device gets its list
+     * rather than a dead app. Starting a download there still cannot work, and still says so.
+     */
+    private val scheduler by schedulerProvider
 
     private val activeStates = DownloadState.entries.filter { it.isActive }
 

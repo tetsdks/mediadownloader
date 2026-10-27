@@ -220,7 +220,8 @@ internal class MediaDownloaderComponent(
     val downloadRepository: DownloadRepository by lazy {
         DownloadRepositoryImpl(
             dao = downloadDao,
-            scheduler = downloadScheduler,
+            // Lazily: observing the downloads must not be what initialises WorkManager.
+            schedulerProvider = lazy { downloadScheduler },
             storage = downloadStorage,
             notifier = downloadNotifier,
             network = networkStatus,
