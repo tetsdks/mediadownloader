@@ -1,5 +1,6 @@
 package com.markhoor.mediadownloader.data.repo
 
+import android.util.Log
 import com.markhoor.mediadownloader.core.Constants.Download
 import com.markhoor.mediadownloader.core.endingOnFailure
 import com.markhoor.mediadownloader.core.isHlsPlaylistUrl
@@ -101,7 +102,7 @@ internal class DownloadRepositoryImpl(
                 createdAtMillis = System.currentTimeMillis(),
             ),
         )
-        if (!request.startPaused) startAndSayIfItMustWait(id)
+        if (!request.startPaused) startAll(listOf(id), replace = false)
         id
     }
 
@@ -110,27 +111,62 @@ internal class DownloadRepositoryImpl(
      * before it runs, so nothing else would be shown until the connection came back - and a
      * download asked for and then silent reads as a download that never started. The worker clears
      * this the moment it runs.
+     *
+     * Reached through [startAll], which is what answers for the row when the device cannot run a
+     * download at all; on its own this only starts one.
      */
     private suspend fun startAndSayIfItMustWait(id: Long, replace: Boolean = false) {
-        try {
-            scheduler.start(id, replace = replace)
-        } catch (e: DownloadException.SchedulerUnavailable) {
-            // The row is in the table already and nothing will ever run it, so it says why rather
-            // than sitting in Queued for ever - which is what a reader on such a device saw, one
-            // download after another, with no reason given anywhere they could look.
-            dao.countFailure(id, Download.SCHEDULER_UNAVAILABLE_MESSAGE)
-            dao.moveState(id, from = listOf(DownloadState.Queued), state = DownloadState.Failed)
-            notifier.cancel(id)
-            throw e
-        }
+        scheduler.start(id, replace = replace)
         if (network.hasConnection()) return
         val entity = dao.get(id) ?: return
         notifier.showWaitingForNetwork(entity)
     }
 
+    /**
+     * Starts [ids], and where the device cannot run a download at all says so on every one.
+     *
+     * [DownloadException.SchedulerUnavailable] can only come from the scheduler being built, which
+     * happens once in a process, so only the first start here can raise it - nothing in [ids] was
+     * scheduled, and the caller has moved all of them to [DownloadState.Queued] in a single
+     * statement. Each therefore says why rather than sitting in Queued for ever with nothing to
+     * run it, which is what a reader on such a device was left looking at.
+     */
+    private suspend fun startAll(ids: List<Long>, replace: Boolean) {
+        try {
+            ids.forEach { startAndSayIfItMustWait(it, replace = replace) }
+        } catch (e: DownloadException.SchedulerUnavailable) {
+            ids.forEach { failAsUnschedulable(it) }
+            throw e
+        }
+    }
+
+    /** Says on the row what no job will ever say: this device cannot run the download. */
+    private suspend fun failAsUnschedulable(id: Long) {
+        dao.countFailure(id, Download.SCHEDULER_UNAVAILABLE_MESSAGE)
+        dao.moveState(id, from = activeStates, state = DownloadState.Failed)
+        notifier.cancel(id)
+    }
+
+    /**
+     * Stops the job for [id], where there can be one to stop.
+     *
+     * A scheduler that cannot be built has never scheduled anything in this process, so there is
+     * nothing here to stop and nothing to report. Starting is the opposite - a download the caller
+     * asked for and did not get - but failing on the way *out* leaves the caller's own work half
+     * done: [delete] has removed the row by this point, and a failure here left the files on disk,
+     * the notification up, and a host told that a download it can no longer see is still there.
+     */
+    private fun stopWhatCouldBeRunning(id: Long) {
+        try {
+            scheduler.stop(id)
+        } catch (e: DownloadException.SchedulerUnavailable) {
+            Log.w(Download.LOG_TAG, "Nothing to stop for download $id", e)
+        }
+    }
+
     override suspend fun pause(id: Long): Result<Unit> = attempt {
         if (dao.moveState(id, from = pausableStates, state = DownloadState.Paused) > 0) {
-            scheduler.stop(id)
+            stopWhatCouldBeRunning(id)
             notifier.cancel(id)
             Result.success(Unit)
         } else {
@@ -140,7 +176,7 @@ internal class DownloadRepositoryImpl(
 
     override suspend fun resume(id: Long): Result<Unit> = attempt {
         if (dao.requeue(id, from = resumableStates) > 0) {
-            startAndSayIfItMustWait(id, replace = true)
+            startAll(listOf(id), replace = true)
             Result.success(Unit)
         } else {
             refusal(id, action = "resume")
@@ -156,7 +192,7 @@ internal class DownloadRepositoryImpl(
         val ids = dao.idsInCollection(title, pausableStates)
         val moved = dao.moveCollection(title, from = pausableStates, state = DownloadState.Paused)
         ids.forEach { id ->
-            scheduler.stop(id)
+            stopWhatCouldBeRunning(id)
             notifier.cancel(id)
         }
         Result.success(moved)
@@ -165,7 +201,7 @@ internal class DownloadRepositoryImpl(
     override suspend fun resumeCollection(title: String): Result<Int> = attemptCounting {
         val ids = dao.idsInCollection(title, resumableStates)
         val moved = dao.requeueCollection(title, from = resumableStates)
-        ids.forEach { id -> startAndSayIfItMustWait(id, replace = true) }
+        startAll(ids, replace = true)
         Result.success(moved)
     }
 
@@ -173,7 +209,7 @@ internal class DownloadRepositoryImpl(
         val entity = dao.get(id) ?: return@attempt Result.failure(DownloadException.NotFound(id))
         // Two deletes at once: only the one that removed the row cleans up after it.
         if (dao.delete(id) == 0) return@attempt Result.failure(DownloadException.NotFound(id))
-        scheduler.stop(id)
+        stopWhatCouldBeRunning(id)
         notifier.cancel(id)
         storage.deleteWorkFiles(entity)
         if (deleteFile && entity.state == DownloadState.Completed) entity.file.delete()
@@ -210,7 +246,20 @@ internal class DownloadRepositoryImpl(
     }
 
     override suspend fun restoreUnfinished() = withContext(ioDispatcher) {
-        dao.getInStates(activeStates).forEach { scheduler.start(it.id, replace = false) }
+        val unfinished = dao.getInStates(activeStates).map { it.id }
+        try {
+            // Not startAll: at app start with no connection that would raise a notification for
+            // every row, and a restore is not something a reader asked for just now.
+            unfinished.forEach { scheduler.start(it, replace = false) }
+        } catch (e: DownloadException.SchedulerUnavailable) {
+            // Rows this module left in Queued on such a device before it knew to refuse: the row
+            // went in and the app died on the way to the job. They would be restored at every
+            // start, raise this again, and read as downloads about to begin. None can begin, so
+            // each says so - and the clean-up below still runs, which it did not while this came
+            // out of here as an Error.
+            Log.w(Download.LOG_TAG, "No scheduler to restore ${unfinished.size} download(s) with", e)
+            unfinished.forEach { failAsUnschedulable(it) }
+        }
         // And the pieces of downloads that have no row any more - a schema change starts the
         // table again, and what they were writing would otherwise sit there for ever.
         storage.deleteWorkFilesExcept(dao.allIds().toSet())

@@ -909,7 +909,7 @@ sealed class DownloadException(message: String, cause: Throwable? = null) : Exce
 | `InvalidMediaUrl` | `url` | Not http(s), or absurdly long |
 | `NotFound` | `id` | No such download (never made, or deleted) |
 | `InvalidState` | `id`, `state` | The action doesn't apply in this state (e.g. resuming a completed download) |
-| `SchedulerUnavailable` | `cause` | The device cannot run background downloads at all: WorkManager would not start on it. Seen on an Android 14 build whose framework is missing `JobScheduler.forNamespace`. Nothing to ask the user for and nothing you can change - show a plain "downloads aren't supported on this device" and log `cause`. The download is left in `Failed` saying the same thing |
+| `SchedulerUnavailable` | `cause` | From `download` and `resume` only. The device cannot run background downloads at all: WorkManager would not start on it. Seen on an Android 14 build whose framework is missing `JobScheduler.forNamespace`. Nothing to ask the user for and nothing you can change - show a plain "downloads aren't supported on this device" and log `cause`. The download is left in `Failed` saying the same thing, and `pause` and `delete` still succeed, since there was never a job to stop |
 | `StorageNotWritable` | `path`, `refusal` | The download folder can't be written. `refusal` says what to do: `PermissionNotGranted` (ask for `WRITE_EXTERNAL_STORAGE`), `LegacyStorageDisabled` (add `requestLegacyExternalStorage="true"`, §2.2), `StorageUnavailable` (nothing to ask for) |
 
 `StorageNotWritable` is decided by **writing to** the folder, not by reading the permission - on

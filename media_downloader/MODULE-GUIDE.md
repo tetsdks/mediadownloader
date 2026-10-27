@@ -1293,7 +1293,24 @@ its wiring in `MediaDownloaderComponent`.
   an exception, already reported, and wrapping it would only hide the host's own mistake.
   `enqueue` inserts the row before it schedules, so the row is marked `Failed` with
   `Download.SCHEDULER_UNAVAILABLE_MESSAGE` as well; without that it sat in `Queued` for ever with
-  nothing to run it, which is what the device showed. The limit of all this: a host that keeps
+  nothing to run it, which is what the device showed.
+- **Which rows a refused scheduler fails, and why stopping one is not refused.** The refusal can
+  only come from the scheduler being *built*, and that happens once in a process, so in a loop over
+  several downloads only the first start can raise it and nothing in the loop was scheduled. That
+  is what lets `startAll` fail every id the caller has just moved to `Queued` in one statement -
+  `resumeCollection` moves them all before it starts any - and `restoreUnfinished` fail every row
+  it was about to restore, which is the one that matters in the field: 1.1.8 left a row in `Queued`
+  on such a device each time it died between the insert and the job, and those rows would be
+  restored, and raise this again, at every start for ever. It does not rethrow, so the orphan-file
+  clean-up after it still runs, which it did not while this came out as an `Error`. Stopping is the
+  other way about: `stopWhatCouldBeRunning` swallows the refusal, because a scheduler that was
+  never built has never scheduled anything, so there is nothing to stop - and `delete` has removed
+  the row by the time it stops the job, so refusing there left the files on disk, the notification
+  up, and the host told that a download it can no longer see is still there. Starting is a download
+  the caller asked for and did not get, and stays a failure. None of the three calls on a built
+  scheduler is guarded: should `enqueueUniqueWork` itself ever raise a `LinkageError` it would
+  escape as an `Error` again, and guarding it would cost the invariant above, which is worth more
+  than a failure mode nothing has reported. The limit of all of it: a host that keeps
   `WorkManagerInitializer` has WorkManager initialised by `androidx.startup` before any module
   code runs, and on such a device it dies there, out of reach. The host this came from had
   removed it, which is why the module is in the path at all.

@@ -16,7 +16,7 @@ import java.util.concurrent.TimeUnit
  * with a growing pause. A lost connection therefore needs no watcher of its own - the job simply
  * waits for one.
  */
-internal class DownloadScheduler(private val workManager: WorkManager) {
+internal class DownloadScheduler private constructor(private val workManager: WorkManager) {
 
     /** [replace] restarts a job that exists; otherwise one already queued or running is kept. */
     fun start(id: Long, replace: Boolean) {
