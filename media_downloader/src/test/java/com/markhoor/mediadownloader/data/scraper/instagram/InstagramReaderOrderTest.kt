@@ -166,6 +166,33 @@ class InstagramReaderOrderTest {
         assertTrue("expected a plain nothing-found, got $failure", failure is NoMediaException)
     }
 
+    /**
+     * A resolver that could not be read at all is not a resolver saying the post is gone. Only the
+     * second rules a sign-in out, and reading the first as the second would answer a signed-out
+     * user "nothing here" for every post on the site the moment somebody else's api changed shape
+     * - which it has, twice. Measured against the api putting a bot check in front of itself: the
+     * reader came back with a json error, and the user still needs to sign in.
+     */
+    @Test
+    fun `a resolver that cannot be read is not a post that is gone`() = runTest {
+        val broken = object : SiteScraper() {
+            override suspend fun scrapeOrNull(url: String): ScrapedMediaDto? {
+                delay(120)
+                throw IllegalStateException("Unexpected JSON token at offset 11: <!DOCTYPE html>")
+            }
+        }
+        val scraper = scraperOf(
+            signedIn = nothing("signedIn", after = 50),
+            ours = nothing("preview", after = 60),
+            backup = broken,
+            cookies = CookieSource { null },
+        )
+
+        val failure = scraper.scrape(reel).exceptionOrNull()
+
+        assertTrue("a broken resolver was read as a post that is gone: $failure", failure is SignInRequiredException)
+    }
+
     @Test
     fun `when every reader comes back empty the failure is the sign-in one`() = runTest {
         val scraper = scraperOf(

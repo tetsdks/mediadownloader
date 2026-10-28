@@ -1,5 +1,7 @@
 package com.markhoor.mediadownloader.data.scraper.instagram
 
+import android.util.Log
+import com.markhoor.mediadownloader.core.Constants.Download
 import com.markhoor.mediadownloader.core.Constants.Instagram
 import com.markhoor.mediadownloader.core.Constants.Network
 import com.markhoor.mediadownloader.core.Constants.Scraping
@@ -10,6 +12,7 @@ import com.markhoor.mediadownloader.core.metaProperty
 import com.markhoor.mediadownloader.data.network.CookieSource
 import com.markhoor.mediadownloader.data.network.HttpFetcher
 import com.markhoor.mediadownloader.data.scraper.MediaGoneException
+import com.markhoor.mediadownloader.data.scraper.NoMediaException
 import com.markhoor.mediadownloader.data.scraper.ScrapedMediaDto
 import com.markhoor.mediadownloader.data.scraper.SignInRequiredException
 import com.markhoor.mediadownloader.data.scraper.SiteScraper
@@ -72,7 +75,7 @@ internal class InstagramScraper(
         val saidGone = AtomicBoolean(false)
         val backup = async {
             getInDevice.scrape(postUrl)
-                .onFailure { if (it is MediaGoneException) saidGone.set(true) }
+                .onFailure { noteWhyTheResolverSaidNothing(it, saidGone) }
                 .getOrNull()
         }
         val chosen = bestAnswer(
@@ -100,6 +103,26 @@ internal class InstagramScraper(
      * every reader of ours was locked out and only the resolver could tell the difference - asking
      * for a sign-in there sends the user to do something that cannot help.
      */
+    /**
+     * What the resolver's silence meant. [MediaGoneException] and [NoMediaException] are answers -
+     * it was read, and it had nothing or said the post is not there. Anything else is the resolver
+     * itself failing: its api is somebody else's, with no promises, and when it changes under this
+     * module every signed-out post quietly loses the one reader that did not need a session.
+     *
+     * That is said out loud because nothing else says it. The failure a host sees is the same
+     * `needsSignIn` either way - sign in is still what the user can do - so a resolver that has
+     * gone dark looks exactly like an ordinary signed-out post, and went unnoticed for a fortnight
+     * when its api put a bot check in front of itself. A line in the log is what would have shown
+     * it. See `GetInDeviceScraper` and HOST-GUIDE section 9.6.
+     */
+    private fun noteWhyTheResolverSaidNothing(error: Throwable, saidGone: AtomicBoolean) {
+        when (error) {
+            is MediaGoneException -> saidGone.set(true)
+            is NoMediaException -> Unit
+            else -> Log.w(Download.LOG_TAG, "The resolver could not be read; a signed-out post has nothing left to answer it", error)
+        }
+    }
+
     private fun refuseWithoutSession(postUrl: String, saidGone: Boolean): ScrapedMediaDto? {
         if (saidGone) return null
         val session = cookies.cookiesFor(postUrl)?.cookieValue(Instagram.SESSION_COOKIE)
