@@ -691,6 +691,14 @@ internal object Constants {
          * answer titled like the site itself is refused. TikTok and Pinterest answer an id they do
          * not have with an error, and are not affected; Instagram answers one with a picture
          * instead, which [PROFILE_PICTURE_PATH] is for.
+         *
+         * **A link that is real does not make the answer real, so do not relax this by checking
+         * the link.** Measured on a live `share/v/` link to a video inside a group: Facebook
+         * redirects it to the post's own `/videos/<id>/` page, so the link proves genuine by every
+         * test there is - and the service still answered it with somebody else's video, titled
+         * `Facebook`, in a payload identical field for field to the one a made-up id gets. The
+         * page was behind a login, the service could not read it either, and it answered anyway.
+         * Only the title gave it away. Confirming the link resolves would have let that through.
          */
         val SHELL_NAMES: Set<String> =
             setOf("facebook", "instagram", "threads", "tiktok", "pinterest", "twitter", "x", "watch")
