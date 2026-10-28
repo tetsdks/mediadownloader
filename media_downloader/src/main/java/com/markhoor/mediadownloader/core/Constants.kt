@@ -670,6 +670,17 @@ internal object Constants {
         const val TOKEN_HEADER = "x-request-token"
 
         /**
+         * A browser's. The api sits behind a bot check that answers anything without a browser's
+         * name `403` and a challenge page, which the reader then has to parse as json - measured
+         * on the token call, where a request with this is answered `200` and the same request with
+         * no `User-Agent`, with ktor's, or with okhttp's is answered the challenge. Both calls
+         * carry it: the token is useless if the call it is for is turned away.
+         */
+        const val USER_AGENT =
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) " +
+                "Chrome/135.0.0.0 Safari/537.36"
+
+        /**
          * Titles that mean the service read the site's own shell, not the post.
          *
          * Facebook answers a video id it does not have with the Watch feed rather than a `404`,

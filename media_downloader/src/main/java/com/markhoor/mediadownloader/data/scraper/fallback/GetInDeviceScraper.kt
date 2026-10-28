@@ -41,6 +41,9 @@ internal class GetInDeviceScraper(private val fetcher: HttpFetcher) : SiteScrape
         "Origin" to GetInDevice.ORIGIN,
         Network.HEADER_REFERER to "${GetInDevice.ORIGIN}/",
         "Accept" to Network.ACCEPT_JSON,
+        // Without it the bot check in front of the api answers a challenge page, which lands here
+        // as a json error and costs the fallback every link. See [GetInDevice.USER_AGENT].
+        Network.HEADER_USER_AGENT to GetInDevice.USER_AGENT,
     )
 
     override suspend fun scrapeOrNull(url: String): ScrapedMediaDto? {

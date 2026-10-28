@@ -1,6 +1,7 @@
 package com.markhoor.mediadownloader.data.scraper.fallback
 
 import com.markhoor.mediadownloader.core.Constants.GetInDevice
+import com.markhoor.mediadownloader.core.Constants.Network
 import com.markhoor.mediadownloader.core.Constants.QualityLabels
 import com.markhoor.mediadownloader.data.download.FakeMediaServer
 import com.markhoor.mediadownloader.data.network.HttpClientFactory
@@ -57,6 +58,26 @@ class GetInDeviceScraperTest {
         // The sound is the same file again; offering it as a second quality would be a lie.
         assertNull(quality.audioUrl)
         assertEquals("4d08c6ff10de05de.1791800414596", server.lastHeaders[GetInDevice.TOKEN_HEADER])
+    }
+
+    /**
+     * The bot check in front of the api answers anything without a browser's name a challenge
+     * page, which arrives here as a json error and costs the fallback every link it is asked for.
+     * Measured against the live api in October 2026: `200` with this, `403` and a challenge with
+     * no `User-Agent`, with ktor's and with okhttp's. Both calls are sent from the one header map,
+     * so asking the finished scrape answers for the token call as well.
+     */
+    @Test
+    fun `every call names a browser, or the bot check answers a page instead of json`() = runTest {
+        val (scraper, server) = scraperOver(
+            GetInDevice.TOKEN_URL to token,
+            GetInDevice.API_URL to reelAnswer,
+        )
+
+        scraper.scrape(reel).getOrThrow()
+
+        assertEquals(GetInDevice.USER_AGENT, server.lastHeaders[Network.HEADER_USER_AGENT])
+        assertTrue("not a browser's name: ${GetInDevice.USER_AGENT}", GetInDevice.USER_AGENT.startsWith("Mozilla/"))
     }
 
     @Test
