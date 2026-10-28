@@ -104,10 +104,12 @@ fun parseFailureMessage(error: MediaParseException): String = when (error) {
     is MediaParseException.SiteBlocked -> "Downloads aren't allowed from this site"
     is MediaParseException.SiteUnsupported -> "This site isn't on the supported list"
     is MediaParseException.LinkNotRecognised -> "That link isn't a post - a feed or a profile has nothing to read"
-    // The site answered, but only signs in users see a post; nothing was there to read.
+    // The site answered, but only signed-in users see a post; nothing was there to read. Said
+    // without promising the post is still there - a deleted one looks the same from outside.
     is MediaParseException.MediaNotFound ->
         if (error.needsSignIn) {
-            "This site only shows posts to someone signed in. Open it in the browser, sign in, and try again"
+            "This site only shows posts to someone signed in. Open it in the browser, sign in, " +
+                "and try again - or the post may no longer be there"
         } else {
             "Couldn't find any media behind that link"
         }

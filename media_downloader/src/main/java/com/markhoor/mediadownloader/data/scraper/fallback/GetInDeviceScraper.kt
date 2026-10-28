@@ -47,7 +47,10 @@ internal class GetInDeviceScraper(private val fetcher: HttpFetcher) : SiteScrape
     )
 
     override suspend fun scrapeOrNull(url: String): ScrapedMediaDto? {
-        val token = tokenOrNull() ?: return null
+        // Said as a failure, not as nothing found: no token means the api could not be read at
+        // all, which is the service being down or changed - not this link having no media behind
+        // it. Only the first is worth telling anyone about, and they are the same silence here.
+        val token = tokenOrNull() ?: error("No token from ${GetInDevice.TOKEN_URL}; the api could not be read")
         val answer = fetcher.postJson(
             url = GetInDevice.API_URL,
             body = buildJsonObject { put("url", url) }.toString(),

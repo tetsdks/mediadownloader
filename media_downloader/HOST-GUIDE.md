@@ -895,7 +895,7 @@ sealed class MediaParseException(val url: String, message: String, cause: Throwa
 | `SiteUnsupported` | Not a supported site in strict mode, or not a web link | Open it in the browser, or "Not supported" |
 | `LinkNotRecognised` | An allowed site, but not a post (a feed, a profile, a home page), or X without a key | Open it in the browser, where the page can be scanned |
 | `MediaNotFound` | Understood, but no media could be read (private, deleted, site changed); `cause` has the detail | "Couldn't find media", or open in the browser |
-| `MediaNotFound` with **`needsSignIn == true`** | The site only shows a post to someone signed in, and there is no session to read it with - nothing was there to read, rather than nothing there (§9.6). A post known to be deleted is **not** flagged this way, where the module could tell (§9.6) | "Open it in the browser and sign in, then try again" - the same button, worth a different label |
+| `MediaNotFound` with **`needsSignIn == true`** | The site only shows a post to someone signed in, and there is no session to read it with - nothing was there to read, rather than nothing there (§9.6). A post known to be deleted is **not** flagged this way, where the module could tell (§9.6) | "Open it in the browser and sign in, then try again - or the post may no longer be there" - the same button, worth a different label. Say both: the module cannot always tell a post nobody is let in to see from one that is gone (§9.6) |
 
 ### 6.2 `DownloadException` (from `download`, `pause`, `resume`, `delete`)
 
@@ -1679,8 +1679,11 @@ What the module does about it:
   an account that is signed in, so a post it cannot find is one no session would have shown, and
   the failure is then the plain not-found. It only knows about half the time - the service answers
   the same dead link either by naming it as missing or by timing out - so a deleted Instagram post
-  does still ask for a sign-in sometimes. Signing in is harmless advice there; it just reveals the
-  same empty page.
+  does still ask for a sign-in sometimes. That is why the message names both: signing in is what
+  the user can do, and it is not a promise the post is there. The resolver can also simply be
+  unreachable - its api has changed shape under this module twice, and once put a bot check in
+  front of itself - which is not the same as it saying a post is gone, and is written to the log
+  as a warning, because the failure a host sees is identical either way.
 - An Instagram post read through the resolver arrives with **no title** - the service does not send
   one. The file is still named `Instagram_<millis>`; a list that shows titles will show a blank, so
   give it a fallback of your own if that matters.

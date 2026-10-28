@@ -11,6 +11,7 @@ import com.markhoor.mediadownloader.data.scraper.NoMediaException
 import com.markhoor.mediadownloader.domain.models.MediaType
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -84,8 +85,15 @@ class GetInDeviceScraperTest {
     fun `without a token the api is not even asked`() = runTest {
         val (scraper, server) = scraperOver(GetInDevice.API_URL to reelAnswer)
 
-        assertTrue(scraper.scrape(reel).isFailure)
+        val failure = scraper.scrape(reel).exceptionOrNull()
+
+        assertTrue("expected a failure, got $failure", failure != null)
         assertTrue("the link was asked for anyway: ${server.requests}", server.requests.none { it.contains("download") })
+        // Not a nothing-found: no token is the api being unreadable, which is worth saying out
+        // loud, and a link with no media behind it is not. They were the same silence until a bot
+        // check in front of the api cost every signed-out Instagram post its only reader for a
+        // fortnight with nothing in the log. See InstagramScraper's note on the resolver.
+        assertFalse("an unreadable api was read as a link with nothing behind it", failure is NoMediaException)
     }
 
     /** What the api answers a request that carries no token; it is not media, and not a crash. */

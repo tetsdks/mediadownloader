@@ -52,7 +52,12 @@ class SignInNeededTest {
         val notFound = error as? MediaParseException.MediaNotFound
         assertTrue("expected a parse failure, got $error", notFound != null)
         assertTrue("the host is told a session is what is missing", notFound?.needsSignIn == true)
-        assertEquals("Sign in to this site in the browser, then try again", notFound?.message)
+        // Both halves on purpose: signing in is what the user can do, and it is not a promise the
+        // post is still there - see MediaNotFound.needsSignIn.
+        assertEquals(
+            "Sign in to this site in the browser and try again - or this post may no longer exist",
+            notFound?.message,
+        )
     }
 
     @Test
