@@ -1549,6 +1549,15 @@ ANDROID_SERIAL=<device> ./gradlew --no-daemon :media_downloader:connectedDebugAn
   -Pandroid.testInstrumentationRunnerArguments.performanceMode=LowEnd
 ```
 
+`ScenarioDeviceCheck` holds what `DownloadRepositoryImpl` does against the real scheduler, database
+and files: a download queued with no connection and finished when it returns, delete of a finished
+row and of one still fetching, a collection queued, paused and resumed as one unit, the
+notification appearing and going with the row, and a link that answers 404. It lives on the device
+because the unit tests reach that class only through `FakeDownloadRepository`, which records the
+call and answers success - so they stay green whether or not the real one works, and every defect
+found in it so far was invisible to them. It **toggles airplane mode**, so run it over USB rather
+than wifi adb.
+
 `SoundAndScriptDeviceCheck` holds the two that need the device itself rather than a reading of the
 code: a video whose sound is a second file - interrupted, and paused between the two tracks - and
 the fallback at the end of `twitter.js` run by the phone's own Chromium. Its dropped-connection
