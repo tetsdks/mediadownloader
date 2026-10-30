@@ -10,6 +10,7 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.markhoor.mediadownloader.MediaDownloader
 import com.markhoor.mediadownloader.core.Constants.Download
+import com.markhoor.mediadownloader.core.mediaUrlsMayBeLogged
 import com.markhoor.mediadownloader.data.download.DownloadTask
 import com.markhoor.mediadownloader.data.download.ProgressMeter
 import com.markhoor.mediadownloader.data.download.UnusableMediaException
@@ -184,11 +185,11 @@ internal class DownloadWorker(
      * what the link offered: a playlist entry is queued with no url at all and reads its own page
      * here, in its turn, and a paused row resumed days later still carries the url it was given.
      *
-     * Silent unless `log.tag.MediaDownloader` is set to `DEBUG`, for the same reason as
-     * `MediaModel.logDownloadableUrls` - a media url can carry the session that asked for it.
+     * Silent unless `mediaUrlsMayBeLogged` - never in a released app, and otherwise only when
+     * asked - because a media url can carry the session that asked for it.
      */
     private fun logWhatIsBeingFetched(entity: DownloadEntity) {
-        if (!Log.isLoggable(Download.LOG_TAG, Log.DEBUG)) return
+        if (!mediaUrlsMayBeLogged()) return
         Log.d(Download.LOG_TAG, "Fetching #${entity.id} \"${entity.title}\" ${entity.qualityLabel} ${entity.mediaUrl}")
         entity.audioUrl?.let { Log.d(Download.LOG_TAG, "      sound for #${entity.id} $it") }
     }

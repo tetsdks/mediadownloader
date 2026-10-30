@@ -4,6 +4,7 @@ import android.content.ComponentCallbacks2
 import android.content.Context
 import android.content.res.Configuration
 import com.markhoor.mediadownloader.core.Constants
+import com.markhoor.mediadownloader.core.noteWhetherMediaUrlsMayBeLogged
 import com.markhoor.mediadownloader.data.network.SafeProxySelector
 import com.markhoor.mediadownloader.di.MediaDownloaderComponent
 import com.markhoor.mediadownloader.domain.models.DownloadException
@@ -63,6 +64,9 @@ object MediaDownloader {
                 // proxy selector when it is built. See SafeProxySelector.install.
                 if (config.guardCarrierProxies) SafeProxySelector.install()
                 val appContext = context.applicationContext
+                // Before anything can find media: whether a url may be logged at all is decided
+                // by this app being debuggable, and nothing reads it until it has been asked.
+                noteWhetherMediaUrlsMayBeLogged(appContext)
                 val created = MediaDownloaderComponent(appContext, config)
                 component = created
                 appContext.registerComponentCallbacks(MemoryPressureCallbacks(created))

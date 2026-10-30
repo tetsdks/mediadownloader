@@ -184,6 +184,19 @@ tweeload.apiKey=YOUR_KEY
 
 then `./gradlew :app:installDebug`.
 
+Two logs help when a download turns out to be the wrong file - both **debug builds only**, and
+nothing is printed by a release build whatever is set:
+
+```bash
+adb shell setprop log.tag.MediaDownloader DEBUG   # then: every url the module offers or fetches
+adb logcat -s MediaDownloader                     # the library
+adb logcat -s DownloaderDemoPick                  # the demo: the one quality a Download button sent
+```
+
+`DownloaderDemoPick` is the demo app's own, written where it starts a download, so the link behind
+the button that was pressed can be read without the rest. The library's tag is documented in
+[`media_downloader/HOST-GUIDE.md`](media_downloader/HOST-GUIDE.md) §11.1.
+
 ## Building and publishing
 
 ```bash

@@ -42,7 +42,9 @@ import com.markhoor.mediadownloader.presentation.browser.BrowserViewModel
 import com.markhoor.mediadownloader.presentation.downloads.DownloadsEvent
 import com.markhoor.mediadownloader.presentation.downloads.DownloadsViewModel
 import com.markhoor.mediadownloader.presentation.linkparse.LinkParseViewModel
+import com.media.downloader.BuildConfig
 import com.media.downloader.ui.browser.BrowserHome
+import com.media.downloader.ui.common.formatBytes
 import com.media.downloader.ui.browser.BrowserScreen
 import com.media.downloader.ui.common.downloadFailureMessage
 import com.media.downloader.ui.common.storageRefusalMessage
@@ -202,11 +204,48 @@ fun DemoRoot(
 
 /** What both screens call. Nothing else starts a download. */
 class DownloadGate internal constructor(private val start: (DownloadIntent) -> Unit) {
-    fun download(media: MediaModel, quality: MediaQualityModel) = start(DownloadIntent.One(media, quality))
+    fun download(media: MediaModel, quality: MediaQualityModel) {
+        logWhatWasPicked(media, quality)
+        start(DownloadIntent.One(media, quality))
+    }
 
     /** A playlist and the like: the module reads and queues each entry itself. */
-    fun downloadAll(collection: MediaCollectionModel, quality: String?) =
+    fun downloadAll(collection: MediaCollectionModel, quality: String?) {
+        if (BuildConfig.DEBUG) {
+            Log.d(
+                PICKED_LOG_TAG,
+                "Download all: \"${collection.title}\" - ${collection.items.size} entries at " +
+                    "${quality ?: "whatever each page offers"}, from ${collection.sourceUrl}",
+            )
+        }
         start(DownloadIntent.All(collection, quality))
+    }
+
+    /**
+     * The link behind the quality whose Download button was pressed, under its own tag so it can
+     * be read on its own - `adb logcat -s DownloaderDemoPick` - rather than hunted for among
+     * everything the module says while it works.
+     *
+     * This is the demo app's own log, not the module's. The module prints every quality it offers
+     * (tag `MediaDownloader`, HOST-GUIDE §11.1); this prints the one a person chose, which is the
+     * question being answered when a download turns out to be the wrong file. Debug builds only:
+     * a media url commonly carries the session it was minted for, which is nothing to write into
+     * a shipped app's log.
+     */
+    private fun logWhatWasPicked(media: MediaModel, quality: MediaQualityModel) {
+        if (!BuildConfig.DEBUG) return
+        val size = quality.sizeBytes?.let { formatBytes(it) } ?: "size unknown"
+        Log.d(PICKED_LOG_TAG, "Picked ${quality.label} ${quality.type} ($size) of \"${media.title}\"")
+        Log.d(PICKED_LOG_TAG, "  from ${media.sourceUrl}")
+        Log.d(PICKED_LOG_TAG, "  link ${quality.url}")
+        // Its own line: both urls run to several hundred characters and logcat cuts a long line.
+        quality.audioUrl?.let { Log.d(PICKED_LOG_TAG, "  sound $it") }
+    }
+
+    private companion object {
+        /** Deliberately not the module's `MediaDownloader`, so one can be read without the other. */
+        const val PICKED_LOG_TAG = "DownloaderDemoPick"
+    }
 }
 
 /** What the gate was asked to start, kept so it can be retried once a permission is granted. */

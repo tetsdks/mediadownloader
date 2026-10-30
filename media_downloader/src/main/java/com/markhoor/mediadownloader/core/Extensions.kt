@@ -1,5 +1,7 @@
 package com.markhoor.mediadownloader.core
 
+import android.content.Context
+import android.content.pm.ApplicationInfo
 import android.util.Log
 import com.markhoor.mediadownloader.core.Constants.Download
 import com.markhoor.mediadownloader.core.Constants.MediaSize
@@ -448,21 +450,53 @@ internal fun JsonElement?.text(key: String): String? =
 // region Media
 
 /**
- * Every url this media can be downloaded from, written to logcat under [Download.LOG_TAG], one
- * line per quality and another for a sound file kept apart from the picture.
+ * Whether the app this module is running inside was built to be debugged. Read by
+ * [mediaUrlsMayBeLogged], which is the only thing it is for.
  *
- * **Silent unless it is asked for**, with
- * `adb shell setprop log.tag.MediaDownloader DEBUG`, because a media url is not harmless to
- * print: a site mints one for whoever asked, and several carry that request's session or a
- * signature for it in the query string - which is the thing this module refuses to print
- * anywhere else (`MediaDownloaderConfig.toString`, `DownloadStorage`). A host app shipping with
- * it left on would write a user's session into a log any other app with log access can read.
- * They are also long enough that logcat truncates a line holding more than one.
+ * `false` until [noteWhetherMediaUrlsMayBeLogged] says otherwise, so a url is never printed by a
+ * module that has not been initialised - and never at all in a released app, whose flag is off
+ * and cannot be turned on without rebuilding it. @Volatile because it is written once on
+ * whichever thread called `initialize` and read from every thread that finds media.
+ */
+@Volatile
+private var hostAppIsDebuggable = false
+
+/**
+ * Remembers whether [context]'s app is debuggable, for [mediaUrlsMayBeLogged]. Asked once, from
+ * `MediaDownloader.initialize`: the answer is fixed for the life of the process, and it is a
+ * `PackageManager` field rather than anything this module can be told.
+ */
+internal fun noteWhetherMediaUrlsMayBeLogged(context: Context) {
+    hostAppIsDebuggable = context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
+}
+
+/**
+ * Whether a media url may be written to the log at all. **Two gates, and the first cannot be
+ * opened from outside:**
+ *
+ * 1. the app is debuggable - a release build of a host app never prints one, whatever anyone sets;
+ * 2. and somebody asked, with `adb shell setprop log.tag.MediaDownloader DEBUG`.
+ *
+ * Both, because a media url is not harmless to print. A site mints one for whoever asked, and
+ * plenty carry that request's session or a signature over it in the query string - the thing this
+ * module refuses to print anywhere else (`MediaDownloaderConfig.toString`, `DownloadStorage`).
+ * The property alone would be one `adb` command away from writing a user's session into a log any
+ * app with log access can read, on a shipped build, which is not a thing to leave reachable.
+ */
+internal fun mediaUrlsMayBeLogged(): Boolean =
+    hostAppIsDebuggable && Log.isLoggable(Download.LOG_TAG, Log.DEBUG)
+
+/**
+ * Every url this media can be downloaded from, written to logcat under [Download.LOG_TAG], one
+ * line per quality and another for a sound file kept apart from the picture. One url per line
+ * because they run long enough that logcat truncates a line holding two.
+ *
+ * Silent unless [mediaUrlsMayBeLogged], which is never in a released app.
  *
  * @param found which reader answered, so the same link read two ways can be told apart.
  */
 internal fun MediaModel.logDownloadableUrls(found: String) {
-    if (!Log.isLoggable(Download.LOG_TAG, Log.DEBUG)) return
+    if (!mediaUrlsMayBeLogged()) return
     downloadableUrlLines(found).forEach { Log.d(Download.LOG_TAG, it) }
 }
 

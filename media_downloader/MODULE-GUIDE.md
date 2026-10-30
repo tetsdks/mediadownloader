@@ -205,14 +205,23 @@ A failure is always a `MediaParseException`: `SiteBlocked`, `SiteUnsupported`,
 
 ### Seeing what it found
 
-`adb shell setprop log.tag.MediaDownloader DEBUG` prints every url the module offers
-(`MediaModel.logDownloadableUrls`, from `MediaParserRepositoryImpl` for a parsed link and
-`MediaDetectionSession` for one found on a page) and the url each download actually pulls
-(`DownloadWorker.logWhatIsBeingFetched`), under tag `MediaDownloader`. Off unless the property is
-set, because a media url commonly carries the session or signature of the request it was minted
-for - the same thing `MediaDownloaderConfig.toString` refuses to print. HOST-GUIDE §11.1 has the
-line formats; the formatting itself is a pure function (`downloadableUrlLines`) because `Log`
-answers a default under unit tests, so anything behind the gate cannot be read back in one.
+`adb shell setprop log.tag.MediaDownloader DEBUG`, **in a debuggable app**, prints every url the
+module offers (`MediaModel.logDownloadableUrls`, from `MediaParserRepositoryImpl` for a parsed link
+and `MediaDetectionSession` for one found on a page) and the url each download actually pulls
+(`DownloadWorker.logWhatIsBeingFetched`), under tag `MediaDownloader`.
+
+`mediaUrlsMayBeLogged` is the one gate both ask, and it is two conditions: the host app carries
+`ApplicationInfo.FLAG_DEBUGGABLE` - noted once from `initialize`, since a library's own
+`BuildConfig.DEBUG` says nothing about the app it was built into - **and** the property is set. A
+media url commonly carries the session or signature of the request it was minted for, the same
+thing `MediaDownloaderConfig.toString` refuses to print, so the property alone would leave a
+shipped app one `adb` command from logging a user's session.
+
+HOST-GUIDE §11.1 has the line formats. The formatting is a pure function
+(`downloadableUrlLines`) because `Log` answers a default under unit tests: with the gate shut
+there, nothing behind it can be read back in one, so only the gate would have been testable. The
+gate itself is proven on a device - a release-built, non-debuggable demo with both properties set
+parsed a four-quality link and finished a download in silence.
 
 To add the module to a project: copy the `media_downloader/` folder, add
 `include(":media_downloader")` to `settings.gradle.kts`, and

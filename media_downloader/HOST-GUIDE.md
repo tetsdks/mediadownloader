@@ -1797,14 +1797,14 @@ switches, or extended with `extraBlockedHosts`), and the supported list (change
 | Typed search does nothing in the browser | Text with spaces passed to `load` | URL-encode it into a search url (§8.2) |
 | Downloads built by the wrong worker / crash in a factory | A custom `WorkerFactory` answering every class | §9.5 |
 | Logs | Failures the module cannot return are logged under tag `MediaDownloader` | `adb logcat -s MediaDownloader` |
-| I cannot tell which url a download is actually fetching | Every url the module offers or fetches can be printed, but it is off by default - a media url is minted for whoever asked and often carries that request's session or a signature for it, so a build shipped with it on writes a user's session into a log any app with log access can read | `adb shell setprop log.tag.MediaDownloader DEBUG`, then `adb logcat -s MediaDownloader`. It survives until reboot; `setprop log.tag.MediaDownloader INFO` ends it. §11.1 |
+| I cannot tell which url a download is actually fetching | Every url the module offers or fetches can be printed, but only in a **debuggable** build and only when asked - a media url is minted for whoever asked and often carries that request's session or a signature for it | In your debug build: `adb shell setprop log.tag.MediaDownloader DEBUG`, then `adb logcat -s MediaDownloader`. A release build of your app prints nothing whatever is set. §11.1 |
 
 
 ### 11.1 Printing every media url
 
-`adb shell setprop log.tag.MediaDownloader DEBUG` makes the module write, under tag
-`MediaDownloader`, every url it offers and every url it fetches. Three lines say it, and which one
-it is matters:
+In a **debuggable** build of your app, `adb shell setprop log.tag.MediaDownloader DEBUG` makes the
+module write, under tag `MediaDownloader`, every url it offers and every url it fetches. Three
+lines say it, and which one it is matters:
 
 ```
 Parsed: "<title>" - 4 downloadable, behind <the link>      the parser read a link
@@ -1818,10 +1818,20 @@ Fetching #12 "<title>" 720p <url>                          what a download is re
 and reads its own page when its turn comes, and a row paused for a day resumes on the url it was
 given - so `Parsed` tells you what a site offered and `Fetching` tells you what went out.
 
-It is **off unless you turn it on**, deliberately: these urls carry sessions and signatures, they
-run to several hundred characters, and logcat keeps only the first part of an over-long line.
-Nothing is logged at all in a build where the property is unset, so leaving the call in costs
-nothing. The property is not kept over a reboot, and
+**Two gates, and your release build cannot open the first one:**
+
+1. the app is debuggable - `ApplicationInfo.FLAG_DEBUGGABLE`, read once in `initialize`. A release
+   build of your app prints nothing, whatever anyone sets, on any device;
+2. and the property above is set.
+
+Both, deliberately. These urls carry sessions and signatures, so the property on its own would
+leave a shipped app one `adb` command away from writing a user's session into a log every app with
+log access can read. With the first gate shut nothing reaches the second, so leaving the calls in
+release code costs nothing - there is no `BuildConfig.DEBUG` of yours for a library to read, which
+is why it is the app's own flag that decides.
+
+They are also long enough that logcat keeps only the first part of an over-long line, which is why
+a quality and its sound are on separate lines. The property is not kept over a reboot, and
 `adb shell setprop log.tag.MediaDownloader INFO` ends it sooner.
 
 ---
