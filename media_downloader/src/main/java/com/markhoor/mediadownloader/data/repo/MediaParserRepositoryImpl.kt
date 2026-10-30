@@ -5,6 +5,7 @@ import com.markhoor.mediadownloader.core.asMediaTitle
 import com.markhoor.mediadownloader.core.cleanTitle
 import com.markhoor.mediadownloader.core.isHlsPlaylistUrl
 import com.markhoor.mediadownloader.core.isHttpUrl
+import com.markhoor.mediadownloader.core.logDownloadableUrls
 import com.markhoor.mediadownloader.core.sensibleSize
 import com.markhoor.mediadownloader.data.hls.HlsMedia
 import com.markhoor.mediadownloader.data.hls.HlsQualityReader
@@ -75,7 +76,7 @@ internal class MediaParserRepositoryImpl(
             // What the site said, and failing that what its stream turned out to be: several sites
             // hand over a playlist and say nothing else about the video at all.
             durationMillis = scraped.durationMillis ?: expanded.durationMillis,
-        )
+        ).also { it.logDownloadableUrls("Parsed") }
     }
 
     /** The scraped qualities, or - when the only one is an HLS playlist - the qualities it lists. */

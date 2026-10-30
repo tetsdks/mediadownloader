@@ -1,5 +1,7 @@
 package com.markhoor.mediadownloader.core
 
+import com.markhoor.mediadownloader.domain.models.MediaModel
+import com.markhoor.mediadownloader.domain.models.MediaQualityModel
 import com.markhoor.mediadownloader.domain.models.MediaType
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
@@ -370,5 +372,42 @@ class ExtensionsTest {
         assertEquals(1_000, "t".repeat(2_000_000).asBoundedTitle().length)
         assertEquals("a short one", "a short one".asBoundedTitle())
         assertEquals("", null.asBoundedTitle())
+    }
+
+    @Test
+    fun `downloadableUrlLines names every quality's url, and a sound file on its own line`() {
+        val media = MediaModel(
+            title = "A clip",
+            thumbnailUrl = "https://cdn.example.com/thumb.jpg",
+            sourceUrl = "https://example.com/p/1",
+            qualities = listOf(
+                MediaQualityModel("https://cdn.example.com/720.mp4", "720p", MediaType.Video, sizeBytes = 4_137_834),
+                MediaQualityModel(
+                    url = "https://cdn.example.com/1080.m3u8",
+                    label = "1080p",
+                    type = MediaType.Video,
+                    audioUrl = "https://cdn.example.com/audio.m3u8",
+                ),
+            ),
+        )
+
+        val lines = media.downloadableUrlLines("Parsed")
+
+        assertEquals(4, lines.size)
+        assertEquals("""Parsed: "A clip" - 2 downloadable, behind https://example.com/p/1""", lines[0])
+        assertEquals("  [1/2] 720p Video (4137834 bytes) https://cdn.example.com/720.mp4", lines[1])
+        assertEquals("  [2/2] 1080p Video (size unknown) https://cdn.example.com/1080.m3u8", lines[2])
+        // Apart from its quality's line: both are long enough that logcat would cut one holding both.
+        assertEquals("      sound for [2] https://cdn.example.com/audio.m3u8", lines[3])
+    }
+
+    @Test
+    fun `downloadableUrlLines still says the link when a site named nothing and gave nothing`() {
+        val nameless = MediaModel(title = "", thumbnailUrl = null, qualities = emptyList(), sourceUrl = "https://example.com/x")
+
+        assertEquals(
+            listOf("""Found on the page: "untitled" - 0 downloadable, behind https://example.com/x"""),
+            nameless.downloadableUrlLines("Found on the page"),
+        )
     }
 }

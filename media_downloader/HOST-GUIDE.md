@@ -1797,6 +1797,32 @@ switches, or extended with `extraBlockedHosts`), and the supported list (change
 | Typed search does nothing in the browser | Text with spaces passed to `load` | URL-encode it into a search url (§8.2) |
 | Downloads built by the wrong worker / crash in a factory | A custom `WorkerFactory` answering every class | §9.5 |
 | Logs | Failures the module cannot return are logged under tag `MediaDownloader` | `adb logcat -s MediaDownloader` |
+| I cannot tell which url a download is actually fetching | Every url the module offers or fetches can be printed, but it is off by default - a media url is minted for whoever asked and often carries that request's session or a signature for it, so a build shipped with it on writes a user's session into a log any app with log access can read | `adb shell setprop log.tag.MediaDownloader DEBUG`, then `adb logcat -s MediaDownloader`. It survives until reboot; `setprop log.tag.MediaDownloader INFO` ends it. §11.1 |
+
+
+### 11.1 Printing every media url
+
+`adb shell setprop log.tag.MediaDownloader DEBUG` makes the module write, under tag
+`MediaDownloader`, every url it offers and every url it fetches. Three lines say it, and which one
+it is matters:
+
+```
+Parsed: "<title>" - 4 downloadable, behind <the link>      the parser read a link
+  [1/4] 720p Video (1534480 bytes) <url>                   one offered quality
+      sound for [1] <url>                                  its sound, when that is a second file
+Found on the page: "<title>" - 1 downloadable, behind <url> the browser found media on a page
+Fetching #12 "<title>" 720p <url>                          what a download is really pulling
+```
+
+`Fetching` is not always one of the urls above it. A playlist entry is queued with no url at all
+and reads its own page when its turn comes, and a row paused for a day resumes on the url it was
+given - so `Parsed` tells you what a site offered and `Fetching` tells you what went out.
+
+It is **off unless you turn it on**, deliberately: these urls carry sessions and signatures, they
+run to several hundred characters, and logcat keeps only the first part of an over-long line.
+Nothing is logged at all in a build where the property is unset, so leaving the call in costs
+nothing. The property is not kept over a reboot, and
+`adb shell setprop log.tag.MediaDownloader INFO` ends it sooner.
 
 ---
 

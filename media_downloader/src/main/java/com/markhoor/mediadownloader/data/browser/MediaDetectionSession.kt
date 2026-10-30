@@ -16,6 +16,7 @@ import com.markhoor.mediadownloader.core.imdbVideoPageFromStream
 import com.markhoor.mediadownloader.core.isSamePageAs
 import com.markhoor.mediadownloader.core.isSamePathAs
 import com.markhoor.mediadownloader.core.isSpelledOutBy
+import com.markhoor.mediadownloader.core.logDownloadableUrls
 import com.markhoor.mediadownloader.core.titleFromSlug
 import com.markhoor.mediadownloader.data.network.CookieSource
 import com.markhoor.mediadownloader.domain.models.DetectionEvent
@@ -822,6 +823,7 @@ internal class MediaDetectionSession(
                         page.scriptFoundMedia = false
                     }
                 }
+                relabelled.logDownloadableUrls("Found on the page")
                 publish { it.copy(media = relabelled, isDescribingMedia = false) }
             }
         }

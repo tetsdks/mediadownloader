@@ -96,6 +96,7 @@ internal class DownloadWorker(
             queued
         }
 
+        logWhatIsBeingFetched(entity)
         val meter = ProgressMeter(startBytes = entity.downloadedBytes, startTotal = entity.totalBytes)
         val task = DownloadTask(
             url = entity.mediaUrl,
@@ -176,6 +177,20 @@ internal class DownloadWorker(
     private sealed interface PageRead {
         data class Read(val entity: DownloadEntity) : PageRead
         data class Failed(val result: Result) : PageRead
+    }
+
+    /**
+     * The url this row is actually fetched from, under [Download.LOG_TAG]. Not the same thing as
+     * what the link offered: a playlist entry is queued with no url at all and reads its own page
+     * here, in its turn, and a paused row resumed days later still carries the url it was given.
+     *
+     * Silent unless `log.tag.MediaDownloader` is set to `DEBUG`, for the same reason as
+     * `MediaModel.logDownloadableUrls` - a media url can carry the session that asked for it.
+     */
+    private fun logWhatIsBeingFetched(entity: DownloadEntity) {
+        if (!Log.isLoggable(Download.LOG_TAG, Log.DEBUG)) return
+        Log.d(Download.LOG_TAG, "Fetching #${entity.id} \"${entity.title}\" ${entity.qualityLabel} ${entity.mediaUrl}")
+        entity.audioUrl?.let { Log.d(Download.LOG_TAG, "      sound for #${entity.id} $it") }
     }
 
     private suspend fun readItsPage(

@@ -203,6 +203,17 @@ the headers its download needs and, for streams that keep sound apart, an `audio
 A failure is always a `MediaParseException`: `SiteBlocked`, `SiteUnsupported`,
 `LinkNotRecognised` (an allowed site, but not a post), or `MediaNotFound`.
 
+### Seeing what it found
+
+`adb shell setprop log.tag.MediaDownloader DEBUG` prints every url the module offers
+(`MediaModel.logDownloadableUrls`, from `MediaParserRepositoryImpl` for a parsed link and
+`MediaDetectionSession` for one found on a page) and the url each download actually pulls
+(`DownloadWorker.logWhatIsBeingFetched`), under tag `MediaDownloader`. Off unless the property is
+set, because a media url commonly carries the session or signature of the request it was minted
+for - the same thing `MediaDownloaderConfig.toString` refuses to print. HOST-GUIDE §11.1 has the
+line formats; the formatting itself is a pure function (`downloadableUrlLines`) because `Log`
+answers a default under unit tests, so anything behind the gate cannot be read back in one.
+
 To add the module to a project: copy the `media_downloader/` folder, add
 `include(":media_downloader")` to `settings.gradle.kts`, and
 `implementation(project(":media_downloader"))` to the app.

@@ -5,6 +5,7 @@ import com.markhoor.mediadownloader.core.Constants.Download
 import com.markhoor.mediadownloader.core.Constants.MediaSize
 import com.markhoor.mediadownloader.core.Constants.Storage
 import com.markhoor.mediadownloader.core.Constants.Url
+import com.markhoor.mediadownloader.domain.models.MediaModel
 import com.markhoor.mediadownloader.domain.models.MediaType
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
@@ -445,6 +446,42 @@ internal fun JsonElement?.text(key: String): String? =
 // endregion
 
 // region Media
+
+/**
+ * Every url this media can be downloaded from, written to logcat under [Download.LOG_TAG], one
+ * line per quality and another for a sound file kept apart from the picture.
+ *
+ * **Silent unless it is asked for**, with
+ * `adb shell setprop log.tag.MediaDownloader DEBUG`, because a media url is not harmless to
+ * print: a site mints one for whoever asked, and several carry that request's session or a
+ * signature for it in the query string - which is the thing this module refuses to print
+ * anywhere else (`MediaDownloaderConfig.toString`, `DownloadStorage`). A host app shipping with
+ * it left on would write a user's session into a log any other app with log access can read.
+ * They are also long enough that logcat truncates a line holding more than one.
+ *
+ * @param found which reader answered, so the same link read two ways can be told apart.
+ */
+internal fun MediaModel.logDownloadableUrls(found: String) {
+    if (!Log.isLoggable(Download.LOG_TAG, Log.DEBUG)) return
+    downloadableUrlLines(found).forEach { Log.d(Download.LOG_TAG, it) }
+}
+
+/**
+ * What [logDownloadableUrls] writes. Apart from the writing so it can be read back in a test:
+ * `Log` answers every call with a default under unit tests, so the gate is always shut there and
+ * nothing that goes through it can be checked.
+ */
+internal fun MediaModel.downloadableUrlLines(found: String): List<String> = buildList {
+    val named = title.ifBlank { "untitled" }
+    add("$found: \"$named\" - ${qualities.size} downloadable, behind $sourceUrl")
+    qualities.forEachIndexed { index, quality ->
+        val size = quality.sizeBytes?.let { "$it bytes" } ?: "size unknown"
+        add("  [${index + 1}/${qualities.size}] ${quality.label} ${quality.type} ($size) ${quality.url}")
+        // Said on its own line rather than appended: both are urls of several hundred characters
+        // and logcat keeps only the first part of a line that long.
+        quality.audioUrl?.let { add("      sound for [${index + 1}] $it") }
+    }
+}
 
 /**
  * This size as it should be shown, or `null` where it cannot be true: nothing, a player's
