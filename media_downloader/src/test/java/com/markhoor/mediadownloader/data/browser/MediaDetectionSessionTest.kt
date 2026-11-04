@@ -117,6 +117,57 @@ class MediaDetectionSessionTest {
         assertFalse(session.state.first { it.hasScriptButtons }.showDownloadButton)
     }
 
+    /**
+     * A press on Instagram's reels feed, which is what a host app shows the first time it is ever
+     * opened: with no session yet it sends the browser to `instagram.com/reels/` rather than to
+     * `explore`, and the address stays the bare feed until the page settles on the reel it is
+     * playing. The script reports the press with that address as the card's page.
+     *
+     * The feed is not a post, and asking a parser for one gets whichever reel the feed happens to
+     * be serving - a stranger's video, offered under the reel on screen. So the parser is not
+     * asked at all, and the answer is the file the player itself said it was playing, which is
+     * the only thing here that knows which reel that is.
+     */
+    @Test
+    fun `a press on the reels feed is answered by the player's own file, never by reading the feed`() = runTest {
+        val asked = mutableListOf<String>()
+        val feed = "https://www.instagram.com/reels/"
+        val playing = "https://instagram.fna.fbcdn.net/o1/v/t2/f2/m86/the-reel-on-screen.mp4"
+        val (session) = harness(
+            files = mapOf(playing to video),
+            parse = { url ->
+                asked += url
+                Result.success(someoneElsesReel)
+            },
+        )
+        session.onSignal(PageSignal.Attached("TestAgent"))
+        session.commit(feed)
+        session.onSignal(PageSignal.Script(pressOn(cardPageUrl = feed, file = playing)))
+
+        val offered = session.state.first { it.media != null }.media
+        assertEquals("the file the player named", playing, offered?.qualities?.single()?.url)
+        assertEquals("the feed was read as a post", emptyList<String>(), asked)
+    }
+
+    /** The same press once the page has settled on a reel: that link names a post, so it is read. */
+    @Test
+    fun `a press on a reel's own page is read by its own link`() = runTest {
+        val asked = mutableListOf<String>()
+        val reelPage = "https://www.instagram.com/reels/DfKmFNwAnFW/"
+        val (session) = harness(
+            parse = { url ->
+                asked += url
+                Result.success(someoneElsesReel.copy(sourceUrl = url))
+            },
+        )
+        session.onSignal(PageSignal.Attached("TestAgent"))
+        session.commit("https://www.instagram.com/reels/")
+        session.onSignal(PageSignal.Script(pressOn(cardPageUrl = reelPage, file = null)))
+
+        session.state.first { it.media != null }
+        assertEquals(listOf(reelPage), asked)
+    }
+
     @Test
     fun `background work that throws is logged, not raised into the screen's scope`() = runTest {
         // The WebView's cookie store throws while the WebView package is being updated.
@@ -664,4 +715,28 @@ class MediaDetectionSessionTest {
             scripts.any { PageScript.NoCapture.fileName in it },
         )
     }
+
+    /** What a site script sends when somebody presses a card's download button. */
+    private fun pressOn(cardPageUrl: String, file: String?) = ScriptMessage.MediaRequested(
+        cardPageUrl = cardPageUrl,
+        title = null,
+        thumbnail = null,
+        mediaUrl = file,
+        isPlaying = true,
+        isImage = false,
+    )
+
+    /** What reading a feed answers with: a real video, belonging to somebody else entirely. */
+    private val someoneElsesReel = MediaModel(
+        title = "Full video out on my YouTube channel!",
+        thumbnailUrl = null,
+        sourceUrl = "https://www.instagram.com/reels/",
+        qualities = listOf(
+            MediaQualityModel(
+                url = "https://instagram.fna.fbcdn.net/o1/v/t2/f2/m86/somebody-elses-reel.mp4",
+                label = "HD",
+                type = MediaType.Video,
+            ),
+        ),
+    )
 }
