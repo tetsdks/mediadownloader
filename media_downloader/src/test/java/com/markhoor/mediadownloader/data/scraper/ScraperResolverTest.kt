@@ -48,6 +48,12 @@ class ScraperResolverTest {
             "https://www.facebook.com/share/p/abc/" to listOf("facebookShare"),
             "https://www.instagram.com/reel/abc/" to listOf("instagram"),
             "https://www.instagram.com/p/abc/" to listOf("instagram"),
+            // What the address becomes once the reels page settles on one reel, and what a person
+            // copies out of it: both name a post and must keep being read as one.
+            "https://www.instagram.com/reels/DfMiEk3NEmg/" to listOf("instagram"),
+            "https://www.instagram.com/reels/abc_12/?igsh=x" to listOf("instagram"),
+            "https://instagram.com/p/DQN9eI6CF55" to listOf("instagram"),
+            "https://www.instagram.com/someone/reel/abc/" to listOf("instagram"),
             "https://www.threads.com/@someone/post/abc" to listOf("instagram"),
             // The link Threads' own share sheet hands out; the post is read out of its page.
             "https://www.threads.com/share/BATDAqdzRY/" to listOf("instagram"),
@@ -79,6 +85,14 @@ class ScraperResolverTest {
             "https://m.facebook.com/watch/",
             "https://x.com/someone",
             "https://www.instagram.com/someone/",
+            // Instagram feeds. See `a reels feed is not the reel being watched`.
+            "https://www.instagram.com/reels/",
+            "https://www.instagram.com/reels",
+            "https://www.instagram.com/reels/?next=1",
+            "https://www.instagram.com/someone/reels/",
+            "https://www.instagram.com/reels/audio/17901234567890123/",
+            "https://www.instagram.com/explore/",
+            "https://www.instagram.com/p/",
             "https://www.pinterest.com/search/pins/?q=cats",
             // A tube site's own pages that name no video.
             "https://www.pornhub.com/",
@@ -86,6 +100,30 @@ class ScraperResolverTest {
             "https://www.reddit.com/r/videos/",
             "",
         ).forEach { assertTrue(it, scrapersFor(it).isEmpty()) }
+    }
+
+    /**
+     * The reels feed is a page of many reels, and Instagram answers a request for it with
+     * whichever one it likes: three reads of `instagram.com/reels/` came back with three
+     * different strangers' videos. Matching the word `reels` without an id behind it sent that
+     * address to the Instagram reader, which answered with one of them - so a host app that
+     * opened the feed (as one does with no Instagram session yet) and offered the download
+     * button on the first reel downloaded somebody else's video, and only the first time,
+     * because the page then rewrites the address to the reel it settled on.
+     *
+     * The id is what makes a link a post. Without one there is nothing for a parser to read, and
+     * the browser's sniffer - which hears the file the player actually asked for - is the only
+     * thing that knows which reel is on screen.
+     */
+    @Test
+    fun `a reels feed is not the reel being watched`() {
+        assertTrue(scrapersFor("https://www.instagram.com/reels/").isEmpty())
+        assertTrue(backupsFor("https://www.instagram.com/reels/").isEmpty())
+        // The same address once the page has settled on a reel: a post, and read as one.
+        assertEquals(
+            listOf("instagram"),
+            scrapersFor("https://www.instagram.com/reels/DfMiEk3NEmg/"),
+        )
     }
 
     /** A url that merely mentions a site is not that site: `sex.com` ends in the letters `x.com`. */

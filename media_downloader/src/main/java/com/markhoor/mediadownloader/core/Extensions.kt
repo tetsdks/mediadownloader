@@ -186,9 +186,29 @@ internal fun String.isFacebookVideoLink(): Boolean {
 
 internal fun String.isFacebookShareLink(): Boolean = isSiteOf("facebook.com") && contains("/share/")
 
+/**
+ * A post's own page. **The id is what makes it one:** `instagram.com/reels/` with nothing after
+ * it is the reels *feed*, and asking for a feed gets whichever reel Instagram is serving at that
+ * moment - measured, three reads of that address answered with three different strangers' videos.
+ * Matching on the word alone was enough to hand somebody one of those and call it the reel they
+ * were watching, which is what a host app opening the feed on a fresh install ran into.
+ *
+ * So a feed names no post and is refused here, leaving `LinkNotRecognised` - "an allowed site,
+ * but not a post" - to say so: the bare `/reels/`, a profile's reels tab (`/<name>/reels/`), and
+ * an audio page (`/reels/audio/<id>/`), which is the feed of reels using one sound. On a page
+ * like that the browser's own sniffer still answers, from the file the player asked for, which
+ * is the reel actually on screen.
+ */
 internal fun String.isInstagramPostLink(): Boolean =
-    (isSiteOf("instagram.com") && listOf("/p/", "/reel/", "/reels/").any { contains(it) }) ||
+    (isSiteOf("instagram.com") && INSTAGRAM_POST_PATH.containsMatchIn(this)) ||
             isThreadsVideoFileUrl()
+
+/**
+ * `/p/`, `/reel/` or `/reels/` followed by a post's own id. `audio` is refused by name because it
+ * is Instagram's own word for a sound's feed and never a shortcode; `/tv/` is left out because it
+ * was never read here.
+ */
+private val INSTAGRAM_POST_PATH = Regex("""/(?:p|reel|reels)/(?!audio(?:[/?#]|$))[A-Za-z0-9_-]+""")
 
 /** A post's own page, or a share of one; the site root and the feed name no post. */
 internal fun String.isThreadsPostLink(): Boolean =
