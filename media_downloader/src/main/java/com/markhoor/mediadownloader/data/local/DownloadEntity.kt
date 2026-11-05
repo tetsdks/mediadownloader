@@ -42,7 +42,11 @@ internal data class DownloadEntity(
 ) {
     val file: File get() = File(directoryPath, fileName)
 
-    fun toModel() = DownloadModel(
+    /**
+     * @param bytesPerSecond what the download is measured to be doing, from `DownloadRates`; it
+     *   is not a column, because a speed is worth nothing once the process measuring it is gone.
+     */
+    fun toModel(bytesPerSecond: Long? = null) = DownloadModel(
         id = id,
         title = title,
         fileName = fileName,
@@ -59,5 +63,6 @@ internal data class DownloadEntity(
         createdAtMillis = createdAtMillis,
         isMediaGone = errorMessage?.startsWith(Download.MEDIA_GONE_MARKER) == true,
         collectionTitle = collectionTitle,
+        bytesPerSecond = bytesPerSecond,
     )
 }

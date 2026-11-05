@@ -9,5 +9,15 @@
     <string name="media_downloader_failed">Download failed</string>
     <string name="media_downloader_unavailable">This video is private or no longer available</string>
     <string name="media_downloader_progress">%1$s of %2$s</string>
+    <!-- 12.4 MB of 48.0 MB · 1.8 MB/s -->
+    <string name="media_downloader_progress_with_speed">%1$s of %2$s · %3$s/s</string>
+    <!-- 12.4 MB · 1.8 MB/s, where the full size is not known -->
+    <string name="media_downloader_downloaded_with_speed">%1$s · %2$s/s</string>
+    <string name="media_downloader_time_left_seconds">%1$d sec left</string>
+    <string name="media_downloader_time_left_minutes">%1$d min left</string>
+    <string name="media_downloader_time_left_hours">%1$d hr %2$d min left</string>
+    <!-- The header line of a finished download: Download complete · 48.0 MB -->
+    <string name="media_downloader_completed_with_size">%1$s · %2$s</string>
+    <string name="media_downloader_finishing">Finishing…</string>
     <string name="media_downloader_untitled">Untitled</string>
 </resources>

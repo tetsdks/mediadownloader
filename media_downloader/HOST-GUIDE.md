@@ -823,8 +823,10 @@ data class DownloadModel(
     val createdAtMillis: Long,
     val isMediaGone: Boolean,
     val collectionTitle: String?,
+    val bytesPerSecond: Long?,  // measured while running, null otherwise
 ) {
     val progressPercent: Int?   // 0–100, or null while the size is unknown
+    val remainingMillis: Long?  // how much longer the bytes will take, null when it cannot be said
 }
 ```
 
@@ -837,6 +839,18 @@ data class DownloadModel(
 | `isMediaGone` | The download failed because the media was never there to take - a private or deleted post, a link already spent - rather than because something went wrong on the way. Say so instead of offering a retry: trying again is told the same thing. |
 | `collectionTitle` | The playlist or album this was queued as part of (§4.3), or `null` for a download asked for on its own. Downloads sharing one belong together on screen: one press queued them, one folder holds them. Group them into a single row - how many are saved, what they add up to - that opens to show the videos, rather than fifty rows the reader did not ask for one at a time. |
 | `progressPercent` | Convenience: 0–100 or `null`. |
+| `bytesPerSecond` | How fast it is going right now, smoothed over the last few seconds. `null` whenever there is nothing honest to say: anything not downloading, the first second of one (a speed needs two readings), and a download whose process was killed until it reports again. **Measured, not stored** - it is not a database column, so it is `null` after a restart until the download says something. |
+| `remainingMillis` | Roughly how much longer the **bytes** will take. `null` when the size is unknown, nothing is moving, or what is left would be over in a moment. |
+
+**`remainingMillis` is the bytes, not the download.** After the last byte comes `Finishing` - the
+video joined to its sound, a stream's pieces stitched, the file copied into the public folder -
+and on a long video that is a real wait nothing can see coming, so this is `null` there rather
+than zero. Show "Finishing" in that state, not a countdown that has run out. On a stream it is an
+estimate twice over, because `totalBytes` is itself an estimate until the last segment is in: it
+firms up as it goes rather than falling steadily.
+
+There is no estimate for a collection as a whole. Its remaining entries have not been read yet, so
+their sizes are unknown, and summing them would be a guess shown as a number.
 
 ### 5.7 `DownloadState`
 

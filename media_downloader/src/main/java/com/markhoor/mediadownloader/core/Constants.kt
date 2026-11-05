@@ -80,6 +80,34 @@ internal object Constants {
         const val PROGRESS_INTERVAL_MS = 1_000L
 
         /**
+         * How much of each new speed reading is believed, the rest being what was believed
+         * before. A second's bytes on a phone swing with every change of signal, and a time left
+         * computed from the raw figure jumps between seconds and minutes while the download is
+         * doing the same thing throughout. Low enough to be steady, high enough that a real
+         * change - a connection dropping to its knees - shows within a few seconds.
+         */
+        const val RATE_SMOOTHING = 0.3
+
+        /**
+         * A speed older than this is not shown. Four reports' worth: a download that has stopped
+         * saying anything is paused, waiting for a connection, or in a process that is gone, and
+         * in none of those cases is the last speed it managed worth putting on screen.
+         */
+        const val RATE_STALE_AFTER_MS = 4 * PROGRESS_INTERVAL_MS
+
+        /** When more downloads than this are being tracked, the stale ones are dropped. */
+        const val MAX_TRACKED_RATES = 64
+
+        /**
+         * A time left shorter than this is not shown. The last moments of a download are spent
+         * where no bytes are counted - a file joined, a stream stitched, the result copied into
+         * the public folder - so counting down to zero and then sitting there reads as a stall.
+         * Under a minute the estimate is also at its least reliable, being the smallest number
+         * divided by the noisiest speed.
+         */
+        const val MIN_SHOWN_REMAINING_MS = 2_000L
+
+        /**
          * Written in front of the reason a download failed when the media was never there to take,
          * and taken off again in `DownloadEntity.toModel`, where it becomes
          * `DownloadModel.isMediaGone`. A marker rather than a column of its own: a new column

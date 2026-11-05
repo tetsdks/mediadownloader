@@ -1,5 +1,7 @@
 package com.markhoor.mediadownloader.domain.models
 
+import com.markhoor.mediadownloader.core.Constants.Download
+
 /** Where a download is in its life. */
 enum class DownloadState {
     /** Waiting for its turn, or for the system to run it. */
@@ -41,6 +43,10 @@ enum class DownloadState {
  *   asked for on its own. Downloads sharing one belong together on screen: they were queued in one
  *   press, they are saved in one folder, and a host showing them as one row with one progress is
  *   showing what the reader asked for.
+ * @param bytesPerSecond how fast it is going right now, smoothed over the last few seconds, or
+ *   `null` when there is nothing honest to say: anything not downloading, the first second of one,
+ *   and a download whose process was killed and has not started reporting again. It is measured,
+ *   not stored, so it is `null` again after a restart until the download says something.
  */
 data class DownloadModel(
     val id: Long,
@@ -58,10 +64,46 @@ data class DownloadModel(
     val createdAtMillis: Long,
     val isMediaGone: Boolean = false,
     val collectionTitle: String? = null,
+    val bytesPerSecond: Long? = null,
 ) {
     /** 0-100, or `null` while the size is unknown. */
     val progressPercent: Int?
         get() = totalBytes?.takeIf { it > 0 }?.let { (downloadedBytes * 100 / it).toInt().coerceIn(0, 100) }
+
+    /**
+     * Roughly how much longer the bytes will take, or `null` when it cannot be said: the size is
+     * unknown, nothing is moving, or what is left would be over in a moment.
+     *
+     * **It is the bytes, not the download.** After the last byte comes [DownloadState.Finishing] -
+     * a video joined to its sound, a stream's pieces stitched, the file copied into the public
+     * folder - and on a long video that is a real wait that nothing here can see coming. So this
+     * is `null` in that state rather than zero, and a screen showing it should say "finishing"
+     * instead of a countdown that has run out.
+     *
+     * On a stream it is an estimate twice over: [totalBytes] is itself an estimate until the last
+     * segment is in, so the figure firms up as it goes rather than falling steadily.
+     */
+    val remainingMillis: Long?
+        get() = if (state == DownloadState.Downloading) {
+            remainingMillisOf(downloadedBytes, totalBytes, bytesPerSecond)
+        } else {
+            null
+        }
+}
+
+/**
+ * How much longer the bytes still to come will take at this speed, or `null` when the size is
+ * unknown, nothing is moving, or what is left would be over in a moment
+ * ([Download.MIN_SHOWN_REMAINING_MS]).
+ *
+ * Top-level and shared rather than worked out in each place that shows it: the download
+ * notification says a time left and so does [DownloadModel.remainingMillis], and two screens of
+ * the same app disagreeing about how long is left is worse than either number being imprecise.
+ */
+internal fun remainingMillisOf(downloadedBytes: Long, totalBytes: Long?, bytesPerSecond: Long?): Long? {
+    val speed = bytesPerSecond?.takeIf { it > 0 } ?: return null
+    val left = totalBytes?.takeIf { it > 0 }?.minus(downloadedBytes)?.takeIf { it > 0 } ?: return null
+    return (left * 1_000 / speed).takeIf { it >= Download.MIN_SHOWN_REMAINING_MS }
 }
 
 /**

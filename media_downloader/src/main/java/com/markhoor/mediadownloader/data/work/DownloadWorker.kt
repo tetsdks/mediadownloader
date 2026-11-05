@@ -3,6 +3,7 @@ package com.markhoor.mediadownloader.data.work
 import android.content.Context
 import android.content.pm.ServiceInfo
 import android.os.Build
+import android.os.SystemClock
 import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.ForegroundInfo
@@ -10,6 +11,7 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.markhoor.mediadownloader.MediaDownloader
 import com.markhoor.mediadownloader.core.Constants.Download
+import com.markhoor.mediadownloader.data.download.DownloadRates
 import com.markhoor.mediadownloader.core.mediaUrlsMayBeLogged
 import com.markhoor.mediadownloader.data.download.DownloadTask
 import com.markhoor.mediadownloader.data.download.ProgressMeter
@@ -118,8 +120,11 @@ internal class DownloadWorker(
                         // pass the estimate for a moment; a total below it would read over 100%.
                         val downloaded = meter.downloadedBytes
                         val total = meter.totalBytes?.let { maxOf(it, downloaded) }
+                        // Elapsed real time, not the wall clock, which moves when the device's
+                        // own time is corrected and would make a reading negative or enormous.
+                        DownloadRates.note(id, downloaded, SystemClock.elapsedRealtime())
                         dao.setProgress(id, downloaded, total)
-                        notifier.showProgress(entity, downloaded, total)
+                        notifier.showProgress(entity, downloaded, total, DownloadRates.of(id, SystemClock.elapsedRealtime()))
                     }
                 }
                 try {
@@ -130,6 +135,9 @@ internal class DownloadWorker(
                     }
                 } finally {
                     reporter.cancel()
+                    // Nothing is moving any more, by whatever ending. Staleness would retire the
+                    // reading on its own; this keeps a finished download out of the map at once.
+                    DownloadRates.forget(id)
                 }
             }
             // Publishing is a copy into the public folder, which on a big file is a wait of its
@@ -166,7 +174,7 @@ internal class DownloadWorker(
         reporter?.cancel()
         val dao = component.downloadDao
         if (dao.moveState(id, from = listOf(DownloadState.Downloading), state = DownloadState.Finishing) == 0) return
-        dao.get(id)?.let { component.downloadNotifier.showProgress(it, meter.downloadedBytes, meter.totalBytes) }
+        dao.get(id)?.let { component.downloadNotifier.showFinishing(it) }
     }
 
     /**

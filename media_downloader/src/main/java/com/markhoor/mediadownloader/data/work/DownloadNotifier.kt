@@ -18,6 +18,8 @@ import com.markhoor.mediadownloader.MediaDownloader
 import com.markhoor.mediadownloader.R
 import com.markhoor.mediadownloader.core.Constants.Download
 import com.markhoor.mediadownloader.data.local.DownloadEntity
+import com.markhoor.mediadownloader.domain.models.DownloadState
+import com.markhoor.mediadownloader.domain.models.remainingMillisOf
 
 /**
  * The download notifications. A running download shows progress under [progressId]; its outcome
@@ -41,31 +43,92 @@ internal class DownloadNotifier(
 
     private fun resultId(id: Long): Int = (id * 2 + 1).toInt()
 
-    /** The notification of a running download; [totalBytes] `null` shows it indeterminate. */
-    fun progress(entity: DownloadEntity, downloadedBytes: Long, totalBytes: Long?): Notification {
+    /**
+     * The notification of a running download: how much of how big on the line, how fast beside
+     * it, how long is left in the header, and the bar. [totalBytes] `null` - a stream whose size
+     * is still being worked out - leaves the bar indeterminate and says only what has arrived.
+     *
+     * Everything but the bar is left out rather than guessed. A speed needs two reports before it
+     * exists and a time left needs a size, so the first seconds show neither and the line grows
+     * into its full shape, rather than showing a zero that means "not known yet".
+     */
+    fun progress(
+        entity: DownloadEntity,
+        downloadedBytes: Long,
+        totalBytes: Long?,
+        bytesPerSecond: Long? = null,
+    ): Notification {
         ensureChannel()
         val total = totalBytes?.takeIf { it > 0 }
+        val speed = bytesPerSecond?.takeIf { it > 0 }?.let { Formatter.formatShortFileSize(context, it) }
+        val got = Formatter.formatShortFileSize(context, downloadedBytes)
         val text = when {
             downloadedBytes <= 0 -> context.getString(R.string.media_downloader_preparing)
-            total == null -> Formatter.formatShortFileSize(context, downloadedBytes)
+            total == null && speed == null -> got
+            total == null -> context.getString(R.string.media_downloader_downloaded_with_speed, got, speed)
+            speed == null ->
+                context.getString(R.string.media_downloader_progress, got, Formatter.formatShortFileSize(context, total))
             else -> context.getString(
-                R.string.media_downloader_progress,
-                Formatter.formatShortFileSize(context, downloadedBytes),
+                R.string.media_downloader_progress_with_speed,
+                got,
                 Formatter.formatShortFileSize(context, total),
+                speed,
             )
         }
         val percent = total?.let { (downloadedBytes * 100 / it).toInt().coerceIn(0, 100) }
         return builder(entity)
             .setContentText(text)
+            .setSubText(timeLeftOrNull(remainingMillisOf(downloadedBytes, total, bytesPerSecond)))
             .setProgress(100, percent ?: 0, percent == null)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setSilent(true)
+            // A clock on a notification that rewrites itself every second is noise. The time
+            // worth showing is the one left, and that is in the header.
+            .setShowWhen(false)
             .build()
     }
 
-    fun showProgress(entity: DownloadEntity, downloadedBytes: Long, totalBytes: Long?) {
-        post(progressId(entity.id), progress(entity, downloadedBytes, totalBytes))
+    fun showProgress(entity: DownloadEntity, downloadedBytes: Long, totalBytes: Long?, bytesPerSecond: Long? = null) {
+        post(progressId(entity.id), progress(entity, downloadedBytes, totalBytes, bytesPerSecond))
+    }
+
+    /**
+     * Every byte is in and the file is being finished - joined to its sound, stitched together,
+     * copied into the public folder. Said in words, because the alternative is a full bar and a
+     * time left of nothing, which is how a download still working looks exactly like one that has
+     * hung. Indeterminate, because none of this part is counted in bytes.
+     * See [DownloadState.Finishing].
+     */
+    fun finishing(entity: DownloadEntity): Notification {
+        ensureChannel()
+        return builder(entity)
+            .setContentText(context.getString(R.string.media_downloader_finishing))
+            .setProgress(0, 0, true)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setSilent(true)
+            .setShowWhen(false)
+            .build()
+    }
+
+    fun showFinishing(entity: DownloadEntity) {
+        post(progressId(entity.id), finishing(entity))
+    }
+
+    /**
+     * How long is left, in words. Minutes are rounded up so the last of them reads "1 min left"
+     * and never "0 min left"; `null` - no size yet, nothing moving, or nearly done - leaves the
+     * header empty rather than saying something untrue.
+     */
+    private fun timeLeftOrNull(remainingMillis: Long?): String? {
+        val seconds = (remainingMillis ?: return null) / 1_000
+        val minutes = (seconds + 59) / 60
+        return when {
+            seconds < 60 -> context.getString(R.string.media_downloader_time_left_seconds, seconds)
+            minutes < 60 -> context.getString(R.string.media_downloader_time_left_minutes, minutes)
+            else -> context.getString(R.string.media_downloader_time_left_hours, seconds / 3_600, seconds % 3_600 / 60)
+        }
     }
 
     fun showWaitingForNetwork(entity: DownloadEntity) {
@@ -75,13 +138,24 @@ internal class DownloadNotifier(
         )
     }
 
+    /** Says the size it came to as well: the one fact somebody checks a finished download for. */
     fun showCompleted(entity: DownloadEntity) {
         manager.cancel(progressId(entity.id))
+        val done = context.getString(R.string.media_downloader_completed)
+        val size = (entity.totalBytes ?: entity.downloadedBytes).takeIf { it > 0 }
         post(
             resultId(entity.id),
             builder(entity)
                 .setSmallIcon(android.R.drawable.stat_sys_download_done)
-                .setContentText(context.getString(R.string.media_downloader_completed))
+                .setContentText(
+                    size?.let {
+                        context.getString(
+                            R.string.media_downloader_completed_with_size,
+                            done,
+                            Formatter.formatShortFileSize(context, it),
+                        )
+                    } ?: done,
+                )
                 .setAutoCancel(true)
                 .build(),
         )

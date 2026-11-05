@@ -1,5 +1,6 @@
 package com.markhoor.mediadownloader.data.repo
 
+import android.os.SystemClock
 import android.util.Log
 import com.markhoor.mediadownloader.core.Constants.Download
 import com.markhoor.mediadownloader.core.endingOnFailure
@@ -9,6 +10,7 @@ import com.markhoor.mediadownloader.core.isUnderAnyOf
 import com.markhoor.mediadownloader.core.isUsableThumbnail
 import com.markhoor.mediadownloader.core.normalizedHost
 import com.markhoor.mediadownloader.data.device.NetworkStatus
+import com.markhoor.mediadownloader.data.download.DownloadRates
 import com.markhoor.mediadownloader.data.local.DownloadDao
 import com.markhoor.mediadownloader.data.local.DownloadEntity
 import com.markhoor.mediadownloader.data.storage.DownloadStorage
@@ -63,13 +65,22 @@ internal class DownloadRepositoryImpl(
     /** Waiting for a connection counts: resuming it tries again now, as the old app did. */
     private val resumableStates = listOf(DownloadState.Paused, DownloadState.Failed, DownloadState.WaitingForNetwork)
 
+    /**
+     * The rows, each with how fast it is going. The speed is read here rather than stored,
+     * and a row's own writes are what carry it to a reader: progress reaches the database every
+     * [Download.PROGRESS_INTERVAL_MS] while a download runs, so a new speed arrives with it, and
+     * a download that stops running writes its new state - at which point there is no speed to
+     * read and the reader is told so.
+     */
     override fun observeDownloads(): Flow<List<DownloadModel>> =
-        dao.observeAll().map { rows -> rows.map(DownloadEntity::toModel) }.distinctUntilChanged()
+        dao.observeAll().map { rows -> rows.map { it.toModel(rateOf(it.id)) } }.distinctUntilChanged()
             .endingOnFailure("The downloads could not be read")
 
     override fun observeDownload(id: Long): Flow<DownloadModel?> =
-        dao.observe(id).map { it?.toModel() }.distinctUntilChanged()
+        dao.observe(id).map { row -> row?.toModel(rateOf(row.id)) }.distinctUntilChanged()
             .endingOnFailure("A download could not be read")
+
+    private fun rateOf(id: Long): Long? = DownloadRates.of(id, SystemClock.elapsedRealtime())
 
     override suspend fun enqueue(request: DownloadRequest): Long = withContext(ioDispatcher) {
         // Refused here rather than downloaded and then lost: without a writable folder the file

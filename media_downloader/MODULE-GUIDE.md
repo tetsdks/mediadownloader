@@ -203,6 +203,30 @@ the headers its download needs and, for streams that keep sound apart, an `audio
 A failure is always a `MediaParseException`: `SiteBlocked`, `SiteUnsupported`,
 `LinkNotRecognised` (an allowed site, but not a post), or `MediaNotFound`.
 
+### How fast, and how much longer
+
+`DownloadWorker`'s reporter already ticks every `Download.PROGRESS_INTERVAL_MS` holding the exact
+byte count, so that is where speed is measured: it hands the reading to `DownloadRates`, which
+keeps one smoothed figure per download (`Download.RATE_SMOOTHING`, an exponential average - the
+raw per-second figure swings with every change of signal and makes a time left leap between
+seconds and minutes while nothing has changed). `DownloadRepositoryImpl` reads it back as it maps
+each row, so `DownloadModel.bytesPerSecond` arrives with the progress that caused it.
+
+**Not a column.** A new column changes the schema, and this database starts its table again
+rather than migrating - a speed is not worth a user's list of downloads (the same reasoning as
+`Download.MEDIA_GONE_MARKER`). It is also worth nothing after a restart, because the process that
+measured it is gone. So it lives in a `ConcurrentHashMap` keyed by download id, each entry one
+immutable sample swapped in, and a reading older than `Download.RATE_STALE_AFTER_MS` is not
+reported: a download that has stopped saying anything is paused, waiting for a connection, or in a
+dead process, and its last speed is not worth showing in any of those cases.
+
+The arithmetic for the time left is `remainingMillisOf` in `DownloadModel.kt`, top-level and
+shared, because both `DownloadModel.remainingMillis` and the notification show it and two parts of
+one app disagreeing about how long is left is worse than either being imprecise. Its exactness is
+tested in `RemainingTimeTest`, the smoothing in `DownloadRatesTest`, and the notification's actual
+words in `DownloadNotificationCheck` - on a device, because `Formatter` and the string resources
+both answer a default under JVM tests, where the lines would be checked against nothing.
+
 ### Seeing what it found
 
 `adb shell setprop log.tag.MediaDownloader DEBUG`, **in a debuggable app**, prints every url the
