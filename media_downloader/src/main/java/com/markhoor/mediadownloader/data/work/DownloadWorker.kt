@@ -334,7 +334,10 @@ internal class DownloadWorker(
      * failing.
      */
     private suspend fun runInForeground(entity: DownloadEntity, notifier: DownloadNotifier) {
-        val notification = notifier.progress(entity, downloadedBytes = 0, totalBytes = null)
+        // What the row already knows, not zero: a download resumed after a pause or a restart has
+        // its bytes and its size on it, and "Preparing download..." would throw both away and
+        // show an empty bar for a file that is most of the way done.
+        val notification = notifier.progress(entity, entity.downloadedBytes, entity.totalBytes)
         val info = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             ForegroundInfo(notifier.progressId(entity.id), notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
         } else {
@@ -345,7 +348,7 @@ internal class DownloadWorker(
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {
-            notifier.showProgress(entity, downloadedBytes = 0, totalBytes = null)
+            notifier.showProgress(entity, entity.downloadedBytes, entity.totalBytes)
         }
     }
 }

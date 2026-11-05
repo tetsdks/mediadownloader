@@ -227,6 +227,14 @@ tested in `RemainingTimeTest`, the smoothing in `DownloadRatesTest`, and the not
 words in `DownloadNotificationCheck` - on a device, because `Formatter` and the string resources
 both answer a default under JVM tests, where the lines would be checked against nothing.
 
+**Shown at once.** The platform holds a foreground service's notification back for about ten
+seconds so a job that is over in a moment never flashes one up. A download is not that job:
+measured here, the notification took 10.4 seconds to appear, by which time 44 MB of a 386 MB file
+had arrived with nothing on screen saying a download had started at all.
+`NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE` in `DownloadNotifier.builder` drops that wait to
+about 300 ms. `NotificationTimingCheck` holds it there, on a file big enough for the first seconds
+to be visible.
+
 ### Seeing what it found
 
 `adb shell setprop log.tag.MediaDownloader DEBUG`, **in a debuggable app**, prints every url the
